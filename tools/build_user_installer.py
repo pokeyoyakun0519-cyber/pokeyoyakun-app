@@ -58,7 +58,7 @@ def main() -> None:
         PROJECT_ROOT
         / "release"
         / "user_installer"
-        / "PokeyoyaKun_User_Setup_Ver1.23.0_RC.exe"
+        / "PokeyoyaKun_User_Setup_Ver1.24.0_RC.exe"
     )
 
 

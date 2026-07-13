@@ -10,7 +10,7 @@ python tools\build_user_installer.py
 if errorlevel 1 goto :failed
 echo.
 echo User Edition build: OK
-echo release\user_installer\PokeyoyaKun_User_Setup_Ver1.23.0_RC.exe
+echo release\user_installer\PokeyoyaKun_User_Setup_Ver1.24.0_RC.exe
 pause
 exit /b 0
 :failed

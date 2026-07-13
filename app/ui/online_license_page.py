@@ -109,9 +109,10 @@ class OnlineLicensePage(QFrame):
         layout.addWidget(self.status)
 
         note = QLabel(
-            "この版にはローカル動作確認用のライセンスサーバー一式を同梱しています。"
-            "インターネット公開には、HTTPS・ドメイン・バックアップ・"
-            "管理者認証の設定が必要です。"
+            "User Editionにはライセンスサーバーを同梱していません。"
+            "管理者から案内された公開URLを指定してください。"
+            "本番公開ではHTTPS・ドメイン・バックアップ・"
+            "管理者認証の設定を推奨します。"
         )
         note.setObjectName("MutedText")
         note.setWordWrap(True)

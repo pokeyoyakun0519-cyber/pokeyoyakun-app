@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from core.device_id import get_device_id
 from core.license_manager import LicenseManager
+from core.online_license_config import OnlineLicenseConfig
 from core.startup_diagnostics import StartupDiagnostics
 
 
@@ -21,6 +22,7 @@ class LicenseDialog(QDialog):
         super().__init__(parent)
 
         self.manager = LicenseManager()
+        self.online_config = OnlineLicenseConfig()
         self.diagnostics = StartupDiagnostics()
         self.authenticated = False
         self._authenticating = False
@@ -53,6 +55,20 @@ class LicenseDialog(QDialog):
         layout.addWidget(device)
 
         online_form = QFormLayout()
+        config = self.online_config.load()
+
+        self.server_url = QLineEdit()
+        self.server_url.setPlaceholderText(
+            "例：http://example.ddns.net:8765"
+        )
+        self.server_url.setText(
+            str(config.get("server_url", ""))
+        )
+        online_form.addRow(
+            "サーバーURL",
+            self.server_url,
+        )
+
         self.online_key = QLineEdit()
         self.online_key.setPlaceholderText(
             "例：PKY-XXXX-XXXX-XXXX-XXXX"
@@ -67,6 +83,12 @@ class LicenseDialog(QDialog):
         layout.addLayout(online_form)
 
         online_row = QHBoxLayout()
+        self.connection_button = QPushButton(
+            "接続テスト"
+        )
+        self.connection_button.clicked.connect(
+            self.test_online_connection
+        )
         self.online_button = QPushButton(
             "オンライン認証して起動"
         )
@@ -76,6 +98,7 @@ class LicenseDialog(QDialog):
         self.online_button.clicked.connect(
             self.authenticate_online
         )
+        online_row.addWidget(self.connection_button)
         online_row.addStretch()
         online_row.addWidget(
             self.online_button
@@ -121,6 +144,41 @@ class LicenseDialog(QDialog):
         self.user_id.returnPressed.connect(self.password.setFocus)
         self.password.returnPressed.connect(self.authenticate)
 
+    def _save_online_settings(self) -> tuple[bool, str]:
+        url = self.server_url.text().strip()
+        valid, message = self.online_config.validate_server_url(url)
+        if not valid:
+            return False, message
+
+        current = self.online_config.load()
+        current.update(
+            {
+                "enabled": True,
+                "server_url": url,
+            }
+        )
+        try:
+            self.online_config.save(current)
+        except (OSError, ValueError) as error:
+            return False, f"設定を保存できませんでした: {error}"
+        return True, "設定を保存しました。"
+
+    def test_online_connection(self):
+        self.connection_button.setEnabled(False)
+        try:
+            ok, message = self._save_online_settings()
+            if ok:
+                ok, message = self.manager.online_client.test_connection(
+                    self.server_url.text().strip()
+                )
+        finally:
+            self.connection_button.setEnabled(True)
+
+        QMessageBox.information(
+            self,
+            "接続テスト成功" if ok else "接続テスト失敗",
+            message,
+        )
 
     def authenticate_online(self):
         if self._authenticating:
@@ -128,8 +186,18 @@ class LicenseDialog(QDialog):
 
         self._authenticating = True
         self.online_button.setEnabled(False)
+        self.connection_button.setEnabled(False)
 
         try:
+            settings_ok, settings_message = self._save_online_settings()
+            if not settings_ok:
+                QMessageBox.warning(
+                    self,
+                    "オンライン認証失敗",
+                    settings_message,
+                )
+                return
+
             key = self.online_key.text().strip()
             ok, message = (
                 self.manager.activate_online(key)
@@ -165,6 +233,7 @@ class LicenseDialog(QDialog):
             self._authenticating = False
             if not self.authenticated:
                 self.online_button.setEnabled(True)
+                self.connection_button.setEnabled(True)
 
     def import_license(self):
         path, _ = QFileDialog.getOpenFileName(

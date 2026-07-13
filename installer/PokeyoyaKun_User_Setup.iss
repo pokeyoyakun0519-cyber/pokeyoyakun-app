@@ -1,5 +1,5 @@
 ﻿#define MyAppName "ポケヨヤ君"
-#define MyAppVersion "1.23.0 RC User Edition"
+#define MyAppVersion "1.24.0 RC User Edition"
 #define MyAppPublisher "PokeyoyaKun Project"
 #define MyAppExeName "ポケヨヤ君.exe"
 
@@ -12,7 +12,7 @@ DefaultDirName={localappdata}\Programs\PokeyoyaKun
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\release\user_installer
-OutputBaseFilename=PokeyoyaKun_User_Setup_Ver1.23.0_RC
+OutputBaseFilename=PokeyoyaKun_User_Setup_Ver1.24.0_RC
 SetupIconFile=..\assets\pokeyoya_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
