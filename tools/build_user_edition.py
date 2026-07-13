@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -11,8 +12,12 @@ APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
 DIST_DIR = PROJECT_ROOT / "release" / "user_dist"
-BUILD_DIR = PROJECT_ROOT / "release" / "user_build"
-SPEC_DIR = PROJECT_ROOT / "release" / "user_spec"
+TEMP_BUILD_ROOT = (
+    Path(tempfile.gettempdir())
+    / "PokeyoyaKun_UserEdition_Ver1.24.0_RC"
+)
+BUILD_DIR = TEMP_BUILD_ROOT / "build"
+SPEC_DIR = TEMP_BUILD_ROOT / "spec"
 
 ICON_PATH = ASSETS_DIR / "pokeyoya_icon.ico"
 VERSION_FILE = INSTALLER_DIR / "version_info.txt"
@@ -61,17 +66,23 @@ def ensure_dependencies() -> None:
 
 def clean() -> None:
     for folder in (
-        DIST_DIR,
         BUILD_DIR,
         SPEC_DIR,
     ):
         if folder.exists():
             shutil.rmtree(folder)
 
+    # OneDrive配下の空フォルダーはクラウド用ReparsePointとなり、
+    # shutil.rmtreeでアクセス拒否になることがある。配布フォルダー
+    # 自体は残し、前回生成したファイルだけを削除する。
     DIST_DIR.mkdir(
         parents=True,
         exist_ok=True,
     )
+    for path in DIST_DIR.iterdir():
+        if path.is_file():
+            path.unlink()
+
     BUILD_DIR.mkdir(
         parents=True,
         exist_ok=True,

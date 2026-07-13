@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,14 +15,22 @@ SCRIPT = (
 
 
 def find_iscc() -> Path | None:
-    candidates = (
+    candidates = [
         Path(
             r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
         ),
         Path(
             r"C:\Program Files\Inno Setup 6\ISCC.exe"
         ),
-    )
+    ]
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        candidates.append(
+            Path(local_app_data)
+            / "Programs"
+            / "Inno Setup 6"
+            / "ISCC.exe"
+        )
     for path in candidates:
         if path.exists():
             return path
