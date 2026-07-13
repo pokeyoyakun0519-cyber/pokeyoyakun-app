@@ -1,0 +1,14 @@
+【Gmail連携の初回設定】
+
+1. Google Cloud Consoleでプロジェクトを作成します。
+2. Gmail APIを有効化します。
+3. OAuth同意画面を設定します。
+4. OAuthクライアントIDを「デスクトップアプリ」で作成します。
+5. ダウンロードしたJSONを google_client_secret.json に名前変更します。
+6. 次のフォルダーへ配置します。
+   %LOCALAPPDATA%\PokeyoyaKun\config\google_client_secret.json
+7. ポケヨヤ君の「メールアカウント」でGmailと連携を押します。
+
+使用する権限はGmailの読取専用です。
+メール送信・削除・変更は行いません。
+Googleアカウントのパスワードはアプリへ保存しません。

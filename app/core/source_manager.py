@@ -1,0 +1,391 @@
+import hashlib
+import json
+import re
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime
+from html import unescape
+from typing import Any
+from urllib.parse import urlparse
+
+from core.official_diff_tracker import OfficialDiffTracker
+from core.pokemon_official_extractor import PokemonOfficialExtractor
+from core.candidate_manager import CandidateManager
+from core.runtime_paths import app_root
+from core.source_product_extractor import SourceProductExtractor
+
+
+class SourceManager:
+    USER_AGENT = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 Chrome/124 Safari/537.36 "
+        "PokeyoyaKun/1.1.0"
+    )
+
+    def __init__(self):
+        self.sources_path = app_root() / "config" / "sources.json"
+        self.extractor = SourceProductExtractor()
+        self.pokemon_extractor = PokemonOfficialExtractor()
+        self.diff_tracker = OfficialDiffTracker()
+        self.candidate_manager = CandidateManager()
+
+    def load_sources(self) -> list[dict[str, Any]]:
+        if not self.sources_path.exists():
+            return []
+
+        try:
+            with self.sources_path.open("r", encoding="utf-8") as file:
+                data = json.load(file)
+            return data if isinstance(data, list) else []
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def save_sources(self, sources: list[dict[str, Any]]) -> None:
+        self.sources_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.sources_path.open("w", encoding="utf-8") as file:
+            json.dump(sources, file, ensure_ascii=False, indent=2)
+
+    def add_source(self, name: str, url: str) -> None:
+        sources = self.load_sources()
+        source_id = self._make_id(url)
+
+        if any(source.get("id") == source_id for source in sources):
+            return
+
+        sources.append(
+            {
+                "id": source_id,
+                "name": name.strip() or "名称未設定",
+                "url": url.strip(),
+                "last_title": "",
+                "last_checked": "",
+                "last_status": "未確認",
+                "changed": False,
+                "last_detected_count": 0,
+                "last_added_count": 0,
+                "last_detail_pages": 0,
+                "detected_products": [],
+                "official_changes": [],
+                "enabled": True,
+                "priority": len(sources) + 1,
+            }
+        )
+        self.save_sources(sources)
+
+
+    def update_source(
+        self,
+        source_id: str,
+        name: str,
+        url: str,
+    ) -> bool:
+        sources = self.load_sources()
+        changed = False
+
+        for source in sources:
+            if str(source.get("id", "")) != source_id:
+                continue
+
+            source["name"] = (
+                name.strip()
+                or "名称未設定"
+            )
+            source["url"] = url.strip()
+            changed = True
+            break
+
+        if changed:
+            self.save_sources(sources)
+
+        return changed
+
+    def set_enabled(
+        self,
+        source_id: str,
+        enabled: bool,
+    ) -> bool:
+        sources = self.load_sources()
+        changed = False
+
+        for source in sources:
+            if str(source.get("id", "")) != source_id:
+                continue
+
+            source["enabled"] = bool(enabled)
+            changed = True
+            break
+
+        if changed:
+            self.save_sources(sources)
+
+        return changed
+
+    def remove_source(self, source_id: str) -> None:
+        sources = [
+            source
+            for source in self.load_sources()
+            if source.get("id") != source_id
+        ]
+        self.save_sources(sources)
+
+    def check_all(
+        self,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        sources = self.load_sources()
+        changed_sources = []
+
+        for source in sources:
+            if not source.get("enabled", True):
+                source["last_status"] = "無効"
+                source["changed"] = False
+                continue
+
+            old_title = source.get("last_title", "")
+            checked = self._fetch_page(source.get("url", ""))
+
+            source["last_checked"] = datetime.now().strftime(
+                "%Y/%m/%d %H:%M:%S"
+            )
+            source["last_status"] = checked["status"]
+            source["last_detected_count"] = 0
+            source["last_added_count"] = 0
+            source["last_detail_pages"] = 0
+            source["detected_products"] = []
+            source["official_changes"] = []
+
+            if not checked["ok"]:
+                source["changed"] = False
+                continue
+
+            new_title = checked["title"]
+            source["changed"] = bool(
+                old_title and new_title != old_title
+            )
+            source["last_title"] = new_title
+
+            source_url = source.get("url", "")
+            source_name = source.get("name", "公式情報ソース")
+
+            if self._is_pokemon_official(source_url):
+                discovered, detail_pages = (
+                    self._extract_pokemon_official_products(
+                        checked["html"],
+                        source_url,
+                        source_name,
+                    )
+                )
+                source["last_detail_pages"] = detail_pages
+            else:
+                discovered = self.extractor.extract(
+                    checked["html"],
+                    source_url,
+                    source_name,
+                )
+
+            official_changes = (
+                self.diff_tracker.compare_and_update(
+                    discovered
+                )
+            )
+            source["official_changes"] = official_changes
+
+            _, added_count = (
+                self.candidate_manager.merge_official_candidates(
+                    discovered,
+                    source_id=str(source.get("id", "")),
+                    source_name=source_name,
+                    source_url=source_url,
+                )
+            )
+
+            source["last_detected_count"] = len(discovered)
+            source["last_added_count"] = added_count
+            source["detected_products"] = [
+                {
+                    "name": item.get("name", ""),
+                    "release_date": item.get("release_date", ""),
+                    "url": (
+                        item.get("sites", [{}])[0].get("url", "")
+                        if item.get("sites")
+                        else ""
+                    ),
+                }
+                for item in discovered[:12]
+            ]
+
+            if self._is_pokemon_official(source_url):
+                source["last_status"] = (
+                    f"確認成功・商品ページ{source['last_detail_pages']}件解析"
+                    f"・商品{len(discovered)}件検出"
+                    f"・新弾候補へ新規{added_count}件追加"
+                    f"・公式変更{len(official_changes)}件"
+                )
+            else:
+                source["last_status"] = (
+                    f"確認成功・商品{len(discovered)}件検出"
+                    f"・新弾候補へ新規{added_count}件追加"
+                    f"・公式変更{len(official_changes)}件"
+                )
+
+            if (
+                source["changed"]
+                or added_count
+                or official_changes
+            ):
+                changed_sources.append(source.copy())
+
+        self.save_sources(sources)
+        return sources, changed_sources
+
+    def _extract_pokemon_official_products(
+        self,
+        top_html: str,
+        source_url: str,
+        source_name: str,
+    ) -> tuple[list[dict], int]:
+        candidates = self.pokemon_extractor.collect_candidate_links(
+            top_html,
+            source_url,
+        )
+
+        products = []
+        detail_pages = 0
+        seen = set()
+
+        for candidate in candidates:
+            checked = self._fetch_page(candidate["url"])
+
+            if not checked["ok"]:
+                continue
+
+            detail_pages += 1
+            found = self.pokemon_extractor.extract_detail_products(
+                checked["html"],
+                candidate["url"],
+                source_name,
+                candidate.get("text", ""),
+            )
+
+            for product in found:
+                key = (
+                    self._normalize_name(
+                        str(product.get("name", ""))
+                    ),
+                    str(product.get("release_date", "")),
+                )
+                if key in seen:
+                    continue
+
+                seen.add(key)
+                products.append(product)
+
+            # 公式サイトへ負荷をかけすぎない。
+            time.sleep(0.25)
+
+        # 商品詳細リンクが取れなかった場合だけトップHTML解析へ戻る。
+        if not products:
+            products = self.extractor.extract(
+                top_html,
+                source_url,
+                source_name,
+            )
+
+        return products, detail_pages
+
+    def _fetch_page(self, url: str) -> dict[str, Any]:
+        if not url.lower().startswith(("http://", "https://")):
+            return {
+                "ok": False,
+                "title": "",
+                "html": "",
+                "status": "URLが正しくありません",
+            }
+
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": self.USER_AGENT,
+                "Accept-Language": "ja,en-US;q=0.8,en;q=0.6",
+                "Accept": (
+                    "text/html,application/xhtml+xml,"
+                    "application/xml;q=0.9,*/*;q=0.8"
+                ),
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                raw = response.read(3_000_000)
+                charset = (
+                    response.headers.get_content_charset()
+                    or "utf-8"
+                )
+        except urllib.error.HTTPError as error:
+            return {
+                "ok": False,
+                "title": "",
+                "html": "",
+                "status": f"HTTPエラー {error.code}",
+            }
+        except urllib.error.URLError as error:
+            return {
+                "ok": False,
+                "title": "",
+                "html": "",
+                "status": f"接続失敗: {error.reason}",
+            }
+        except Exception as error:
+            return {
+                "ok": False,
+                "title": "",
+                "html": "",
+                "status": f"確認失敗: {error}",
+            }
+
+        try:
+            html = raw.decode(charset, errors="replace")
+        except LookupError:
+            html = raw.decode("utf-8", errors="replace")
+
+        match = re.search(
+            r"<title[^>]*>(.*?)</title>",
+            html,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+
+        title = ""
+        if match:
+            title = re.sub(
+                r"\s+",
+                " ",
+                unescape(match.group(1)),
+            ).strip()
+
+        return {
+            "ok": True,
+            "title": title or "タイトル未取得",
+            "html": html,
+            "status": "確認成功",
+        }
+
+    @staticmethod
+    def _is_pokemon_official(url: str) -> bool:
+        host = urlparse(url).netloc.lower().split(":", 1)[0]
+        return host == "pokemon-card.com" or host.endswith(
+            ".pokemon-card.com"
+        )
+
+    @staticmethod
+    def _normalize_name(name: str) -> str:
+        return re.sub(
+            r"[\s「」『』・･_\-&＆]",
+            "",
+            name,
+        ).lower()
+
+    @staticmethod
+    def _make_id(url: str) -> str:
+        return hashlib.sha256(
+            url.strip().encode("utf-8")
+        ).hexdigest()[:16]
