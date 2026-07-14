@@ -20,7 +20,6 @@ def run_command(
     env: dict[str, str],
 ) -> None:
     print(">", " ".join(command))
-
     try:
         completed = subprocess.run(
             command,
@@ -29,9 +28,7 @@ def run_command(
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
-        raise SystemExit(
-            "スモークテストがタイムアウトしました。"
-        )
+        raise SystemExit("スモークテストがタイムアウトしました。")
 
     if completed.returncode != 0:
         raise SystemExit(
@@ -43,53 +40,28 @@ def run_command(
 def build_environment() -> dict[str, str]:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(APP_DIR)
-
-    # 画面を実際に表示せず、Qtの画面生成だけ確認する。
-    env.setdefault(
-        "QT_QPA_PLATFORM",
-        "offscreen",
-    )
-
-    # テスト中のログや設定を専用の一時フォルダーへ分離する。
-    temp_root = Path(
-        tempfile.mkdtemp(
-            prefix="pokeyoya_smoke_",
-        )
-    )
+    env.setdefault("QT_QPA_PLATFORM", "offscreen")
+    temp_root = Path(tempfile.mkdtemp(prefix="pokeyoya_smoke_"))
     env["LOCALAPPDATA"] = str(temp_root)
-
     return env
 
 
 def run_source_test() -> None:
-    env = build_environment()
     run_command(
-        [
-            sys.executable,
-            str(APP_DIR / "monitor_main.py"),
-            "--smoke-test",
-        ],
+        [sys.executable, str(APP_DIR / "monitor_main.py"), "--smoke-test"],
         timeout=30,
-        env=env,
+        env=build_environment(),
     )
 
 
 def run_exe_test() -> None:
     exe = DIST_DIR / "ポケヨヤ君.exe"
-
     if not exe.exists():
-        raise SystemExit(
-            f"EXEが見つかりません: {exe}"
-        )
-
-    env = build_environment()
+        raise SystemExit(f"EXEが見つかりません: {exe}")
     run_command(
-        [
-            str(exe),
-            "--smoke-test",
-        ],
+        [str(exe), "--smoke-test"],
         timeout=45,
-        env=env,
+        env=build_environment(),
     )
 
 
@@ -101,7 +73,6 @@ def main() -> None:
         help="ビルド済みEXEをテストします。",
     )
     args = parser.parse_args()
-
     if args.exe:
         run_exe_test()
         print("EXEスモークテスト: OK")

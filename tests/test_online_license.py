@@ -4,7 +4,6 @@ import json
 import sys
 import tempfile
 import unittest
-import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +14,7 @@ sys.path.insert(0, str(APP_DIR))
 
 from core.online_license_client import OnlineLicenseClient
 from core.online_license_config import DEFAULT_CONFIG, OnlineLicenseConfig
+from core.release_config import ReleaseConfig
 
 
 class FakeResponse:
@@ -65,7 +65,7 @@ class OnlineLicenseConfigTest(unittest.TestCase):
         loaded = self.config.load()
         self.assertEqual(loaded, DEFAULT_CONFIG)
 
-    def test_explicit_versioned_localhost_is_preserved(self):
+    def test_release_channel_ignores_local_server_override(self):
         self.config.save(
             {
                 "enabled": True,
@@ -75,21 +75,28 @@ class OnlineLicenseConfigTest(unittest.TestCase):
         loaded = self.config.load()
         self.assertEqual(
             loaded["server_url"],
-            "http://127.0.0.1:8765",
+            DEFAULT_CONFIG["server_url"],
         )
+
+    def test_developer_mode_can_change_server_url(self):
+        config = OnlineLicenseConfig(ReleaseConfig(channel="dev"))
+        config.path = Path(self.temp_dir.name) / "developer-settings.json"
+        config.save({"server_url": "http://127.0.0.1:8765/"})
+        self.assertEqual(config.load()["server_url"], "http://127.0.0.1:8765")
 
     def test_invalid_url_is_rejected(self):
         valid, _ = self.config.validate_server_url("ftp://example.com")
         self.assertFalse(valid)
+        developer_config = OnlineLicenseConfig(ReleaseConfig(channel="dev"))
+        developer_config.path = Path(self.temp_dir.name) / "invalid.json"
         with self.assertRaises(ValueError):
-            self.config.save({"server_url": "not-a-url"})
+            developer_config.save({"server_url": "not-a-url"})
 
 
 class OnlineLicenseClientTest(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.client = OnlineLicenseClient()
-        self.client.cache_path = Path(self.temp_dir.name) / "cache.json"
         self.client.config_manager.path = (
             Path(self.temp_dir.name) / "settings.json"
         )
@@ -139,13 +146,6 @@ class OnlineLicenseClientTest(unittest.TestCase):
         urlopen,
         _device_id,
     ):
-        self.client._save_cache(
-            "PKY-TEST",
-            {
-                "ok": True,
-                "expires_at": "2099-01-01T00:00:00+00:00",
-            },
-        )
         urlopen.return_value = FakeResponse(
             {"ok": False, "message": "このライセンスは停止されています。"}
         )
@@ -155,18 +155,13 @@ class OnlineLicenseClientTest(unittest.TestCase):
 
     @patch("core.online_license_client.get_device_id", return_value="PC-1")
     @patch("core.online_license_client.urllib.request.urlopen")
-    def test_network_failure_uses_offline_cache(self, urlopen, _device_id):
-        self.client._save_cache(
-            "PKY-TEST",
-            {
-                "ok": True,
-                "expires_at": "2099-01-01T00:00:00+00:00",
-            },
-        )
+    def test_network_failure_never_grants_offline_access(self, urlopen, _device_id):
+        import urllib.error
+
         urlopen.side_effect = urllib.error.URLError("timed out")
         ok, message, _ = self.client.verify("PKY-TEST")
-        self.assertTrue(ok)
-        self.assertIn("オフライン認証成功", message)
+        self.assertFalse(ok)
+        self.assertIn("タイムアウト", message)
 
 
 if __name__ == "__main__":

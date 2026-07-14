@@ -6,6 +6,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+from release_security import (
+    scan_repository,
+    verify_distribution,
+    write_integrity_manifest,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = PROJECT_ROOT / "app"
@@ -102,6 +107,8 @@ def build_target(
         "PyInstaller",
         "--noconfirm",
         "--clean",
+        "--optimize",
+        "2",
         "--onefile",
         "--windowed",
         "--name",
@@ -129,6 +136,16 @@ def build_target(
         "google_auth_oauthlib",
         "--collect-all",
         "google.oauth2",
+        "--exclude-module",
+        "tests",
+        "--exclude-module",
+        "unittest",
+        "--exclude-module",
+        "pdb",
+        "--exclude-module",
+        "core.admin_auth",
+        "--exclude-module",
+        "core.license_crypto",
         str(target["script"]),
     ]
     run(command)
@@ -139,6 +156,7 @@ def verify_user_edition() -> None:
         "ポケヨヤ君.exe",
         "ポケヨヤ君_設定.exe",
         "ポケヨヤ君_Updater.exe",
+        "release-integrity.json",
     )
     missing = [
         name
@@ -174,10 +192,20 @@ def verify_user_edition() -> None:
                 + str(path)
             )
 
+    errors = verify_distribution(DIST_DIR)
+    if errors:
+        raise SystemExit("\n".join(errors))
+
 
 def main() -> None:
     print("ポケヨヤ君 User Editionをビルドします。")
     print("管理サーバー・管理CLI・開発ツールは含めません。")
+    findings = scan_repository(PROJECT_ROOT)
+    if findings:
+        raise SystemExit(
+            "秘密情報の可能性があるためビルドを中止しました:\n- "
+            + "\n- ".join(findings)
+        )
     ensure_dependencies()
     clean()
 
@@ -224,6 +252,11 @@ def main() -> None:
             DIST_DIR
             / icon_png.name,
         )
+
+    write_integrity_manifest(
+        DIST_DIR,
+        [f"{target['name']}.exe" for target in TARGETS],
+    )
 
     verify_user_edition()
 

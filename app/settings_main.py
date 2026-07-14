@@ -6,6 +6,7 @@ from core.app_setup import configure_application
 from core.crash_handler import install_crash_handler
 from core.startup_check import StartupCheck
 from core.startup_diagnostics import StartupDiagnostics
+from core.release_integrity import verify_runtime_integrity
 
 
 def main():
@@ -17,6 +18,11 @@ def main():
         app.setApplicationName("ポケヨヤ君設定")
         configure_application(app)
         install_crash_handler()
+        integrity_ok, integrity_message = verify_runtime_integrity()
+        diagnostics.write(integrity_message)
+        if not integrity_ok:
+            QMessageBox.critical(None, "セキュリティ検査エラー", integrity_message)
+            return
         StartupCheck().run()
 
         from ui.settings_window import SettingsWindow

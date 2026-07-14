@@ -7,8 +7,11 @@ APP_FOLDER_NAME = "PokeyoyaKun"
 
 
 def is_frozen() -> bool:
-    """PyInstallerでEXE化されているか判定する。"""
-    return bool(getattr(sys, "frozen", False))
+    """PyInstallerまたはNuitkaでEXE化されているか判定する。"""
+    return bool(
+        getattr(sys, "frozen", False)
+        or "__compiled__" in globals()
+    )
 
 
 def install_root() -> Path:
@@ -55,5 +58,9 @@ def bundled_root() -> Path:
     """
     if hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS)
+
+    if "__compiled__" in globals():
+        # Nuitkaは同梱データ参照用の__file__を維持する。
+        return Path(__file__).resolve().parents[2]
 
     return install_root()

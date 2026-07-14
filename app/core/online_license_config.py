@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from core.runtime_paths import app_root
+from core.release_config import ReleaseConfig
 
 
 DEFAULT_CONFIG = {
@@ -12,7 +13,7 @@ DEFAULT_CONFIG = {
     "enabled": True,
     "server_url": "http://180.24.86.226:8765",
     "timeout_seconds": 10,
-    "offline_grace_hours": 72,
+    "offline_grace_hours": 0,
 }
 
 LEGACY_LOCAL_URLS = {
@@ -22,7 +23,8 @@ LEGACY_LOCAL_URLS = {
 
 
 class OnlineLicenseConfig:
-    def __init__(self):
+    def __init__(self, release_config: ReleaseConfig | None = None):
+        self.release_config = release_config or ReleaseConfig()
         self.path = (
             app_root()
             / "config"
@@ -70,6 +72,9 @@ class OnlineLicenseConfig:
                 )
             )
         )
+        if not self.release_config.is_development:
+            # 配布版ではローカル設定による接続先の差し替えを許可しない。
+            result["server_url"] = DEFAULT_CONFIG["server_url"]
         result["timeout_seconds"] = self._bounded_int(
             result.get("timeout_seconds"),
             default=10,
@@ -78,9 +83,9 @@ class OnlineLicenseConfig:
         )
         result["offline_grace_hours"] = self._bounded_int(
             result.get("offline_grace_hours"),
-            default=72,
+            default=0,
             minimum=0,
-            maximum=720,
+            maximum=0,
         )
         result["enabled"] = bool(
             result.get("enabled", True)
@@ -98,6 +103,8 @@ class OnlineLicenseConfig:
         value["server_url"] = self.normalize_server_url(
             str(value.get("server_url", ""))
         )
+        if not self.release_config.is_development:
+            value["server_url"] = DEFAULT_CONFIG["server_url"]
 
         valid, message = self.validate_server_url(
             value["server_url"]
@@ -113,9 +120,9 @@ class OnlineLicenseConfig:
         )
         value["offline_grace_hours"] = self._bounded_int(
             value.get("offline_grace_hours"),
-            default=72,
+            default=0,
             minimum=0,
-            maximum=720,
+            maximum=0,
         )
         self.path.parent.mkdir(
             parents=True,

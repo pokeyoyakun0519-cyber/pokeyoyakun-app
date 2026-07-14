@@ -7,6 +7,7 @@ from core.app_setup import configure_application
 from core.behavior_config import BehaviorConfig
 from core.crash_handler import install_crash_handler
 from core.release_config import ReleaseConfig
+from core.release_integrity import verify_runtime_integrity
 from core.startup_check import StartupCheck
 from core.startup_diagnostics import StartupDiagnostics
 from core.whats_new_manager import WhatsNewManager
@@ -23,6 +24,12 @@ def main():
         configure_application(app)
         release_config = ReleaseConfig()
         install_crash_handler()
+
+        integrity_ok, integrity_message = verify_runtime_integrity()
+        diagnostics.write(integrity_message)
+        if not integrity_ok:
+            QMessageBox.critical(None, "セキュリティ検査エラー", integrity_message)
+            return
 
         repaired = StartupCheck().run()
         if repaired:

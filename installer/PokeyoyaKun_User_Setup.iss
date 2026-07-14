@@ -34,6 +34,7 @@ Name: "desktopicon"; Description: "デスクトップにショートカットを
 Source: "..\release\user_dist\ポケヨヤ君.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist\ポケヨヤ君_設定.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist\ポケヨヤ君_Updater.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\user_dist\release-integrity.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist\README.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\release\user_dist\使用方法.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\release\user_dist\pokeyoya_icon.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
