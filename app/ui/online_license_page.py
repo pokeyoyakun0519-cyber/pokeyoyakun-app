@@ -78,8 +78,8 @@ class OnlineLicensePage(QFrame):
         layout.addWidget(self.status)
 
         note = QLabel(
-            "配布版では認証サーバーの接続先を固定しています。"
-            "URLの表示・変更はdevチャネルの開発者モードだけで有効です。"
+            "公開ライセンスAPIは固定ホスト名のHTTPS（443）のみ使用します。"
+            "平文HTTP、IPアドレス、公開APIポートへの直接接続は拒否されます。"
         )
         note.setObjectName("MutedText")
         note.setWordWrap(True)
@@ -95,9 +95,13 @@ class OnlineLicensePage(QFrame):
         if self.server_url is not None:
             self.server_url.setText(str(config.get("server_url", "")))
         key = self.license_manager.load_online_key()
-        self.status.setText(
-            "登録済みキー：" + (self._mask_key(key) if key else "なし")
-        )
+        configuration_error = str(config.get("configuration_error", ""))
+        if configuration_error:
+            self.status.setText("HTTPS設定未完了：" + configuration_error)
+        else:
+            self.status.setText(
+                "登録済みキー：" + (self._mask_key(key) if key else "なし")
+            )
 
     def save_settings(self):
         current = self.config_manager.load()
@@ -106,7 +110,11 @@ class OnlineLicensePage(QFrame):
             current["enabled"] = self.enabled.isChecked()
         if self.server_url is not None:
             current["server_url"] = self.server_url.text().strip()
-        self.config_manager.save(current)
+        try:
+            self.config_manager.save(current)
+        except ValueError as error:
+            QMessageBox.warning(self, "HTTPS設定エラー", str(error))
+            return
         QMessageBox.information(self, "保存完了", "オンラインライセンス設定を保存しました。")
 
     def verify_registered_key(self):

@@ -5,34 +5,85 @@ import socket
 import urllib.error
 import urllib.request
 from typing import Any
+from urllib.parse import urlsplit
 
 from core.device_id import get_device_id
-from core.online_license_config import OnlineLicenseConfig
+from core.online_license_config import (
+    OnlineLicenseConfig,
+    validate_public_server_url,
+)
 from core.version import APP_VERSION
+
+
+class HttpsOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Keep every redirect on the configured HTTPS origin."""
+
+    def __init__(self, server_url: str):
+        super().__init__()
+        approved = urlsplit(validate_public_server_url(server_url))
+        self._approved_origin = (
+            approved.scheme.lower(),
+            approved.hostname,
+            approved.port or 443,
+        )
+
+    def redirect_request(
+        self,
+        req,
+        fp,
+        code,
+        msg,
+        headers,
+        newurl,
+    ):
+        try:
+            redirected = urlsplit(newurl)
+            redirected_port = redirected.port or 443
+        except ValueError as error:
+            raise urllib.error.URLError(
+                "不正なライセンスAPIリダイレクトを拒否しました。"
+            ) from error
+
+        redirected_origin = (
+            redirected.scheme.lower(),
+            redirected.hostname,
+            redirected_port,
+        )
+        if (
+            redirected.scheme.lower() != "https"
+            or redirected.username
+            or redirected.password
+            or redirected_origin != self._approved_origin
+        ):
+            raise urllib.error.URLError(
+                "HTTPSの同一ホスト以外へのリダイレクトを拒否しました。"
+            )
+        return super().redirect_request(
+            req,
+            fp,
+            code,
+            msg,
+            headers,
+            newurl,
+        )
 
 
 class OnlineLicenseClient:
     def __init__(self):
         self.config_manager = OnlineLicenseConfig()
 
-    def test_connection(
-        self,
-        server_url: str | None = None,
-    ) -> tuple[bool, str]:
+    def test_connection(self) -> tuple[bool, str]:
         config = self.config_manager.load()
-        if server_url is not None:
-            config["server_url"] = server_url
 
-        valid, message = self.config_manager.validate_server_url(
-            str(config.get("server_url", ""))
-        )
-        if not valid:
-            return False, message
+        try:
+            approved_server_url = validate_public_server_url(
+                str(config.get("server_url", ""))
+            )
+        except ValueError as error:
+            return False, str(error)
 
         url = (
-            self.config_manager.normalize_server_url(
-                str(config["server_url"])
-            )
+            approved_server_url
             + "/health"
         )
         request = urllib.request.Request(
@@ -44,7 +95,10 @@ class OnlineLicenseClient:
         )
 
         try:
-            with urllib.request.urlopen(
+            opener = urllib.request.build_opener(
+                HttpsOnlyRedirectHandler(approved_server_url)
+            )
+            with opener.open(
                 request,
                 timeout=int(config["timeout_seconds"]),
             ) as response:
@@ -154,14 +208,15 @@ class OnlineLicenseClient:
                 False,
             )
 
-        valid, message = self.config_manager.validate_server_url(
-            str(config.get("server_url", ""))
-        )
-        if not valid:
-            return False, message, {}, False
+        try:
+            approved_server_url = validate_public_server_url(
+                str(config.get("server_url", ""))
+            )
+        except ValueError as error:
+            return False, str(error), {}, False
 
         url = (
-            str(config["server_url"]).rstrip("/")
+            approved_server_url
             + path
         )
         body = json.dumps(
@@ -183,7 +238,10 @@ class OnlineLicenseClient:
         )
 
         try:
-            with urllib.request.urlopen(
+            opener = urllib.request.build_opener(
+                HttpsOnlyRedirectHandler(approved_server_url)
+            )
+            with opener.open(
                 request,
                 timeout=int(
                     config["timeout_seconds"]

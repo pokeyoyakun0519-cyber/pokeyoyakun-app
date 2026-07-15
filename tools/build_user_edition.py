@@ -130,6 +130,8 @@ def build_target(
         str(VERSION_FILE),
         "--add-data",
         f"{ASSETS_DIR};assets",
+        "--add-data",
+        f"{APP_DIR / 'core' / 'online_license_endpoint.json'};core",
         "--collect-all",
         "googleapiclient",
         "--collect-all",

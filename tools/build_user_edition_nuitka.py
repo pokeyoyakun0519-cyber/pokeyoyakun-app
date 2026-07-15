@@ -63,6 +63,11 @@ def build_target(name: str, script: Path) -> None:
         f"--output-dir={output_dir}",
         f"--output-filename={name}.exe",
         f"--include-data-dir={ASSETS_DIR}=assets",
+        (
+            "--include-data-files="
+            f"{APP_DIR / 'core' / 'online_license_endpoint.json'}="
+            "core/online_license_endpoint.json"
+        ),
         "--include-package=googleapiclient",
         "--include-package=google_auth_oauthlib",
         "--include-package=google.oauth2",
