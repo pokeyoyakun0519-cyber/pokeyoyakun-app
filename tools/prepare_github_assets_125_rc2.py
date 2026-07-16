@@ -7,23 +7,23 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ASSET_DIR = (
-    PROJECT_ROOT / "release" / "github_assets" / "ver1.25.0-rc1"
+    PROJECT_ROOT / "release" / "github_assets" / "ver1.25.0-rc2"
 )
 SOURCES = (
     (
         PROJECT_ROOT
         / "release"
         / "user_installer"
-        / "PokeyoyaKun_User_Setup_Ver1.25.0_RC1.exe",
-        "PokeyoyaKun_User_Setup_Ver1.25.0_RC1.exe",
+        / "PokeyoyaKun_User_Setup_Ver1.25.0_RC2.exe",
+        "PokeyoyaKun_User_Setup_Ver1.25.0_RC2.exe",
     ),
     (
-        PROJECT_ROOT / "RELEASE_NOTES_Ver1.25.0_RC1.txt",
-        "RELEASE_NOTES_Ver1.25.0_RC1.txt",
+        PROJECT_ROOT / "RELEASE_NOTES_Ver1.25.0_RC2.txt",
+        "RELEASE_NOTES_Ver1.25.0_RC2.txt",
     ),
     (
-        PROJECT_ROOT / "TESTER_README_Ver1.25.0_RC1.txt",
-        "TESTER_README_Ver1.25.0_RC1.txt",
+        PROJECT_ROOT / "TESTER_README_Ver1.25.0_RC2.txt",
+        "TESTER_README_Ver1.25.0_RC2.txt",
     ),
 )
 

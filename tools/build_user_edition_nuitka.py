@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 DIST_DIR = PROJECT_ROOT / "release" / "user_dist_nuitka"
-BUILD_ROOT = Path(tempfile.gettempdir()) / "PokeyoyaKun_Nuitka_Ver1.25.0_RC1"
+BUILD_ROOT = Path(tempfile.gettempdir()) / "PokeyoyaKun_Nuitka_Ver1.25.0_RC2"
 ICON_PATH = ASSETS_DIR / "pokeyoya_icon.ico"
 
 TARGETS = (
@@ -58,8 +58,8 @@ def build_target(name: str, script: Path) -> None:
         f"--windows-icon-from-ico={ICON_PATH}",
         "--company-name=PokeyoyaKun Project",
         "--product-name=ポケヨヤ君 User Edition",
-        "--file-version=1.25.0.1",
-        "--product-version=1.25.0.1",
+        "--file-version=1.25.0.2",
+        "--product-version=1.25.0.2",
         f"--output-dir={output_dir}",
         f"--output-filename={name}.exe",
         f"--include-data-dir={ASSETS_DIR}=assets",

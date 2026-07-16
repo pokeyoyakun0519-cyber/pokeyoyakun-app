@@ -10,6 +10,11 @@ class HistoryPage(QFrame):
         title = QLabel("更新履歴")
         title.setObjectName("PageTitle")
         text = QLabel(
+            "Ver.1.25.0 RC2\n"
+            "・遊戯王OCGカテゴリと商品表示に対応\n"
+            "・遊戯王OCG公式の商品情報取得に対応\n"
+            "・Gmail抽選結果の遊戯王判定に対応\n"
+            "・店舗検索とTCG誤分類防止を強化\n\n"
             "Ver.1.25.0 RC1\n"
             "・HTTPS固定のオンラインライセンス認証を統合\n"
             "・ご意見・ご要望／店舗追加依頼画面を追加\n"

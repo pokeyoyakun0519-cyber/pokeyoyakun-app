@@ -14,6 +14,7 @@ sys.path.insert(0, str(TOOLS_DIR))
 
 from core.feedback_api import FEEDBACK_API_ORIGIN
 from core.public_roadmap import PUBLIC_ROADMAP_ORIGIN
+from core.tcg_categories import display_name
 from core.version import APP_CHANNEL, APP_VERSION
 from release_security import verify_distribution
 
@@ -21,10 +22,10 @@ from release_security import verify_distribution
 PRODUCTION_ORIGIN = "https://pokeyoyakun.duckdns.org"
 
 
-class Release125Rc1Test(unittest.TestCase):
-    def test_application_version_is_rc1(self):
+class Release125Rc2Test(unittest.TestCase):
+    def test_application_version_is_rc2(self):
         self.assertEqual(APP_VERSION, "1.25.0")
-        self.assertEqual(APP_CHANNEL, "rc1")
+        self.assertEqual(APP_CHANNEL, "rc2")
 
     def test_all_public_apis_use_fixed_production_https_origin(self):
         endpoint = (
@@ -34,29 +35,43 @@ class Release125Rc1Test(unittest.TestCase):
         self.assertEqual(FEEDBACK_API_ORIGIN, PRODUCTION_ORIGIN)
         self.assertEqual(PUBLIC_ROADMAP_ORIGIN, PRODUCTION_ORIGIN)
 
-    def test_executable_and_installer_versions_are_rc1(self):
+    def test_executable_installer_and_build_versions_are_rc2(self):
         version_info = (
             PROJECT_ROOT / "installer" / "version_info.txt"
         ).read_text(encoding="utf-8")
         installer = (
             PROJECT_ROOT / "installer" / "PokeyoyaKun_User_Setup.iss"
         ).read_text(encoding="utf-8")
-        self.assertIn("1.25.0.1", version_info)
-        self.assertIn("1.25.0 RC1", version_info)
-        self.assertIn("1.25.0 RC1 User Edition", installer)
-        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC1", installer)
+        build_installer = (
+            PROJECT_ROOT / "tools" / "build_user_installer.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("1.25.0.2", version_info)
+        self.assertIn("1.25.0 RC2", version_info)
+        self.assertIn("1.25.0 RC2 User Edition", installer)
+        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC2", installer)
+        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC2", build_installer)
 
-    def test_tester_documents_mark_build_as_non_final(self):
+    def test_tester_documents_mark_rc2_as_non_final(self):
         for name in (
             "USER_EDITION_README.txt",
-            "RELEASE_NOTES_Ver1.25.0_RC1.txt",
-            "TESTER_README_Ver1.25.0_RC1.txt",
+            "RELEASE_NOTES_Ver1.25.0_RC2.txt",
+            "TESTER_README_Ver1.25.0_RC2.txt",
         ):
             with self.subTest(name=name):
                 text = (PROJECT_ROOT / name).read_text(encoding="utf-8")
-                self.assertIn("RC1", text)
+                self.assertIn("RC2", text)
                 self.assertIn("正式版ではありません", text)
                 self.assertIn("3か月無料ライセンス", text)
+
+    def test_rc2_documents_include_yugioh_scope(self):
+        for name in (
+            "README.txt",
+            "RELEASE_NOTES_Ver1.25.0_RC2.txt",
+            "TESTER_README_Ver1.25.0_RC2.txt",
+        ):
+            text = (PROJECT_ROOT / name).read_text(encoding="utf-8")
+            self.assertIn("遊戯王OCG", text)
+        self.assertEqual(display_name("yugioh"), "遊戯王OCG")
 
     def test_distribution_rejects_runtime_config_database_and_dpapi(self):
         forbidden = (

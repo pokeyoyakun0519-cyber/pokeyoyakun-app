@@ -19,7 +19,7 @@ INSTALLER_DIR = PROJECT_ROOT / "installer"
 DIST_DIR = PROJECT_ROOT / "release" / "user_dist"
 TEMP_BUILD_ROOT = (
     Path(tempfile.gettempdir())
-    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC1"
+    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC2"
 )
 BUILD_DIR = TEMP_BUILD_ROOT / "build"
 SPEC_DIR = TEMP_BUILD_ROOT / "spec"
