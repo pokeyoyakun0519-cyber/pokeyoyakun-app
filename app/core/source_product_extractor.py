@@ -5,6 +5,7 @@ from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import urljoin
 from core.product_candidate_validator import ProductCandidateValidator
+from core.tcg_categories import display_name
 
 
 PRODUCT_KEYWORDS = (
@@ -214,8 +215,8 @@ class SourceProductExtractor:
 
         return {
             "id": f"source_{product_id}",
-            "tcg_key": "pokemon",
-            "tcg": "ポケモンカード",
+            "tcg_key": "other",
+            "tcg": display_name("other"),
             "name": name,
             "release_date": release_date,
             "status": "発売予定",

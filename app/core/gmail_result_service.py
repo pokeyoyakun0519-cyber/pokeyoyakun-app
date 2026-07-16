@@ -13,6 +13,7 @@ from core.gmail_result_history import GmailResultHistory
 from core.lottery_manager import LotteryManager
 from core.product_store import ProductStore
 from core.runtime_paths import app_root
+from core.tcg_categories import display_name, normalize_key
 
 
 GMAIL_SCOPES = [
@@ -41,6 +42,26 @@ RESULT_KEYWORDS = (
     "抽選販売",
 )
 
+ORDER_STATUS_KEYWORDS = (
+    ("キャンセル", ("キャンセル", "注文取消", "予約取消")),
+    ("予約完了", ("予約完了", "予約を承りました", "予約受付完了")),
+    ("注文受付", ("注文受付", "ご注文を承りました", "注文完了")),
+    ("抽選結果", ("抽選結果", "当選結果", "結果のお知らせ")),
+)
+
+YUGIOH_KEYWORDS = (
+    "遊戯王",
+    "遊戯王OCG",
+    "デュエルモンスターズ",
+    "遊☆戯☆王",
+    "YU-GI-OH",
+)
+POKEMON_ONLY_KEYWORDS = (
+    "ポケモンカード",
+    "ポケモンセンター",
+    "pokemoncenter",
+)
+
 STORE_HINTS = {
     "pokemon_center_online": (
         "ポケモンセンター",
@@ -62,6 +83,18 @@ STORE_HINTS = {
     "geo": (
         "ゲオ",
         "geo",
+    ),
+    "amazon_jp": (
+        "amazon.co.jp",
+        "アマゾン",
+    ),
+    "biccamera": (
+        "ビックカメラ",
+        "biccamera",
+    ),
+    "joshin": (
+        "ジョーシン",
+        "joshin",
     ),
 }
 
@@ -364,6 +397,8 @@ class GmailResultService:
                         "site_url": str(
                             site.get("url", "")
                         ),
+                        "tcg_key": str(product.get("tcg_key", "other")),
+                        "tcg": str(product.get("tcg", "")),
                     }
                 )
         return output
@@ -396,6 +431,16 @@ class GmailResultService:
                 if self._normalize(keyword) in normalized:
                     status = "落選"
                     matched_keyword = keyword
+                break
+
+        if not status:
+            for result_status, keywords in ORDER_STATUS_KEYWORDS:
+                for keyword in keywords:
+                    if self._normalize(keyword) in normalized:
+                        status = result_status
+                        matched_keyword = keyword
+                        break
+                if status:
                     break
 
         if not status and not any(
@@ -438,8 +483,11 @@ class GmailResultService:
                 best_target = target
 
         if best_target is None or best_score < 3:
+            inferred_key = self._infer_tcg_key(normalized)
             return {
                 "status": status or "要確認",
+                "tcg_key": inferred_key,
+                "tcg": display_name(inferred_key),
                 "product_name": "",
                 "site_name": "",
                 "subject": message["subject"],
@@ -456,6 +504,12 @@ class GmailResultService:
             "site_key": best_target["site_key"],
             "site_name": best_target["site_name"],
             "site_url": best_target["site_url"],
+            "tcg_key": normalize_key(
+                best_target.get("tcg_key"), best_target.get("tcg")
+            )[0],
+            "tcg": display_name(
+                best_target.get("tcg_key"), best_target.get("tcg")
+            ),
             "subject": message["subject"],
             "from": message["from"],
             "date": message["date"],
@@ -465,6 +519,16 @@ class GmailResultService:
                 0.45 + best_score * 0.08,
             ),
         }
+
+    @classmethod
+    def _infer_tcg_key(cls, normalized: str) -> str:
+        if any(cls._normalize(term) in normalized for term in YUGIOH_KEYWORDS):
+            return "yugioh"
+        if any(
+            cls._normalize(term) in normalized for term in POKEMON_ONLY_KEYWORDS
+        ):
+            return "pokemon"
+        return "other"
 
     def _apply_result(
         self,

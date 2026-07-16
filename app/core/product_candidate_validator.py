@@ -14,6 +14,14 @@ PRODUCT_TERMS = (
     "構築デッキ",
     "プレミアムデッキセット",
     "デッキセット",
+    "デッキビルドパック",
+    "ストラクチャーデッキ",
+    "LIMITED PACK",
+    "PREMIUM PACK",
+    "WORLD PREMIERE PACK",
+    "基本パック",
+    "コンセプトパック",
+    "スペシャルパック",
 )
 
 REJECT_PHRASES = (

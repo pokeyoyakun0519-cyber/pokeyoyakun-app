@@ -93,6 +93,8 @@ class GmailResultHistory:
                     "",
                 )
             ),
+            "tcg_key": str(result.get("tcg_key", "other")),
+            "tcg": str(result.get("tcg", "その他")),
             "processed_at": datetime.now().isoformat(
                 timespec="seconds"
             ),

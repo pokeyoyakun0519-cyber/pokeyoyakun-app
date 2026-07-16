@@ -17,7 +17,13 @@ from PySide6.QtWidgets import (
 
 from core.log_manager import LogManager
 from core.product_store import ProductStore
+from core.tcg_categories import display_name
 from ui.product_detail_dialog import ProductDetailDialog
+from ui.tcg_category_tabs import (
+    TcgCategoryTabs,
+    category_counts,
+    filter_items_by_category,
+)
 
 
 class ProductCard(QFrame):
@@ -41,7 +47,7 @@ class ProductCard(QFrame):
 
         top_row = QHBoxLayout()
         title = QLabel(
-            f'{product["tcg"]}  ｜  {product["name"]}'
+            f'{display_name(product.get("tcg_key"), product.get("tcg"))}  ｜  {product["name"]}'
         )
         title.setObjectName("ProductName")
         title.setWordWrap(True)
@@ -278,6 +284,11 @@ class ProductPage(QFrame):
         description.setWordWrap(True)
         self.main_layout.addWidget(description)
 
+        self.category_tabs = TcgCategoryTabs()
+        self.category_tabs.category_changed.connect(self._apply_category_filter)
+        self.main_layout.addWidget(self.category_tabs)
+        self._all_products: list[dict] = []
+
         self.result_label = QLabel("")
         self.result_label.setObjectName("MutedText")
         self.result_label.setWordWrap(True)
@@ -292,11 +303,18 @@ class ProductPage(QFrame):
 
     def reload_saved_products(self) -> None:
         products = self.store.load_products()
+        self._all_products = products
+        self.category_tabs.set_counts(category_counts(products))
         self.result_label.setText(
             "保存済みの商品・販売情報を読み込みました。"
         )
-        self._show_products(products)
+        self._apply_category_filter(self.category_tabs.selected_key)
         self._update_timestamp()
+
+    def _apply_category_filter(self, category_key: str) -> None:
+        self._show_products(
+            list(filter_items_by_category(self._all_products, category_key))
+        )
 
     def _show_products(
         self,

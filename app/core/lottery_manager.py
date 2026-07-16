@@ -138,6 +138,8 @@ class LotteryManager:
 
         item = {
             "id": item_id,
+            "tcg_key": str(result.get("tcg_key", "other")),
+            "tcg": str(result.get("tcg", "その他")),
             "product_name": str(
                 result.get(
                     "product_name",

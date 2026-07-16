@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.config_manager import ConfigManager
+from core.tcg_categories import categories
 from core.credential_store import CredentialStore
 from core.log_manager import LogManager
 from core.maintenance import MaintenanceManager, format_bytes
@@ -54,13 +55,11 @@ class SettingsPage(QFrame):
         games_card = self._make_card("監視するTCG")
         games_grid = QGridLayout()
 
-        self.game_pokemon = QCheckBox("ポケモンカード")
-        self.game_onepiece = QCheckBox("ONE PIECEカードゲーム")
-        self.game_gundam = QCheckBox("ガンダムカードゲーム")
-
-        games_grid.addWidget(self.game_pokemon, 0, 0)
-        games_grid.addWidget(self.game_onepiece, 0, 1)
-        games_grid.addWidget(self.game_gundam, 1, 0)
+        self.game_checks = {}
+        for index, category in enumerate(categories(enabled_only=True)):
+            checkbox = QCheckBox(category.display_name)
+            self.game_checks[category.key] = checkbox
+            games_grid.addWidget(checkbox, index // 2, index % 2)
 
         games_card.layout().addLayout(games_grid)
         layout.addWidget(games_card)
@@ -209,9 +208,8 @@ class SettingsPage(QFrame):
         games = config["games"]
         sites = config["sites"]
 
-        self.game_pokemon.setChecked(games["pokemon"])
-        self.game_onepiece.setChecked(games["onepiece"])
-        self.game_gundam.setChecked(games["gundam"])
+        for key, checkbox in self.game_checks.items():
+            checkbox.setChecked(bool(games.get(key, True)))
 
         self.site_pokemon_center.setChecked(sites["pokemon_center"])
         self.site_amazon.setChecked(sites["amazon"])
@@ -254,9 +252,8 @@ class SettingsPage(QFrame):
                 "sound_file": self.sound_path.text().strip(),
             },
             "games": {
-                "pokemon": self.game_pokemon.isChecked(),
-                "onepiece": self.game_onepiece.isChecked(),
-                "gundam": self.game_gundam.isChecked(),
+                key: checkbox.isChecked()
+                for key, checkbox in self.game_checks.items()
             },
             "sites": {
                 "pokemon_center": self.site_pokemon_center.isChecked(),

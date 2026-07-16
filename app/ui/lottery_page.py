@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from core.log_manager import LogManager
 from core.lottery_manager import LotteryManager
 from core.notification_manager import NotificationManager
+from core.tcg_categories import display_name
 
 
 class LotteryCard(QFrame):
@@ -31,6 +32,7 @@ class LotteryCard(QFrame):
         header = QHBoxLayout()
 
         title = QLabel(
+            f'{display_name(item.get("tcg_key"), item.get("tcg"))} ｜ '
             f'{item.get("product_name", "商品名未設定")}  ｜  '
             f'{item.get("site_name", "サイト名未設定")}'
         )

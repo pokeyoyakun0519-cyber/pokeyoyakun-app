@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.gmail_result_service import GmailResultService
+from core.tcg_categories import display_name
 from core.email_account_manager import (
     EmailAccountManager,
 )
@@ -403,11 +404,19 @@ class EmailAccountsPage(QFrame):
             for item in results
             if item.get("status") == "エラー"
         )
+        tcg_counts: dict[str, int] = {}
+        for item in results:
+            label = display_name(item.get("tcg_key"), item.get("tcg"))
+            tcg_counts[label] = tcg_counts.get(label, 0) + 1
+        tcg_summary = "　".join(
+            f"{label} {count}件" for label, count in tcg_counts.items()
+        )
 
         self.summary.setText(
             f"メール確認完了：{len(results)}件　"
             f"当選 {wins}件　落選 {losses}件　"
             f"要確認 {reviews}件　エラー {errors}件"
+            + (f"\nTCG：{tcg_summary}" if tcg_summary else "")
         )
 
         QMessageBox.information(

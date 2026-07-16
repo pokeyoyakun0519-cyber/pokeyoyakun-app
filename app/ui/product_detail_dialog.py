@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.site_master_manager import SiteMasterManager
+from core.tcg_categories import display_name
 
 
 class ProductDetailDialog(QDialog):
@@ -40,7 +41,7 @@ class ProductDetailDialog(QDialog):
         root.addLayout(header)
 
         info = QLabel(
-            f'TCG：{self.product.get("tcg", "未設定")}\n'
+            f'TCG：{display_name(self.product.get("tcg_key"), self.product.get("tcg"))}\n'
             f'発売日：{self.product.get("release_date", "未設定")}'
         )
         info.setObjectName("PageText")

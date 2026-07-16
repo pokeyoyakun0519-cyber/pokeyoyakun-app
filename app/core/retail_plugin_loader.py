@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.runtime_paths import app_root
+from core.tcg_categories import categories
 
 
 ALLOWED_MODES = {
@@ -283,7 +284,9 @@ class RetailPluginLoader:
                             "?q={query}"
                         ),
                         "regions": ["全国"],
-                        "tcg": ["pokemon"],
+                        "tcg": [
+                            item.key for item in categories(enabled_only=True)
+                        ],
                         "application_method": "Web",
                         "result_mode": "account_page",
                         "enabled": False,

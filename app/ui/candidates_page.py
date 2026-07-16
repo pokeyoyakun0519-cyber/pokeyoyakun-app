@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QComboBox,
     QLineEdit,
     QMessageBox,
     QProgressBar,
@@ -17,6 +18,12 @@ from core.candidate_manager import CandidateManager
 from core.log_manager import LogManager
 from core.retail_search_manager import RetailSearchManager
 from core.source_manager import SourceManager
+from core.tcg_categories import categories, display_name
+from ui.tcg_category_tabs import (
+    TcgCategoryTabs,
+    category_counts,
+    filter_items_by_category,
+)
 
 
 class RetailSearchWorker(QObject):
@@ -114,7 +121,8 @@ class CandidateCard(QFrame):
         header = QHBoxLayout()
 
         title = QLabel(
-            candidate.get(
+            f'{display_name(candidate.get("tcg_key"), candidate.get("tcg"))} ｜ '
+            + candidate.get(
                 "name",
                 "名称未設定",
             )
@@ -385,6 +393,9 @@ class CandidatesPage(QFrame):
         self.manual_name.setPlaceholderText(
             "候補の商品名"
         )
+        self.manual_tcg = QComboBox()
+        for category in categories(enabled_only=True):
+            self.manual_tcg.addItem(category.display_name, category.key)
 
         self.manual_add_button = QPushButton(
             "候補を手動追加"
@@ -397,6 +408,7 @@ class CandidatesPage(QFrame):
             self.manual_name,
             1,
         )
+        manual_layout.addWidget(self.manual_tcg)
         manual_layout.addWidget(
             self.manual_add_button
         )
@@ -408,6 +420,11 @@ class CandidatesPage(QFrame):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
+
+        self.category_tabs = TcgCategoryTabs()
+        self.category_tabs.category_changed.connect(self._apply_category_filter)
+        layout.addWidget(self.category_tabs)
+        self._all_candidates: list[dict] = []
 
         self.result_label = QLabel("")
         self.result_label.setObjectName(
@@ -811,7 +828,8 @@ class CandidatesPage(QFrame):
             return
 
         self.candidate_manager.add_manual_candidate(
-            name
+            name,
+            tcg_key=str(self.manual_tcg.currentData()),
         )
         self.manual_name.clear()
         self.result_label.setText(
@@ -845,6 +863,14 @@ class CandidatesPage(QFrame):
         candidates = (
             self.candidate_manager
             .load_candidates()
+        )
+        self._all_candidates = candidates
+        self.category_tabs.set_counts(category_counts(candidates))
+        self._apply_category_filter(self.category_tabs.selected_key)
+
+    def _apply_category_filter(self, category_key: str) -> None:
+        candidates = list(
+            filter_items_by_category(self._all_candidates, category_key)
         )
 
         container = QWidget()

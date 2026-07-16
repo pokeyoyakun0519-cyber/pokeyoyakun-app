@@ -90,10 +90,12 @@ class RetailSearchManager:
         hits: list[dict[str, Any]] = []
         messages: list[str] = []
 
-        for searcher in (
-            self._search_pokemon_center,
-            self._search_yodobashi,
-        ):
+        tcg_key = str(candidate.get("tcg_key", "other"))
+        searchers = [self._search_yodobashi]
+        if tcg_key == "pokemon":
+            searchers.insert(0, self._search_pokemon_center)
+
+        for searcher in searchers:
             try:
                 found, message = searcher(candidate)
                 hits.extend(found)
@@ -102,8 +104,6 @@ class RetailSearchManager:
                 messages.append(
                     f"{searcher.__name__}: 検索失敗 ({error})"
                 )
-
-        tcg_key = str(candidate.get("tcg_key", "pokemon"))
 
         for plugin in enabled_plugins_for_tcg(tcg_key):
             if plugin.get("mode") == "dedicated":

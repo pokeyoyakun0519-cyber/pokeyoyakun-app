@@ -11,12 +11,17 @@ from urllib.parse import urlparse
 
 from core.official_diff_tracker import OfficialDiffTracker
 from core.pokemon_official_extractor import PokemonOfficialExtractor
+from core.yugioh_official_extractor import YugiohOfficialExtractor
 from core.candidate_manager import CandidateManager
 from core.runtime_paths import app_root
+from core.tcg_categories import display_name, normalize_key, normalize_record
 from core.source_product_extractor import SourceProductExtractor
 
 
 class SourceManager:
+    YUGIOH_OFFICIAL_PRODUCTS_URL = (
+        "https://www.yugioh-card.com/japan/products/"
+    )
     USER_AGENT = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 Chrome/124 Safari/537.36 "
@@ -27,6 +32,7 @@ class SourceManager:
         self.sources_path = app_root() / "config" / "sources.json"
         self.extractor = SourceProductExtractor()
         self.pokemon_extractor = PokemonOfficialExtractor()
+        self.yugioh_extractor = YugiohOfficialExtractor()
         self.diff_tracker = OfficialDiffTracker()
         self.candidate_manager = CandidateManager()
 
@@ -37,7 +43,11 @@ class SourceManager:
         try:
             with self.sources_path.open("r", encoding="utf-8") as file:
                 data = json.load(file)
-            return data if isinstance(data, list) else []
+            return (
+                [normalize_record(item)[0] for item in data]
+                if isinstance(data, list)
+                else []
+            )
         except (OSError, json.JSONDecodeError):
             return []
 
@@ -46,7 +56,7 @@ class SourceManager:
         with self.sources_path.open("w", encoding="utf-8") as file:
             json.dump(sources, file, ensure_ascii=False, indent=2)
 
-    def add_source(self, name: str, url: str) -> None:
+    def add_source(self, name: str, url: str, tcg_key: str = "other") -> None:
         sources = self.load_sources()
         source_id = self._make_id(url)
 
@@ -69,6 +79,8 @@ class SourceManager:
                 "official_changes": [],
                 "enabled": True,
                 "priority": len(sources) + 1,
+                "tcg_key": normalize_key(tcg_key)[0],
+                "tcg": display_name(normalize_key(tcg_key)[0]),
             }
         )
         self.save_sources(sources)
@@ -79,6 +91,7 @@ class SourceManager:
         source_id: str,
         name: str,
         url: str,
+        tcg_key: str | None = None,
     ) -> bool:
         sources = self.load_sources()
         changed = False
@@ -92,6 +105,9 @@ class SourceManager:
                 or "名称未設定"
             )
             source["url"] = url.strip()
+            if tcg_key is not None:
+                source["tcg_key"] = normalize_key(tcg_key)[0]
+                source["tcg"] = display_name(source["tcg_key"])
             changed = True
             break
 
@@ -176,12 +192,23 @@ class SourceManager:
                     )
                 )
                 source["last_detail_pages"] = detail_pages
+            elif self._is_yugioh_official(source_url):
+                discovered, detail_pages = self._extract_yugioh_official_products(
+                    checked["html"], source_url, source_name
+                )
+                source["last_detail_pages"] = detail_pages
             else:
                 discovered = self.extractor.extract(
                     checked["html"],
                     source_url,
                     source_name,
                 )
+                source_tcg_key = normalize_key(
+                    source.get("tcg_key"), source.get("tcg")
+                )[0]
+                for product in discovered:
+                    product["tcg_key"] = source_tcg_key
+                    product["tcg"] = display_name(source_tcg_key)
 
             official_changes = (
                 self.diff_tracker.compare_and_update(
@@ -214,7 +241,9 @@ class SourceManager:
                 for item in discovered[:12]
             ]
 
-            if self._is_pokemon_official(source_url):
+            if self._is_pokemon_official(source_url) or self._is_yugioh_official(
+                source_url
+            ):
                 source["last_status"] = (
                     f"確認成功・商品ページ{source['last_detail_pages']}件解析"
                     f"・商品{len(discovered)}件検出"
@@ -291,6 +320,44 @@ class SourceManager:
                 source_name,
             )
 
+        return products, detail_pages
+
+    def _extract_yugioh_official_products(
+        self,
+        top_html: str,
+        source_url: str,
+        source_name: str,
+    ) -> tuple[list[dict], int]:
+        candidates = self.yugioh_extractor.collect_candidate_links(
+            top_html, source_url
+        )
+        products = []
+        detail_pages = 0
+        seen = set()
+        for candidate in candidates:
+            checked = self._fetch_page(candidate["url"])
+            if not checked["ok"]:
+                continue
+            detail_pages += 1
+            for product in self.yugioh_extractor.extract_detail_products(
+                checked["html"],
+                candidate["url"],
+                source_name,
+                candidate.get("text", ""),
+            ):
+                key = (
+                    self._normalize_name(str(product.get("name", ""))),
+                    str(product.get("release_date", "")),
+                )
+                if key not in seen:
+                    seen.add(key)
+                    products.append(product)
+            time.sleep(0.25)
+        if not products:
+            products = self.extractor.extract(top_html, source_url, source_name)
+            for product in products:
+                product["tcg_key"] = "yugioh"
+                product["tcg"] = "遊戯王OCG"
         return products, detail_pages
 
     def _fetch_page(self, url: str) -> dict[str, Any]:
@@ -375,6 +442,11 @@ class SourceManager:
         return host == "pokemon-card.com" or host.endswith(
             ".pokemon-card.com"
         )
+
+    @staticmethod
+    def _is_yugioh_official(url: str) -> bool:
+        host = urlparse(url).netloc.lower().split(":", 1)[0]
+        return host == "yugioh-card.com" or host.endswith(".yugioh-card.com")
 
     @staticmethod
     def _normalize_name(name: str) -> str:

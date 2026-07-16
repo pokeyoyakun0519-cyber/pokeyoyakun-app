@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QComboBox,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
 from core.log_manager import LogManager
 from core.notification_manager import NotificationManager
 from core.source_manager import SourceManager
+from core.tcg_categories import categories, display_name
 
 
 class SourceEditDialog(QDialog):
@@ -42,9 +44,15 @@ class SourceEditDialog(QDialog):
         self.url = QLineEdit(
             str(source.get("url", ""))
         )
+        self.tcg = QComboBox()
+        for category in categories(enabled_only=True):
+            self.tcg.addItem(category.display_name, category.key)
+        index = self.tcg.findData(source.get("tcg_key", "other"))
+        self.tcg.setCurrentIndex(max(0, index))
 
         form.addRow("名前", self.name)
         form.addRow("URL", self.url)
+        form.addRow("TCG", self.tcg)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(
@@ -84,7 +92,8 @@ class SourceCard(QFrame):
         header = QHBoxLayout()
 
         name = QLabel(
-            source.get(
+            f'{display_name(source.get("tcg_key"), source.get("tcg"))} ｜ '
+            + source.get(
                 "name",
                 "名称未設定",
             )
@@ -245,10 +254,15 @@ class SourcesPage(QFrame):
         self.url_input.setPlaceholderText(
             "https:// から始まるURL"
         )
+        self.tcg_input = QComboBox()
+        for category in categories(enabled_only=True):
+            self.tcg_input.addItem(category.display_name, category.key)
         add_button = QPushButton("登録")
         add_button.clicked.connect(
             self.add_source
         )
+        yugioh_button = QPushButton("遊戯王OCG公式を入力")
+        yugioh_button.clicked.connect(self.fill_yugioh_official_source)
 
         fields.addWidget(
             self.name_input,
@@ -258,6 +272,8 @@ class SourcesPage(QFrame):
             self.url_input,
             2,
         )
+        fields.addWidget(self.tcg_input)
+        fields.addWidget(yugioh_button)
         fields.addWidget(add_button)
 
         add_layout.addWidget(add_title)
@@ -280,6 +296,14 @@ class SourcesPage(QFrame):
 
         self.reload_sources()
 
+    def fill_yugioh_official_source(self) -> None:
+        """公式ソースの値を入力する。登録は利用者が明示的に行う。"""
+        self.name_input.setText("遊戯王OCG公式 商品情報")
+        self.url_input.setText(SourceManager.YUGIOH_OFFICIAL_PRODUCTS_URL)
+        index = self.tcg_input.findData("yugioh")
+        if index >= 0:
+            self.tcg_input.setCurrentIndex(index)
+
     def add_source(self) -> None:
         name = self.name_input.text().strip()
         url = self.url_input.text().strip()
@@ -297,6 +321,7 @@ class SourcesPage(QFrame):
         self.source_manager.add_source(
             name,
             url,
+            str(self.tcg_input.currentData()),
         )
         self.name_input.clear()
         self.url_input.clear()
@@ -328,6 +353,7 @@ class SourcesPage(QFrame):
             str(source.get("id", "")),
             dialog.name.text(),
             url,
+            str(dialog.tcg.currentData()),
         )
         self.reload_sources()
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.runtime_paths import app_root
+from core.tcg_categories import display_name, normalize_key, normalize_record
 
 
 class CandidateManager:
@@ -17,7 +18,7 @@ class CandidateManager:
         self.products_path = root / "data" / "products.json"
 
     def load_candidates(self) -> list[dict[str, Any]]:
-        return self._load_list(self.candidates_path)
+        return [normalize_record(item)[0] for item in self._load_list(self.candidates_path)]
 
     def save_candidates(
         self,
@@ -105,11 +106,12 @@ class CandidateManager:
                     "source_url": source_url,
                     "official_url": official_url,
                     "name": name,
-                    "tcg_key": str(
-                        product.get("tcg_key", "pokemon")
-                    ),
-                    "tcg": str(
-                        product.get("tcg", "ポケモンカード")
+                    "tcg_key": normalize_key(
+                        product.get("tcg_key"), product.get("tcg")
+                    )[0],
+                    "tcg": display_name(
+                        normalize_key(product.get("tcg_key"), product.get("tcg"))[0],
+                        product.get("tcg"),
                     ),
                     "release_date": release_date,
                     "status": "販売・抽選情報を検索待ち",
@@ -164,8 +166,13 @@ class CandidateManager:
                             "release_date",
                             "",
                         ),
-                        "tcg_key": "pokemon",
-                        "tcg": "ポケモンカード",
+                        "tcg_key": normalize_key(
+                            source.get("tcg_key"), source.get("tcg")
+                        )[0],
+                        "tcg": display_name(
+                            normalize_key(source.get("tcg_key"), source.get("tcg"))[0],
+                            source.get("tcg"),
+                        ),
                         "sites": [
                             {
                                 "url": item.get(
@@ -198,6 +205,7 @@ class CandidateManager:
         name: str,
         source_name: str = "手動追加",
         source_url: str = "",
+        tcg_key: str = "other",
     ) -> None:
         clean_name = name.strip()
         if not clean_name:
@@ -227,8 +235,8 @@ class CandidateManager:
                 "source_url": source_url,
                 "official_url": source_url,
                 "name": clean_name,
-                "tcg_key": "pokemon",
-                "tcg": "ポケモンカード",
+                "tcg_key": normalize_key(tcg_key)[0],
+                "tcg": display_name(normalize_key(tcg_key)[0]),
                 "release_date": "",
                 "status": "販売・抽選情報を検索待ち",
                 "approved": False,
@@ -360,13 +368,11 @@ class CandidateManager:
 
         product = {
             "id": product_id,
-            "tcg_key": candidate.get(
-                "tcg_key",
-                "pokemon",
-            ),
-            "tcg": candidate.get(
-                "tcg",
-                "ポケモンカード",
+            "tcg_key": normalize_key(
+                candidate.get("tcg_key"), candidate.get("tcg")
+            )[0],
+            "tcg": display_name(
+                candidate.get("tcg_key"), candidate.get("tcg")
             ),
             "name": candidate.get(
                 "name",

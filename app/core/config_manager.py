@@ -24,7 +24,9 @@ DEFAULT_CONFIG = {
     "games": {
         "pokemon": True,
         "onepiece": True,
+        "yugioh": True,
         "gundam": True,
+        "other": True,
     },
     "sites": {
         "pokemon_center": True,

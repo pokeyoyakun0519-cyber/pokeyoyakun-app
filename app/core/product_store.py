@@ -5,6 +5,7 @@ from typing import Any
 
 from core.plugin_manager import PluginManager
 from core.runtime_paths import app_root
+from core.tcg_categories import normalize_record
 
 
 class ProductStore:
@@ -17,7 +18,7 @@ class ProductStore:
         self.plugin_manager = PluginManager()
 
     def load_products(self) -> list[dict[str, Any]]:
-        products = self._load_product_file()
+        products = [normalize_record(item)[0] for item in self._load_product_file()]
         return self._apply_user_state_and_archive(products)
 
     def update_from_plugins(
