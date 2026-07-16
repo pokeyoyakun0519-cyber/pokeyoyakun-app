@@ -1,3 +1,3 @@
 APP_NAME = "ポケヨヤ君"
-APP_VERSION = "1.24.0"
-APP_CHANNEL = "rc"
+APP_VERSION = "1.25.0"
+APP_CHANNEL = "rc1"

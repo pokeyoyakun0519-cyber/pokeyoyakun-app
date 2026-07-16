@@ -10,6 +10,12 @@ class HistoryPage(QFrame):
         title = QLabel("更新履歴")
         title.setObjectName("PageTitle")
         text = QLabel(
+            "Ver.1.25.0 RC1\n"
+            "・HTTPS固定のオンラインライセンス認証を統合\n"
+            "・ご意見・ご要望／店舗追加依頼画面を追加\n"
+            "・人気要望・開発状況画面を追加\n"
+            "・ETag、5分キャッシュ、オフライン表示に対応\n"
+            "・User Edition配布物のセキュリティ監査を強化\n\n"
             "Ver.1.23.0 RC\n"
             "・サブスクリプション管理基盤を追加\n"
             "・先行ユーザー月額300円、通常月額500円\n"

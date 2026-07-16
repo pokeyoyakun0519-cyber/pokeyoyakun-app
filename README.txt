@@ -1,4 +1,5 @@
-PokeyoyaKun Ver.1.0.1
+PokeyoyaKun User Edition Ver.1.25.0 RC1
+テスター向け評価版（正式版ではありません）
 
 【修正内容】
 公式情報ソースを確認しても、商品一覧へ商品が追加されない問題を修正しました。
@@ -171,20 +172,20 @@ BAT編集は不要で、パスワード設定・秘密鍵生成・ブラウザ�
 正式版1.0前のまとめ確認用RCです。RUN_RC_ACCEPTANCE_TEST.batで主要基盤を一括検査できます。
 
 
-【Ver.1.24.0 RC User Edition ノートPCテスト手順】
+【Ver.1.25.0 RC1 User Edition ノートPCテスト手順】
 
 事前準備（管理PC）:
 1. ライセンスサーバーとHTTPSリバースプロキシを起動し、公開先が443番で応答することを確認します。
 2. 管理画面または管理CLIで、テスト用オンラインライセンスキーを1件発行します。
 3. 公開URLの /health を外部回線から開き、ok が true になることを確認します。
    例: https://設定した固定ドメイン/health
-4. release\user_installer\PokeyoyaKun_User_Setup_Ver1.24.0_RC.exeをノートPCへコピーします。
+4. release\user_installer\PokeyoyaKun_User_Setup_Ver1.25.0_RC1.exeをノートPCへコピーします。
 
 インストールとオンライン認証（ノートPC）:
 1. 管理PCと同じLANは使わず、スマートフォンのテザリングなど別の回線へ接続します。
    同一LANから公開IPへ接続すると、ルーターのNATループバック非対応により
    タイムアウトする場合があります。
-2. PokeyoyaKun_User_Setup_Ver1.24.0_RC.exeを実行し、インストールします。
+2. PokeyoyaKun_User_Setup_Ver1.25.0_RC1.exeを実行し、インストールします。
 3. ポケヨヤ君を起動します。配布版では認証サーバーURLは画面へ表示されません。
 4. 「接続テスト」を押し、「ライセンスサーバーへ接続できました。」と
    表示されることを確認します。
@@ -208,7 +209,7 @@ BAT編集は不要で、パスワード設定・秘密鍵生成・ブラウザ�
 ・User Editionは固定ホスト名のHTTPS（443）だけを使用します。
 
 
-【Ver.1.24.0 RC User Edition 配布セキュリティ】
+【Ver.1.25.0 RC1 User Edition 配布セキュリティ】
 ・固定Administrator認証と従来のローカルライセンス判定をUser Editionから削除しました。
 ・ライセンス発行、停止、期限、端末数の最終判定はサーバー側だけで行います。
 ・配布版のサーバーURLは画面へ表示せず、devチャネルだけで変更できます。

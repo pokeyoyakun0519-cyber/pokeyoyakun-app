@@ -78,12 +78,28 @@ def write_integrity_manifest(dist_dir: Path, executable_names: list[str]) -> Pat
 
 def verify_distribution(dist_dir: Path) -> list[str]:
     errors: list[str] = []
-    forbidden_suffixes = {".py", ".pyc", ".pdb", ".spec", ".map"}
+    forbidden_suffixes = {
+        ".py", ".pyc", ".pdb", ".spec", ".map",
+        ".db", ".sqlite", ".sqlite3", ".pem", ".key", ".pfx", ".p12",
+    }
     forbidden_names = {"tests", "test", "__pycache__", "debug", "license_server", "admin_server"}
+    forbidden_runtime_names = {
+        "admin_config.json",
+        "google_client_secret.json",
+        "online_license_key.json",
+        "online_license_cache.json",
+        "online_license_settings.json",
+        "feedback_receipts.json",
+        "public_roadmap_cache.json",
+    }
     for path in dist_dir.rglob("*"):
         lowered_parts = {part.lower() for part in path.relative_to(dist_dir).parts}
         if lowered_parts & forbidden_names:
             errors.append(f"開発・管理用パスが混入: {path}")
         if path.is_file() and path.suffix.lower() in forbidden_suffixes:
             errors.append(f"配布禁止ファイルが混入: {path}")
+        if path.is_file() and path.name.lower() in forbidden_runtime_names:
+            errors.append(f"ユーザー設定・認証キャッシュが混入: {path}")
+        if path.is_file() and "dpapi" in path.name.lower():
+            errors.append(f"DPAPI由来ファイルが混入: {path}")
     return errors

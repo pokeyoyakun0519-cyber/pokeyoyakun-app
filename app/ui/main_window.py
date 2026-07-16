@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from core.behavior_config import BehaviorConfig
 from core.monitor_scheduler import MonitorScheduler
 from core.runtime_paths import is_frozen
+from core.version import APP_CHANNEL, APP_VERSION
 from ui.about_page import AboutPage
 from ui.application_dashboard_page import ApplicationDashboardPage
 from ui.backup_page import BackupPage
@@ -46,7 +47,9 @@ from ui.update_page import UpdatePage
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ポケヨヤ君 Ver.1.22.0 RC")
+        self.setWindowTitle(
+            f"ポケヨヤ君 Ver.{APP_VERSION} {APP_CHANNEL.upper()}"
+        )
         self.resize(1280, 780)
         self.setMinimumSize(980, 620)
 
@@ -177,7 +180,7 @@ class MainWindow(QMainWindow):
         scroll.setWidget(container)
         outer.addWidget(scroll, 1)
 
-        version = QLabel("Version 1.22.0 RC")
+        version = QLabel(f"Version {APP_VERSION} {APP_CHANNEL.upper()}")
         version.setObjectName("VersionLabel")
         version.setAlignment(Qt.AlignCenter)
         self.exit_button = QPushButton("終了")

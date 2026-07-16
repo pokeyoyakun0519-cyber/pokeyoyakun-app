@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 DIST_DIR = PROJECT_ROOT / "release" / "user_dist_nuitka"
-BUILD_ROOT = Path(tempfile.gettempdir()) / "PokeyoyaKun_Nuitka_Ver1.24.0_RC"
+BUILD_ROOT = Path(tempfile.gettempdir()) / "PokeyoyaKun_Nuitka_Ver1.25.0_RC1"
 ICON_PATH = ASSETS_DIR / "pokeyoya_icon.ico"
 
 TARGETS = (
@@ -58,8 +58,8 @@ def build_target(name: str, script: Path) -> None:
         f"--windows-icon-from-ico={ICON_PATH}",
         "--company-name=PokeyoyaKun Project",
         "--product-name=ポケヨヤ君 User Edition",
-        "--file-version=1.24.0.0",
-        "--product-version=1.24.0.0",
+        "--file-version=1.25.0.1",
+        "--product-version=1.25.0.1",
         f"--output-dir={output_dir}",
         f"--output-filename={name}.exe",
         f"--include-data-dir={ASSETS_DIR}=assets",
@@ -82,10 +82,13 @@ def build_target(name: str, script: Path) -> None:
 
 
 def copy_public_files() -> None:
-    for file_name in ("README.txt", "使用方法.txt"):
-        source = PROJECT_ROOT / file_name
+    for source_name, destination_name in (
+        ("USER_EDITION_README.txt", "README.txt"),
+        ("使用方法.txt", "使用方法.txt"),
+    ):
+        source = PROJECT_ROOT / source_name
         if source.is_file():
-            shutil.copy2(source, DIST_DIR / file_name)
+            shutil.copy2(source, DIST_DIR / destination_name)
     icon = ASSETS_DIR / "pokeyoya_icon.png"
     if icon.is_file():
         shutil.copy2(icon, DIST_DIR / icon.name)

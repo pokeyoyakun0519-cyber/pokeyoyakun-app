@@ -19,7 +19,7 @@ INSTALLER_DIR = PROJECT_ROOT / "installer"
 DIST_DIR = PROJECT_ROOT / "release" / "user_dist"
 TEMP_BUILD_ROOT = (
     Path(tempfile.gettempdir())
-    / "PokeyoyaKun_UserEdition_Ver1.24.0_RC"
+    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC1"
 )
 BUILD_DIR = TEMP_BUILD_ROOT / "build"
 SPEC_DIR = TEMP_BUILD_ROOT / "spec"
@@ -229,19 +229,16 @@ def main() -> None:
             exist_ok=True,
         )
 
-    for file_name in (
-        "README.txt",
-        "使用方法.txt",
-    ):
-        source = (
-            PROJECT_ROOT
-            / file_name
-        )
+    public_files = (
+        ("USER_EDITION_README.txt", "README.txt"),
+        ("使用方法.txt", "使用方法.txt"),
+    )
+    for source_name, destination_name in public_files:
+        source = PROJECT_ROOT / source_name
         if source.exists():
             shutil.copy2(
                 source,
-                DIST_DIR
-                / file_name,
+                DIST_DIR / destination_name,
             )
 
     icon_png = (
