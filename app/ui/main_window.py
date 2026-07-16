@@ -31,6 +31,7 @@ from ui.online_license_page import OnlineLicensePage
 from ui.plugin_page import PluginPage
 from ui.plugin_distribution_page import PluginDistributionPage
 from ui.product_page import ProductPage
+from ui.public_roadmap_page import PublicRoadmapPage
 from ui.resident_page import ResidentPage
 from ui.regression_page import RegressionPage
 from ui.release_readiness_page import ReleaseReadinessPage
@@ -125,6 +126,7 @@ class MainWindow(QMainWindow):
             ("release_readiness_button", "リリース準備状況"),
             ("support_button", "サポート"),
             ("feedback_button", "ご意見・ご要望"),
+            ("public_roadmap_button", "人気要望・開発状況"),
             ("about_button", "アプリ情報"),
         ]
         for attr, label in labels:
@@ -166,7 +168,8 @@ class MainWindow(QMainWindow):
             self.online_license_button,
             self.history_button, self.self_test_button,
             self.regression_button, self.release_readiness_button,
-            self.support_button, self.feedback_button, self.about_button,
+            self.support_button, self.feedback_button,
+            self.public_roadmap_button, self.about_button,
             self.open_settings_button,
         ])
         menu.addStretch()
@@ -237,6 +240,7 @@ class MainWindow(QMainWindow):
         self.release_readiness_page = ReleaseReadinessPage()
         self.support_page = SupportPage()
         self.feedback_page = FeedbackPage()
+        self.public_roadmap_page = PublicRoadmapPage()
         self.about_page = AboutPage()
 
         self.page_map = {
@@ -267,6 +271,7 @@ class MainWindow(QMainWindow):
             self.release_readiness_button: self.release_readiness_page,
             self.support_button: self.support_page,
             self.feedback_button: self.feedback_page,
+            self.public_roadmap_button: self.public_roadmap_page,
             self.about_button: self.about_page,
         }
 
