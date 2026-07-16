@@ -18,6 +18,7 @@ from ui.application_dashboard_page import ApplicationDashboardPage
 from ui.backup_page import BackupPage
 from ui.candidates_page import CandidatesPage
 from ui.external_notification_page import ExternalNotificationPage
+from ui.feedback_page import FeedbackPage
 from ui.email_accounts_page import EmailAccountsPage
 from ui.history_page import HistoryPage
 from ui.home_page import HomePage
@@ -123,6 +124,7 @@ class MainWindow(QMainWindow):
             ("regression_button", "回帰テスト"),
             ("release_readiness_button", "リリース準備状況"),
             ("support_button", "サポート"),
+            ("feedback_button", "ご意見・ご要望"),
             ("about_button", "アプリ情報"),
         ]
         for attr, label in labels:
@@ -164,7 +166,7 @@ class MainWindow(QMainWindow):
             self.online_license_button,
             self.history_button, self.self_test_button,
             self.regression_button, self.release_readiness_button,
-            self.support_button, self.about_button,
+            self.support_button, self.feedback_button, self.about_button,
             self.open_settings_button,
         ])
         menu.addStretch()
@@ -234,6 +236,7 @@ class MainWindow(QMainWindow):
         self.regression_page = RegressionPage()
         self.release_readiness_page = ReleaseReadinessPage()
         self.support_page = SupportPage()
+        self.feedback_page = FeedbackPage()
         self.about_page = AboutPage()
 
         self.page_map = {
@@ -263,6 +266,7 @@ class MainWindow(QMainWindow):
             self.regression_button: self.regression_page,
             self.release_readiness_button: self.release_readiness_page,
             self.support_button: self.support_page,
+            self.feedback_button: self.feedback_page,
             self.about_button: self.about_page,
         }
 
