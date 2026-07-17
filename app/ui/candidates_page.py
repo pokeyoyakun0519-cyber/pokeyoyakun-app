@@ -195,6 +195,14 @@ class CandidateCard(QFrame):
         )
         release.setObjectName("MutedText")
 
+        kind_and_added = QLabel(
+            "商品種別："
+            + str(candidate.get("product_kind", "その他"))
+            + "　候補追加日時："
+            + str(candidate.get("created_at", "未記録"))
+        )
+        kind_and_added.setObjectName("MutedText")
+
         confidence = float(
             candidate.get(
                 "candidate_confidence",
@@ -222,6 +230,7 @@ class CandidateCard(QFrame):
         layout.addLayout(header)
         layout.addWidget(source)
         layout.addWidget(release)
+        layout.addWidget(kind_and_added)
         layout.addWidget(confidence_label)
         layout.addWidget(last_searched)
 
@@ -280,6 +289,10 @@ class CandidateCard(QFrame):
                         "情報あり",
                     )
                     + confidence_text
+                    + "\n  "
+                    + str(hit.get("price_status", "価格未確認"))
+                    + " / 販売元: "
+                    + str(hit.get("seller", "未確認"))
                     + (
                         "\n  "
                         + hit.get(
@@ -295,6 +308,21 @@ class CandidateCard(QFrame):
                 )
                 hit_label.setWordWrap(True)
                 layout.addWidget(hit_label)
+
+        diagnostics = candidate.get("search_diagnostics", {})
+        if diagnostics:
+            diagnostic_label = QLabel(
+                "検索診断："
+                f'検索店舗 {diagnostics.get("searched_store_count", 0)} / '
+                f'発見 {diagnostics.get("found_store_count", 0)} / '
+                f'正規販売 {diagnostics.get("regular_retail_count", 0)} / '
+                f'除外 {diagnostics.get("excluded_count", 0)} / '
+                f'新規店舗候補 {diagnostics.get("new_store_candidate_count", 0)}\n'
+                "最終確認：" + str(diagnostics.get("checked_at", "未実行"))
+            )
+            diagnostic_label.setObjectName("MutedText")
+            diagnostic_label.setWordWrap(True)
+            layout.addWidget(diagnostic_label)
 
         search_message = candidate.get(
             "search_message",

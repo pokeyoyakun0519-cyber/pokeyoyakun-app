@@ -71,6 +71,7 @@ class OnePieceOfficialExtractor:
                     category=match.group("cat"),
                     source_name=source_name,
                     image_url=urljoin(page_url, unescape(image.group("url"))) if image else "",
+                    msrp=self._extract_price(self._clean_text(body)),
                 )
             )
         return products
@@ -91,6 +92,7 @@ class OnePieceOfficialExtractor:
         return {
             "name": self._clean_title(title.group(1)) if title else "",
             "release_date": self._iso_date(date_match) if date_match else "",
+            "msrp": self._extract_price(text),
         }
 
     @staticmethod
@@ -115,6 +117,7 @@ class OnePieceOfficialExtractor:
         category: str,
         source_name: str,
         image_url: str,
+        msrp: int | None,
     ) -> dict:
         product_code = self._product_code(name, detail_url)
         digest = hashlib.sha256(detail_url.encode("utf-8")).hexdigest()[:20]
@@ -126,6 +129,9 @@ class OnePieceOfficialExtractor:
             "product_code": product_code,
             "release_date": release_date,
             "product_kind": self._product_kind(name, category),
+            "msrp": msrp,
+            "msrp_includes_tax": True,
+            "reference_price": msrp,
             "official_url": detail_url,
             "image_url": image_url,
             "status": "発売予定",
@@ -162,6 +168,14 @@ class OnePieceOfficialExtractor:
     @staticmethod
     def _clean_text(value: str) -> str:
         return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", value))).strip()
+
+    @staticmethod
+    def _extract_price(text: str) -> int | None:
+        match = re.search(
+            r"(?:メーカー希望小売価格|販売価格|価格)\s*[:：]?\s*[￥¥]?\s*(\d[\d,]*)\s*円",
+            text,
+        )
+        return int(match.group(1).replace(",", "")) if match else None
 
     @classmethod
     def _clean_title(cls, value: str) -> str:

@@ -37,6 +37,7 @@ class CandidateManager:
         candidates = self.load_candidates()
         existing_keys = {
             (
+                normalize_key(item.get("tcg_key"), item.get("tcg"))[0],
                 self._normalize_name(
                     str(item.get("name", ""))
                 ),
@@ -44,10 +45,19 @@ class CandidateManager:
             )
             for item in candidates
         }
+        product_keys = {
+            (
+                normalize_key(item.get("tcg_key"), item.get("tcg"))[0],
+                self._normalize_name(str(item.get("name", ""))),
+                str(item.get("release_date", "")),
+            )
+            for item in self._load_list(self.products_path)
+        }
 
         added = 0
 
         for product in discovered:
+            tcg_key = normalize_key(product.get("tcg_key"), product.get("tcg"))[0]
             name = str(product.get("name", "")).strip()
             release_date = str(
                 product.get("release_date", "")
@@ -69,8 +79,10 @@ class CandidateManager:
                 continue
             if confidence < 0.72:
                 continue
+            if not self._is_new_release_candidate(product, tcg_key):
+                continue
 
-            official_url = source_url
+            official_url = str(product.get("official_url", "")) or source_url
             sites = product.get("sites", [])
             if sites:
                 official_url = str(
@@ -78,9 +90,12 @@ class CandidateManager:
                 )
 
             key = (
+                tcg_key,
                 self._normalize_name(name),
                 release_date,
             )
+            if key in product_keys:
+                continue
             if key in existing_keys:
                 self._refresh_existing_candidate(
                     candidates,
@@ -106,14 +121,17 @@ class CandidateManager:
                     "source_url": source_url,
                     "official_url": official_url,
                     "name": name,
-                    "tcg_key": normalize_key(
-                        product.get("tcg_key"), product.get("tcg")
-                    )[0],
+                    "tcg_key": tcg_key,
                     "tcg": display_name(
                         normalize_key(product.get("tcg_key"), product.get("tcg"))[0],
                         product.get("tcg"),
                     ),
                     "release_date": release_date,
+                    "product_kind": str(product.get("product_kind", "その他")),
+                    "product_code": str(product.get("product_code", "")),
+                    "msrp": product.get("msrp"),
+                    "msrp_includes_tax": bool(product.get("msrp_includes_tax", True)),
+                    "reference_price": product.get("reference_price"),
                     "status": "販売・抽選情報を検索待ち",
                     "candidate_confidence": confidence,
                     "candidate_reasons": reasons,
@@ -121,6 +139,7 @@ class CandidateManager:
                     "last_searched": "",
                     "retail_hits": [],
                     "search_message": "",
+                    "search_diagnostics": {},
                     "created_at": datetime.now().isoformat(
                         timespec="seconds"
                     ),
@@ -166,6 +185,11 @@ class CandidateManager:
                             "release_date",
                             "",
                         ),
+                        "product_kind": item.get("product_kind", "その他"),
+                        "product_code": item.get("product_code", ""),
+                        "msrp": item.get("msrp"),
+                        "msrp_includes_tax": item.get("msrp_includes_tax", True),
+                        "reference_price": item.get("reference_price"),
                         "tcg_key": normalize_key(
                             source.get("tcg_key"), source.get("tcg")
                         )[0],
@@ -238,11 +262,14 @@ class CandidateManager:
                 "tcg_key": normalize_key(tcg_key)[0],
                 "tcg": display_name(normalize_key(tcg_key)[0]),
                 "release_date": "",
+                "product_kind": "その他",
+                "product_code": "",
                 "status": "販売・抽選情報を検索待ち",
                 "approved": False,
                 "last_searched": "",
                 "retail_hits": [],
                 "search_message": "",
+                "search_diagnostics": {},
                 "created_at": datetime.now().isoformat(
                     timespec="seconds"
                 ),
@@ -279,6 +306,9 @@ class CandidateManager:
             )
             candidate["search_message"] = "\n".join(
                 messages
+            )
+            candidate["search_diagnostics"] = self._build_search_diagnostics(
+                hits, messages
             )
 
             if hits:
@@ -390,6 +420,11 @@ class CandidateManager:
                 "official_url",
                 "",
             ),
+            "product_kind": candidate.get("product_kind", "その他"),
+            "product_code": candidate.get("product_code", ""),
+            "msrp": candidate.get("msrp"),
+            "msrp_includes_tax": candidate.get("msrp_includes_tax", True),
+            "reference_price": candidate.get("reference_price"),
             "sites": hits,
         }
 
@@ -444,7 +479,7 @@ class CandidateManager:
     def _refresh_existing_candidate(
         cls,
         candidates: list[dict[str, Any]],
-        key: tuple[str, str],
+        key: tuple[str, str, str],
         *,
         official_url: str,
         source_name: str,
@@ -452,6 +487,7 @@ class CandidateManager:
     ) -> None:
         for item in candidates:
             item_key = (
+                normalize_key(item.get("tcg_key"), item.get("tcg"))[0],
                 cls._normalize_name(
                     str(item.get("name", ""))
                 ),
@@ -473,6 +509,67 @@ class CandidateManager:
                 or item.get("source_id", "")
             )
             break
+
+    @staticmethod
+    def _is_new_release_candidate(product: dict[str, Any], tcg_key: str) -> bool:
+        if tcg_key not in {"onepiece", "gundam"}:
+            return bool(str(product.get("name", "")).strip())
+        allowed = {
+            "onepiece": {
+                "ブースターパック", "エクストラブースター", "スタートデッキ",
+                "プレミアムカードコレクション", "プレミアム商品",
+            },
+            "gundam": {
+                "ブースターパック", "スタートデッキ", "プレミアムバンダイ", "その他",
+            },
+        }
+        kind = str(product.get("product_kind", "その他"))
+        if kind not in allowed[tcg_key]:
+            return False
+        name = str(product.get("name", ""))
+        if kind == "その他":
+            lowered_name = name.casefold()
+            if any(term in lowered_name for term in (
+                "スリーブ", "プレイマット", "ケース", "アクセサリー", "sleeve", "playmat", "case",
+            )):
+                return False
+            if not re.search(r"カード|セット|コレクション|card|set|collection", lowered_name, re.IGNORECASE):
+                return False
+        try:
+            release = datetime.strptime(
+                str(product.get("release_date", "")), "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            return False
+        age_days = (date.today() - release).days
+        if age_days > 45 or age_days < -730:
+            return False
+        url = str(product.get("official_url", ""))
+        if not url:
+            sites = product.get("sites", [])
+            url = str(sites[0].get("url", "")) if sites else ""
+        if not url.startswith("https://"):
+            return False
+        lowered = (name + " " + url).casefold()
+        return not any(
+            term in lowered for term in ("cardlist", "event", "rule", "カードリスト", "イベント", "ルール")
+        )
+
+    @staticmethod
+    def _build_search_diagnostics(
+        hits: list[dict[str, Any]], messages: list[str]
+    ) -> dict[str, Any]:
+        excluded = [message.removeprefix("除外: ") for message in messages if message.startswith("除外: ")]
+        searched = [message for message in messages if not message.startswith(("除外:", "検索診断:"))]
+        return {
+            "searched_store_count": len(searched),
+            "found_store_count": len({str(hit.get("site_key", "")) for hit in hits}) + len(excluded),
+            "regular_retail_count": len({str(hit.get("site_key", "")) for hit in hits}),
+            "excluded_count": len(excluded),
+            "new_store_candidate_count": sum("管理者確認待ち" in message for message in messages),
+            "excluded_reasons": excluded,
+            "checked_at": datetime.now().isoformat(timespec="seconds"),
+        }
 
     @staticmethod
     def _normalize_name(name: str) -> str:

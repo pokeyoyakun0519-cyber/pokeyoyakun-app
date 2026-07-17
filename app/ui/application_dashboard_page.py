@@ -1,5 +1,3 @@
-import webbrowser
-
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
@@ -17,6 +15,7 @@ from PySide6.QtWidgets import (
 from core.application_dashboard import ApplicationDashboard
 from core.lottery_manager import LotteryManager
 from core.product_store import ProductStore
+from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import categories
 
 
@@ -70,19 +69,20 @@ class ApplicationRow(QFrame):
             )
         )
 
-        open_button = QPushButton(
-            "応募・確認ページを開く"
-        )
-        open_button.setObjectName(
-            "SmallButton"
-        )
-        open_button.clicked.connect(
-            self._open_page
-        )
+        product_button = QPushButton("商品ページを開く")
+        product_button.setObjectName("SmallButton")
+        product_button.setEnabled(can_open_product_url(row.get("product_url")))
+        product_button.clicked.connect(self._open_product_page)
+
+        application_button = QPushButton("応募ページを開く")
+        application_button.setObjectName("SmallButton")
+        application_button.setEnabled(can_open_product_url(row.get("application_url")))
+        application_button.clicked.connect(self._open_application_page)
 
         header.addWidget(title, 1)
         header.addWidget(state)
-        header.addWidget(open_button)
+        header.addWidget(product_button)
+        header.addWidget(application_button)
         layout.addLayout(header)
 
         store_info = QLabel(
@@ -200,10 +200,11 @@ class ApplicationRow(QFrame):
         if value != "未確認":
             self.reload_callback()
 
-    def _open_page(self):
-        url = self.row.get("site_url", "")
-        if url:
-            webbrowser.open(url)
+    def _open_product_page(self):
+        open_product_url(self.row.get("product_url", ""))
+
+    def _open_application_page(self):
+        open_product_url(self.row.get("application_url", ""))
 
     @staticmethod
     def _status_object_name(

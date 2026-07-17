@@ -364,11 +364,18 @@ class SourceManager:
                 {
                     "name": item.get("name", ""),
                     "release_date": item.get("release_date", ""),
+                    "product_kind": item.get("product_kind", "その他"),
+                    "product_code": item.get("product_code", ""),
+                    "msrp": item.get("msrp"),
+                    "msrp_includes_tax": item.get("msrp_includes_tax", True),
+                    "reference_price": item.get("reference_price"),
                     "url": (
                         item.get("sites", [{}])[0].get("url", "")
                         if item.get("sites")
                         else ""
                     ),
+                    "source_name": source_name,
+                    "candidate_added_at": datetime.now().isoformat(timespec="seconds"),
                 }
                 for item in discovered[:12]
             ]
@@ -433,6 +440,9 @@ class SourceManager:
                 checked["html"], checked.get("url", product["official_url"])
             )
             product["release_date"] = supplement.get("release_date", "")
+            if supplement.get("msrp"):
+                product["msrp"] = supplement["msrp"]
+                product["reference_price"] = supplement["msrp"]
             time.sleep(0.25)
         return [item for item in products if item.get("release_date")], detail_pages, duplicates
 
@@ -471,6 +481,9 @@ class SourceManager:
                 checked["html"], checked.get("url", product["official_url"])
             )
             product["release_date"] = supplement.get("release_date", "")
+            if supplement.get("msrp"):
+                product["msrp"] = supplement["msrp"]
+                product["reference_price"] = supplement["msrp"]
             time.sleep(0.25)
         return [item for item in products if item.get("release_date")], detail_pages, duplicates
 

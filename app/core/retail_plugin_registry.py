@@ -78,13 +78,15 @@ BUILTIN_RETAIL_PLUGINS: list[dict[str, Any]] = [
         "tcg": ["pokemon", "onepiece", "yugioh", "gundam"],
         "application_method": "Web",
         "result_mode": "account_page",
-        "enabled": True,
+        "enabled": False,
+        "security_disabled": True,
+        "disabled_reason": "公開検索URLの安全なHTTPS応答を確認できないため停止中",
     },
     {
         "id": "rakuten_books",
         "name": "楽天ブックス",
         "mode": "search_page",
-        "search_url": "https://search.books.rakuten.co.jp/bksearch/nm?sv=30&g=000&keyword={query}",
+        "search_url": "https://books.rakuten.co.jp/search?sitem={query}&v=2",
         "regions": ["全国"],
         "tcg": ["pokemon", "onepiece", "yugioh", "gundam"],
         "application_method": "Web",
@@ -250,9 +252,10 @@ def load_all_retail_plugins(
         plugin_id = str(
             plugin.get("id", "")
         )
-        plugin["enabled"] = state.is_enabled(
-            plugin_id,
-            bool(plugin.get("enabled", True)),
+        plugin["enabled"] = (
+            False
+            if plugin.get("security_disabled")
+            else state.is_enabled(plugin_id, bool(plugin.get("enabled", True)))
         )
         plugins.append(plugin)
 

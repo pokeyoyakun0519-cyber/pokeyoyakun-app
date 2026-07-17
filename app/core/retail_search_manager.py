@@ -6,9 +6,12 @@ from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from core.retail_plugin_registry import enabled_plugins_for_tcg
+from core.retail_price_policy import RetailPricePolicy
+from core.secure_https import build_https_opener
+from core.store_candidate_manager import StoreCandidateManager
 
 
 POKEMON_CENTER_LOTTERY_INDEX = (
@@ -24,6 +27,7 @@ POKEMON_CENTER_CARD_INDEX = (
 )
 
 YODOBASHI_LOTTERY = "https://limited.yodobashi.com/"
+YODOBASHI_SEARCH = "https://www.yodobashi.com/?word={query}"
 
 
 class _LinkParser(HTMLParser):
@@ -83,12 +87,20 @@ class RetailSearchManager:
 
     MIN_CONFIDENCE = 0.75
 
+    def __init__(self):
+        self.price_policy = RetailPricePolicy()
+        self.store_candidates = StoreCandidateManager()
+        self.last_diagnostics: dict[str, Any] = {}
+
     def search_candidate(
         self,
         candidate: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], list[str]]:
         hits: list[dict[str, Any]] = []
         messages: list[str] = []
+        searched_stores: set[str] = set()
+        excluded: list[str] = []
+        new_store_candidates = 0
 
         tcg_key = str(candidate.get("tcg_key", "other"))
         searchers = [self._search_yodobashi]
@@ -96,25 +108,36 @@ class RetailSearchManager:
             searchers.insert(0, self._search_pokemon_center)
 
         for searcher in searchers:
+            searched_stores.add(getattr(searcher, "__name__", "dedicated_search"))
             try:
                 found, message = searcher(candidate)
                 hits.extend(found)
                 messages.append(message)
             except Exception as error:
                 messages.append(
-                    f"{searcher.__name__}: 検索失敗 ({error})"
+                    f"{getattr(searcher, '__name__', '専用検索')}: 検索失敗 ({error})"
                 )
 
         for plugin in enabled_plugins_for_tcg(tcg_key):
             if plugin.get("mode") == "dedicated":
                 continue
+            searched_stores.add(str(plugin.get("id", plugin.get("name", ""))))
 
             try:
                 found, message = self._search_generic_plugin(
                     candidate,
                     plugin,
                 )
-                hits.extend(found)
+                if plugin.get("source") != "builtin":
+                    for item in found:
+                        item["host"] = urlparse(str(item.get("url", ""))).hostname or ""
+                        if self.store_candidates.add_candidate(item):
+                            new_store_candidates += 1
+                    messages.append(
+                        f"{plugin.get('name', '店舗')}: 新規店舗候補として管理者確認待ち"
+                    )
+                else:
+                    hits.extend(found)
                 messages.append(message)
             except Exception as error:
                 messages.append(
@@ -128,7 +151,38 @@ class RetailSearchManager:
             if float(hit.get("confidence", 0.0))
             >= self.MIN_CONFIDENCE
         ]
-        return hits, messages
+        accepted = []
+        for hit in hits:
+            decision = self.price_policy.evaluate(candidate, hit)
+            hit.pop("_evaluation_text", None)
+            hit.pop("text", None)
+            if not decision["accepted"]:
+                excluded.append(
+                    f"{hit.get('name', '店舗')}: {decision['exclusion_reason']}"
+                )
+                continue
+            hit.update(decision)
+            accepted.append(hit)
+
+        found_stores = {str(hit.get("site_key", "")) for hit in hits}
+        regular_stores = {str(hit.get("site_key", "")) for hit in accepted}
+        self.last_diagnostics = {
+            "searched_store_count": len(searched_stores),
+            "found_store_count": len(found_stores),
+            "regular_retail_count": len(regular_stores),
+            "excluded_count": len(excluded),
+            "new_store_candidate_count": new_store_candidates,
+            "excluded_reasons": excluded,
+            "checked_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        messages.extend(f"除外: {reason}" for reason in excluded)
+        messages.append(
+            "検索診断: "
+            f"検索店舗{len(searched_stores)} / 発見{len(found_stores)} / "
+            f"正規販売{len(regular_stores)} / 除外{len(excluded)} / "
+            f"新規店舗候補{new_store_candidates}"
+        )
+        return accepted, messages
 
     def _search_pokemon_center(
         self,
@@ -196,6 +250,8 @@ class RetailSearchManager:
             hit["application_method"] = "Web"
             hit["result_mode"] = "account_page"
             hit["regions"] = ["全国"]
+            hit["retailer_verified"] = True
+            hit["seller"] = "ポケモンセンターオンライン"
             hits.append(hit)
 
         card_index = self._fetch(
@@ -233,6 +289,9 @@ class RetailSearchManager:
                         "application_method": "Web",
                         "result_mode": "account_page",
                         "regions": ["全国"],
+                        "retailer_verified": True,
+                        "seller": "ポケモンセンターオンライン",
+                        "text": link_text,
                         "confidence": confidence,
                         "checked_at": datetime.now().isoformat(
                             timespec="seconds"
@@ -257,37 +316,62 @@ class RetailSearchManager:
         release_date = str(
             candidate.get("release_date", "")
         )
-        page = self._fetch(YODOBASHI_LOTTERY)
+        hits = []
+        errors = []
+        lottery = self._fetch(YODOBASHI_LOTTERY)
+        if lottery["ok"]:
+            page_text = self._html_to_text(lottery["html"])
+            confidence = self._confidence(page_text, keywords, release_date)
+            if confidence >= self.MIN_CONFIDENCE:
+                hits.append(self._build_hit(
+                    site_key="yodobashi_lottery",
+                    site_name="ヨドバシ・ドット・コム",
+                    url=YODOBASHI_LOTTERY,
+                    text=page_text,
+                    default_status="抽選情報あり",
+                    confidence=confidence,
+                ))
+        else:
+            errors.append("抽選ページ: " + lottery["status"])
 
-        if not page["ok"]:
-            return (
-                [],
-                "ヨドバシ: " + page["status"],
-            )
-
-        page_text = self._html_to_text(page["html"])
-        confidence = self._confidence(
-            page_text,
-            keywords,
-            release_date,
+        search_url = YODOBASHI_SEARCH.format(
+            query=urllib.parse.quote(str(candidate.get("name", "")))
         )
+        search = self._fetch(search_url)
+        if search["ok"]:
+            parser = _LinkParser(search_url)
+            parser.feed(search["html"])
+            for link in parser.links:
+                if urlparse(link["url"]).hostname != "www.yodobashi.com":
+                    continue
+                confidence = self._confidence(link["text"], keywords, release_date)
+                if confidence < self.MIN_CONFIDENCE:
+                    continue
+                hits.append(self._build_hit(
+                    site_key="yodobashi_retail",
+                    site_name="ヨドバシ・ドット・コム",
+                    url=link["url"],
+                    text=link["text"],
+                    default_status="販売予定",
+                    confidence=confidence,
+                ))
+                if len(hits) >= 3:
+                    break
+        else:
+            errors.append("商品検索: " + search["status"])
 
-        if confidence < self.MIN_CONFIDENCE:
-            return [], "ヨドバシ: 該当なし"
-
-        hit = self._build_hit(
-            site_key="yodobashi_lottery",
-            site_name="ヨドバシ・ドット・コム",
-            url=YODOBASHI_LOTTERY,
-            text=page_text,
-            default_status="抽選情報あり",
-            confidence=confidence,
-        )
-        hit["application_method"] = "Web"
-        hit["result_mode"] = "account_page"
-        hit["regions"] = ["全国"]
-
-        return [hit], "ヨドバシ: 1件"
+        for hit in hits:
+            hit.update({
+                "application_method": "Web",
+                "result_mode": "account_page",
+                "regions": ["全国"],
+                "retailer_verified": True,
+                "seller": "ヨドバシ・ドット・コム",
+            })
+        message = f"ヨドバシ: {len(hits)}件"
+        if errors:
+            message += " / " + " / ".join(errors)
+        return hits, message
 
     def _search_generic_plugin(
         self,
@@ -295,6 +379,7 @@ class RetailSearchManager:
         plugin: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], str]:
         name = str(candidate.get("name", ""))
+        product_code = str(candidate.get("product_code", "")).strip()
         release_date = str(
             candidate.get("release_date", "")
         )
@@ -311,7 +396,8 @@ class RetailSearchManager:
             )
 
         keywords = self._name_keywords(name)
-        query = urllib.parse.quote(name)
+        query_text = name if not product_code or product_code in name else f"{name} {product_code}"
+        query = urllib.parse.quote(query_text)
 
         if mode == "search_page":
             url = str(
@@ -328,56 +414,62 @@ class RetailSearchManager:
             return [], f"{plugin_name}: {page['status']}"
 
         page_text = self._html_to_text(page["html"])
-        confidence = self._confidence(
-            page_text,
-            keywords,
-            release_date,
-        )
+        matches: list[tuple[str, str, float]] = []
+        if mode == "search_page":
+            parser = _LinkParser(url)
+            parser.feed(page["html"])
+            for link in parser.links:
+                link_text = str(link.get("text", ""))
+                if not self._is_safe_retail_link(url, str(link.get("url", ""))):
+                    continue
+                confidence = self._confidence(link_text, keywords, release_date)
+                if confidence >= self.MIN_CONFIDENCE:
+                    matches.append((str(link.get("url", "")), link_text, confidence))
+            matches = matches[:3]
+        else:
+            confidence = self._confidence(page_text, keywords, release_date)
+            if confidence >= self.MIN_CONFIDENCE:
+                matches.append((url, page_text, confidence))
 
-        if confidence < self.MIN_CONFIDENCE:
-            return (
-                [],
-                f"{plugin_name}: 該当なし "
-                f"(信頼度 {confidence:.0%})",
+        if not matches:
+            return [], f"{plugin_name}: 該当商品リンクなし"
+
+        found = []
+        for product_url, match_text, confidence in matches:
+            hit = self._build_hit(
+                site_key=str(plugin.get("id", "")),
+                site_name=plugin_name,
+                url=product_url,
+                text=match_text,
+                default_status="販売・抽選情報あり",
+                confidence=confidence,
             )
-
-        hit = self._build_hit(
-            site_key=str(plugin.get("id", "")),
-            site_name=plugin_name,
-            url=url,
-            text=page_text,
-            default_status="販売・抽選情報あり",
-            confidence=confidence,
-        )
-        hit["application_method"] = str(
-            plugin.get("application_method", "")
-        )
-        hit["result_mode"] = str(
-            plugin.get("result_mode", "manual")
-        )
-        hit["regions"] = list(
-            plugin.get("regions", ["全国"])
-        )
-        hit["plugin_source"] = str(
-            plugin.get("source", "builtin")
-        )
-        hit["plugin_version"] = str(
-            plugin.get(
-                "plugin_version",
-                "builtin",
-            )
-        )
-
-        return (
-            [hit],
-            f"{plugin_name}: 1件 "
-            f"(信頼度 {confidence:.0%})",
-        )
+            hit.update({
+                "application_method": str(plugin.get("application_method", "")),
+                "result_mode": str(plugin.get("result_mode", "manual")),
+                "regions": list(plugin.get("regions", ["全国"])),
+                "plugin_source": str(plugin.get("source", "builtin")),
+                "plugin_version": str(plugin.get("plugin_version", "builtin")),
+                "retailer_verified": plugin.get("source") == "builtin",
+                "seller": self._extract_seller(match_text, plugin_name),
+                "shipped_by": self._extract_shipping_seller(match_text),
+                "text": match_text,
+            })
+            found.append(hit)
+        return found, f"{plugin_name}: {len(found)}件"
 
     def _fetch(
         self,
         url: str,
     ) -> dict[str, Any]:
+        try:
+            requested = urlparse(url)
+            requested_port = requested.port
+        except ValueError:
+            return {"ok": False, "html": "", "status": "URL形式エラー"}
+        if requested.scheme != "https" or requested_port not in (None, 443):
+            return {"ok": False, "html": "", "status": "HTTPS以外を拒否"}
+
         request = urllib.request.Request(
             url,
             headers={
@@ -395,10 +487,10 @@ class RetailSearchManager:
         )
 
         try:
-            with urllib.request.urlopen(
-                request,
-                timeout=20,
-            ) as response:
+            with build_https_opener().open(request, timeout=20) as response:
+                final = urlparse(response.geturl())
+                if final.scheme != "https" or final.port not in (None, 443):
+                    return {"ok": False, "html": "", "status": "安全でないリダイレクトを拒否"}
                 raw = response.read(3_000_000)
                 charset = (
                     response.headers
@@ -481,11 +573,14 @@ class RetailSearchManager:
             ),
         )
 
-        status = (
-            "抽選受付情報あり"
-            if application
-            else default_status
-        )
+        if application or "抽選受付中" in text:
+            status = "抽選受付中"
+        elif "予約受付中" in text or "予約商品" in text:
+            status = "予約受付中"
+        elif "販売予定" in text or "発売予定" in text:
+            status = "販売予定"
+        else:
+            status = default_status
 
         notice_parts = []
         if application:
@@ -517,7 +612,38 @@ class RetailSearchManager:
             "checked_at": datetime.now().isoformat(
                 timespec="seconds"
             ),
+            "text": text,
         }
+
+    @staticmethod
+    def _extract_seller(text: str, fallback: str) -> str:
+        match = re.search(
+            r"(?:販売元|出品者)\s*[:：]?\s*(.{2,60}?)(?=\s*(?:発送元|発送|販売価格|価格|$))",
+            text,
+        )
+        return match.group(1).strip() if match else fallback
+
+    @staticmethod
+    def _extract_shipping_seller(text: str) -> str:
+        match = re.search(
+            r"(?:発送元|発送)\s*[:：]?\s*(.{2,60}?)(?=\s*(?:販売価格|価格|$))",
+            text,
+        )
+        return match.group(1).strip() if match else ""
+
+    @staticmethod
+    def _is_safe_retail_link(search_url: str, product_url: str) -> bool:
+        try:
+            search = urlparse(search_url)
+            product = urlparse(product_url)
+            port = product.port
+        except ValueError:
+            return False
+        if product.scheme != "https" or port not in (None, 443):
+            return False
+        return (search.hostname or "").removeprefix("www.").casefold() == (
+            product.hostname or ""
+        ).removeprefix("www.").casefold()
 
     @staticmethod
     def _extract_period(

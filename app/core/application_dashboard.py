@@ -59,6 +59,10 @@ class ApplicationDashboard:
                         "店舗名未設定",
                     ),
                     "site_url": site.get("url", ""),
+                    "application_url": site.get("application_url", site.get("url", "")),
+                    "product_url": site.get(
+                        "product_url", product.get("official_url", "")
+                    ),
                     "related_url": site.get("url", ""),
                     "status": site.get("status", ""),
                     "application_state": state,

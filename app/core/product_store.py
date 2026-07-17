@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import Any
 
 from core.plugin_manager import PluginManager
+from core.retail_price_policy import RetailPricePolicy
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
 
@@ -16,6 +17,7 @@ class ProductStore:
         self.products_path = root / "data" / "products.json"
         self.user_state_path = root / "config" / "user_state.json"
         self.plugin_manager = PluginManager()
+        self.last_excluded_retail_offers: list[dict[str, str]] = []
 
     def load_products(self) -> list[dict[str, Any]]:
         products = [normalize_record(item)[0] for item in self._load_product_file()]
@@ -299,6 +301,10 @@ class ProductStore:
         today = date.today()
 
         for product in products:
+            if product.get("source_type") == "retail_search":
+                product["sites"] = self._filter_retail_sites(product)
+                if not product["sites"]:
+                    continue
             product["reserved"] = (
                 product.get("id") in reserved_ids
             )
@@ -358,6 +364,33 @@ class ProductStore:
             visible_products.append(product)
 
         return visible_products
+
+    def _filter_retail_sites(self, product: dict[str, Any]) -> list[dict[str, Any]]:
+        verified_site_keys = {
+            "amazon_jp", "yodobashi_lottery", "yodobashi_retail", "geo",
+            "seven_net", "rakuten_books", "lawson_loppi", "premium_bandai",
+            "biccamera", "joshin", "edion", "toysrus", "sanyodo",
+            "pokemon_center_online",
+        }
+        output = []
+        for raw in product.get("sites", []):
+            if not isinstance(raw, dict):
+                continue
+            site = dict(raw)
+            site.setdefault(
+                "retailer_verified", site.get("site_key") in verified_site_keys
+            )
+            decision = RetailPricePolicy.evaluate(product, site)
+            if not decision["accepted"]:
+                self.last_excluded_retail_offers.append({
+                    "product": str(product.get("name", "")),
+                    "store": str(site.get("name", "")),
+                    "reason": str(decision["exclusion_reason"]),
+                })
+                continue
+            site.update(decision)
+            output.append(site)
+        return output
 
     @staticmethod
     def _site_state_key(

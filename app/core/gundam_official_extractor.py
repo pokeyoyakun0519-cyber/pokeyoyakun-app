@@ -53,6 +53,7 @@ class GundamOfficialExtractor:
                 tag=match.group("tag"),
                 source_name=source_name,
                 image_url=urljoin(page_url, unescape(image.group("url"))) if image else "",
+                msrp=self._extract_price(self._clean_text(body)),
             ))
         return products
 
@@ -71,6 +72,7 @@ class GundamOfficialExtractor:
         return {
             "name": self._clean_text(title.group(1)) if title else "",
             "release_date": self._normalize_date(date_match.group(1)) if date_match else "",
+            "msrp": self._extract_price(self._clean_text(html)),
         }
 
     @staticmethod
@@ -86,7 +88,7 @@ class GundamOfficialExtractor:
             and bool(re.fullmatch(r"/jp/products/[a-z0-9_-]+\.html", parsed.path, re.IGNORECASE))
         )
 
-    def _product(self, *, name: str, release_date: str, detail_url: str, tag: str, source_name: str, image_url: str) -> dict:
+    def _product(self, *, name: str, release_date: str, detail_url: str, tag: str, source_name: str, image_url: str, msrp: int | None) -> dict:
         digest = hashlib.sha256(detail_url.encode("utf-8")).hexdigest()[:20]
         return {
             "id": f"gundam_official_{digest}",
@@ -96,6 +98,9 @@ class GundamOfficialExtractor:
             "product_code": self._product_code(name, detail_url),
             "release_date": release_date,
             "product_kind": self._product_kind(tag, name),
+            "msrp": msrp,
+            "msrp_includes_tax": True,
+            "reference_price": msrp,
             "official_url": detail_url,
             "image_url": image_url,
             "status": "発売予定",
@@ -136,6 +141,14 @@ class GundamOfficialExtractor:
     @staticmethod
     def _clean_text(value: str) -> str:
         return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", value))).strip()
+
+    @staticmethod
+    def _extract_price(text: str) -> int | None:
+        match = re.search(
+            r"(?:メーカー希望小売価格|販売価格|価格)\s*[:：]?\s*[￥¥]?\s*(\d[\d,]*)\s*円",
+            text,
+        )
+        return int(match.group(1).replace(",", "")) if match else None
 
     @staticmethod
     def _normalize_date(value: str) -> str:

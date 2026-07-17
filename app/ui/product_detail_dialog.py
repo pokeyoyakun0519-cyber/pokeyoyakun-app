@@ -1,5 +1,3 @@
-import webbrowser
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel,
@@ -7,6 +5,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.site_master_manager import SiteMasterManager
+from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import display_name
 
 
@@ -90,9 +89,20 @@ class ProductDetailDialog(QDialog):
         status = QLabel(status_text); status.setObjectName(self._status_object_name(status_text))
         url = site.get("url", "")
         open_button = QPushButton("商品ページを開く"); open_button.setObjectName("SmallButton")
-        open_button.setEnabled(bool(url)); open_button.clicked.connect(lambda: webbrowser.open(url) if url else None)
+        open_button.setEnabled(can_open_product_url(url)); open_button.clicked.connect(lambda: open_product_url(url))
         header.addWidget(name); header.addStretch(); header.addWidget(status); header.addWidget(open_button)
         layout.addLayout(header)
+
+        reference_price = self.product.get("reference_price") or self.product.get("msrp")
+        sale_price = site.get("sale_price")
+        price = QLabel(
+            (f"定価：{int(reference_price):,}円" if isinstance(reference_price, (int, float)) and reference_price > 0 else "定価：価格未確認")
+            + "　"
+            + (f"販売価格：{int(sale_price):,}円" if isinstance(sale_price, (int, float)) and sale_price > 0 else "販売価格：価格未確認")
+            + "　販売元：" + str(site.get("seller", "未確認"))
+        )
+        price.setObjectName("MutedText")
+        layout.addWidget(price)
 
         sales_type = master.get("sales_type")
         if sales_type:

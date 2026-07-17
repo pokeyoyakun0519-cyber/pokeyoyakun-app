@@ -1,4 +1,3 @@
-import webbrowser
 from datetime import datetime
 
 from PySide6.QtCore import Qt
@@ -17,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from core.log_manager import LogManager
 from core.product_store import ProductStore
+from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import display_name
 from ui.product_detail_dialog import ProductDetailDialog
 from ui.tcg_category_tabs import (
@@ -74,6 +74,14 @@ class ProductCard(QFrame):
 
         layout.addLayout(top_row)
         layout.addWidget(release_date)
+        reference_price = product.get("reference_price") or product.get("msrp")
+        price_label = QLabel(
+            f'定価：{int(reference_price):,}円'
+            if isinstance(reference_price, (int, float)) and reference_price > 0
+            else "定価：価格未確認"
+        )
+        price_label.setObjectName("MutedText")
+        layout.addWidget(price_label)
 
         for site in product.get("sites", []):
             layout.addWidget(
@@ -105,6 +113,7 @@ class ProductCard(QFrame):
 
         open_button = QPushButton("応募・商品ページを開く")
         open_button.setObjectName("SmallButton")
+        open_button.setEnabled(can_open_product_url(site.get("url", "")))
         open_button.clicked.connect(
             lambda checked=False, url=site.get("url", ""):
             self._open_url(url)
@@ -115,6 +124,17 @@ class ProductCard(QFrame):
         header.addWidget(state)
         header.addWidget(open_button)
         layout.addLayout(header)
+
+        sale_price = site.get("sale_price")
+        price_text = (
+            f'販売価格：{int(sale_price):,}円'
+            if isinstance(sale_price, (int, float)) and sale_price > 0
+            else "販売価格：価格未確認"
+        )
+        seller_text = str(site.get("seller", "販売元未確認"))
+        retail_price = QLabel(price_text + "　販売元：" + seller_text)
+        retail_price.setObjectName("MutedText")
+        layout.addWidget(retail_price)
 
         notice = site.get("notice", "").strip()
         if notice:
@@ -217,8 +237,7 @@ class ProductCard(QFrame):
 
     @staticmethod
     def _open_url(url: str) -> None:
-        if url:
-            webbrowser.open(url)
+        open_product_url(url)
 
     @staticmethod
     def _status_object_name(status: str) -> str:
