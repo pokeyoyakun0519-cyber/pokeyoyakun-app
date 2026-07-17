@@ -5,7 +5,7 @@ from typing import Any
 
 from core.plugin_manager import PluginManager
 from core.runtime_paths import app_root
-from core.tcg_categories import normalize_record
+from core.tcg_categories import display_name, normalize_key, normalize_record
 
 
 class ProductStore:
@@ -119,6 +119,8 @@ class ProductStore:
         site_key: str,
         site_url: str,
         applied: bool,
+        tcg_key: str = "other",
+        tcg: str = "",
     ) -> None:
         state = self._load_user_state()
         applications = state.setdefault(
@@ -132,6 +134,9 @@ class ProductStore:
         )
         item = dict(applications.get(key, {}))
         item["applied"] = bool(applied)
+        normalized_key = normalize_key(tcg_key, tcg)[0]
+        item["tcg_key"] = normalized_key
+        item["tcg"] = display_name(normalized_key)
         item["applied_at"] = (
             datetime.now().isoformat(timespec="seconds")
             if applied
@@ -166,7 +171,7 @@ class ProductStore:
         item["result_status"] = result_status
         item["result_checked_at"] = (
             datetime.now().isoformat(timespec="seconds")
-            if result_status in {"当選", "落選"}
+            if result_status != "未確認"
             else ""
         )
         item["updated_at"] = datetime.now().isoformat(
@@ -311,6 +316,23 @@ class ProductStore:
                 )
                 site["applied"] = applied
                 site["result_status"] = result_status
+                product_key = normalize_key(
+                    product.get("tcg_key"), product.get("tcg")
+                )[0]
+                saved_key = normalize_key(
+                    saved.get("tcg_key"), saved.get("tcg")
+                )[0] if (saved.get("tcg_key") or saved.get("tcg")) else product_key
+                site["tcg_key"] = saved_key
+                site["tcg"] = display_name(saved_key)
+                site["applied_at"] = str(saved.get("applied_at", ""))
+                site["result_checked_at"] = str(
+                    saved.get("result_checked_at", "")
+                )
+                for reference_key in (
+                    "receipt_number", "reception_number", "order_number"
+                ):
+                    if saved.get(reference_key):
+                        site[reference_key] = str(saved[reference_key])
                 site["application_state"] = self._application_state(
                     site,
                     applied,
@@ -356,6 +378,8 @@ class ProductStore:
             return "当選"
         if result_status == "落選":
             return "落選"
+        if result_status in {"予約完了", "注文受付", "キャンセル", "その他"}:
+            return result_status
         if not applied:
             return "未応募"
 

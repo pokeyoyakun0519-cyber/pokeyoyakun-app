@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 from core.application_dashboard import ApplicationDashboard
 from core.lottery_manager import LotteryManager
 from core.product_store import ProductStore
+from core.tcg_categories import categories
 
 
 class ApplicationRow(QFrame):
@@ -84,6 +86,7 @@ class ApplicationRow(QFrame):
         layout.addLayout(header)
 
         store_info = QLabel(
+            f'TCG：{row.get("tcg", "その他")}　'
             f'店舗：{row.get("site_name", "店舗名未設定")}　'
             f'発売日：{row.get("release_date") or "未設定"}'
         )
@@ -111,6 +114,26 @@ class ApplicationRow(QFrame):
         schedule.setWordWrap(True)
         layout.addWidget(schedule)
 
+        history = QLabel(
+            "応募／予約日時："
+            + (row.get("application_datetime") or "未記録")
+            + "　結果確認日時："
+            + (row.get("result_checked_at") or "未確認")
+            + ("　受付・注文番号：" + row["masked_reference"]
+               if row.get("masked_reference") else "")
+        )
+        history.setObjectName("MutedText")
+        history.setWordWrap(True)
+        layout.addWidget(history)
+
+        related_url = QLabel(
+            "関連URL：" + (row.get("related_url") or "未登録")
+        )
+        related_url.setObjectName("MutedText")
+        related_url.setWordWrap(True)
+        related_url.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(related_url)
+
         controls = QHBoxLayout()
 
         applied_button = QPushButton(
@@ -124,7 +147,7 @@ class ApplicationRow(QFrame):
 
         result = QComboBox()
         result.addItems(
-            ["未確認", "当選", "落選"]
+            ["未確認", "当選", "落選", "予約完了", "注文受付", "キャンセル", "その他"]
         )
         index = result.findText(
             row.get(
@@ -157,6 +180,8 @@ class ApplicationRow(QFrame):
             str(self.row.get("site_key", "")),
             str(self.row.get("site_url", "")),
             new_applied,
+            str(self.row.get("tcg_key", "other")),
+            str(self.row.get("tcg", "その他")),
         )
 
         if new_applied:
@@ -172,7 +197,7 @@ class ApplicationRow(QFrame):
             str(self.row.get("site_url", "")),
             value,
         )
-        if value in {"当選", "落選"}:
+        if value != "未確認":
             self.reload_callback()
 
     def _open_page(self):
@@ -244,6 +269,16 @@ class ApplicationDashboardPage(QFrame):
         description.setWordWrap(True)
         layout.addWidget(description)
 
+        self.tcg_tabs = QTabBar()
+        self.tcg_tabs.setExpanding(False)
+        self.tcg_tabs.addTab("すべて 0")
+        self.tcg_tabs.setTabData(0, "all")
+        for item in categories():
+            index = self.tcg_tabs.addTab(f"{item.short_name} 0")
+            self.tcg_tabs.setTabData(index, item.key)
+        self.tcg_tabs.currentChanged.connect(self.reload)
+        layout.addWidget(self.tcg_tabs)
+
         filter_row = QHBoxLayout()
 
         filter_row.addWidget(QLabel("表示："))
@@ -252,10 +287,14 @@ class ApplicationDashboardPage(QFrame):
             [
                 "すべて",
                 "未応募",
-                "抽選受付完了",
-                "抽選結果確認",
+                "応募済み",
+                "抽選結果待ち",
                 "当選",
                 "落選",
+                "予約完了",
+                "注文受付",
+                "キャンセル",
+                "その他",
             ]
         )
         self.state_filter.currentTextChanged.connect(
@@ -326,6 +365,8 @@ class ApplicationDashboardPage(QFrame):
             product_name,
             site_name,
             site_url,
+            str(row.get("tcg_key", "other")),
+            str(row.get("tcg", "その他")),
         )
 
         self.reload()
@@ -336,15 +377,29 @@ class ApplicationDashboardPage(QFrame):
             state_filter=self.state_filter.currentText(),
             sort_mode=self.sort_mode.currentText(),
             keyword=self.keyword.text(),
+            tcg_filter=str(
+                self.tcg_tabs.tabData(self.tcg_tabs.currentIndex()) or "all"
+            ),
         )
         counts = data["counts"]
 
+        tcg_counts = data["tcg_counts"]
+        self.tcg_tabs.blockSignals(True)
+        self.tcg_tabs.setTabText(0, f'すべて {data["total_rows"]}')
+        for index, item in enumerate(categories(), start=1):
+            self.tcg_tabs.setTabText(
+                index, f'{item.short_name} {tcg_counts[item.key]}'
+            )
+        self.tcg_tabs.blockSignals(False)
+
         self.summary.setText(
             f'未応募 {counts["未応募"]}件　'
-            f'応募済み {counts["抽選受付完了"]}件　'
-            f'結果確認 {counts["抽選結果確認"]}件　'
+            f'応募済み {counts["応募済み"]}件　'
+            f'結果待ち {counts["抽選結果待ち"]}件　'
             f'当選 {counts["当選"]}件　'
-            f'落選 {counts["落選"]}件'
+            f'落選 {counts["落選"]}件　'
+            f'予約完了 {counts["予約完了"]}件　'
+            f'注文受付 {counts["注文受付"]}件'
         )
 
         container = QWidget()

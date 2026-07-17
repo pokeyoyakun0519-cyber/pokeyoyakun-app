@@ -57,7 +57,8 @@ def normalize_key(key: object, label: object = "") -> tuple[str, bool]:
     if clean in CATEGORY_REGISTRY:
         return clean, False
     if clean:
-        return clean, True
+        alias = key_from_label(clean) or key_from_label(label)
+        return alias or "other", True
     return key_from_label(label) or "other", False
 
 

@@ -7,6 +7,7 @@ from html import unescape
 from pathlib import Path
 
 from core.runtime_paths import app_root
+from core.tcg_categories import display_name, normalize_key
 from typing import Any
 
 
@@ -57,7 +58,24 @@ class LotteryManager:
         try:
             with self.items_path.open("r", encoding="utf-8") as file:
                 data = json.load(file)
-            return data if isinstance(data, list) else []
+            if not isinstance(data, list):
+                return []
+            normalized = []
+            changed = False
+            for raw in data:
+                if not isinstance(raw, dict):
+                    changed = True
+                    continue
+                item = dict(raw)
+                key, unknown = normalize_key(item.get("tcg_key"), item.get("tcg"))
+                if item.get("tcg_key") != key or unknown:
+                    changed = True
+                item["tcg_key"] = key
+                item["tcg"] = display_name(key)
+                normalized.append(item)
+            if changed:
+                self.save_items(normalized)
+            return normalized
         except (OSError, json.JSONDecodeError):
             return []
 
@@ -71,6 +89,8 @@ class LotteryManager:
         product_name: str,
         site_name: str,
         url: str,
+        tcg_key: str = "other",
+        tcg: str = "",
     ) -> bool:
         items = self.load_items()
         item_id = self._make_id(
@@ -85,6 +105,7 @@ class LotteryManager:
         ):
             return False
 
+        normalized_key = normalize_key(tcg_key, tcg)[0]
         items.append(
             {
                 "id": item_id,
@@ -97,6 +118,8 @@ class LotteryManager:
                     or "サイト名未設定"
                 ),
                 "url": url.strip(),
+                "tcg_key": normalized_key,
+                "tcg": display_name(normalized_key),
                 "status": "結果待ち候補",
                 "last_checked": "",
                 "last_title": "",
@@ -136,10 +159,11 @@ class LotteryManager:
             "要確認": "判定できません",
         }
 
+        normalized_key = normalize_key(result.get("tcg_key"), result.get("tcg"))[0]
         item = {
             "id": item_id,
-            "tcg_key": str(result.get("tcg_key", "other")),
-            "tcg": str(result.get("tcg", "その他")),
+            "tcg_key": normalized_key,
+            "tcg": display_name(normalized_key),
             "product_name": str(
                 result.get(
                     "product_name",

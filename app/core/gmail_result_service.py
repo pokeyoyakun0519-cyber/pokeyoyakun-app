@@ -56,6 +56,12 @@ YUGIOH_KEYWORDS = (
     "遊☆戯☆王",
     "YU-GI-OH",
 )
+ONEPIECE_KEYWORDS = (
+    "ONE PIECEカードゲーム", "ワンピースカード", "ONEPIECE CARD GAME",
+)
+GUNDAM_KEYWORDS = (
+    "ガンダムカードゲーム", "GUNDAM CARD GAME", "GUNDAM GCG",
+)
 POKEMON_ONLY_KEYWORDS = (
     "ポケモンカード",
     "ポケモンセンター",
@@ -397,8 +403,12 @@ class GmailResultService:
                         "site_url": str(
                             site.get("url", "")
                         ),
-                        "tcg_key": str(product.get("tcg_key", "other")),
-                        "tcg": str(product.get("tcg", "")),
+                        "tcg_key": normalize_key(
+                            product.get("tcg_key"), product.get("tcg")
+                        )[0],
+                        "tcg": display_name(normalize_key(
+                            product.get("tcg_key"), product.get("tcg")
+                        )[0]),
                     }
                 )
         return output
@@ -522,6 +532,11 @@ class GmailResultService:
 
     @classmethod
     def _infer_tcg_key(cls, normalized: str) -> str:
+        normalized = cls._normalize(normalized)
+        if any(cls._normalize(term) in normalized for term in ONEPIECE_KEYWORDS):
+            return "onepiece"
+        if any(cls._normalize(term) in normalized for term in GUNDAM_KEYWORDS):
+            return "gundam"
         if any(cls._normalize(term) in normalized for term in YUGIOH_KEYWORDS):
             return "yugioh"
         if any(
@@ -535,8 +550,7 @@ class GmailResultService:
         result: dict[str, Any],
     ) -> None:
         if result.get("status") not in {
-            "当選",
-            "落選",
+            "当選", "落選", "予約完了", "注文受付", "キャンセル",
         }:
             return
 
@@ -558,9 +572,7 @@ class GmailResultService:
                 str(result["status"]),
             )
 
-        self.lottery_manager.upsert_email_result(
-            result
-        )
+        self.lottery_manager.upsert_email_result(result)
 
     @staticmethod
     def _parse_message(

@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 from core.official_diff_tracker import OfficialDiffTracker
 from core.pokemon_official_extractor import PokemonOfficialExtractor
 from core.yugioh_official_extractor import YugiohOfficialExtractor
+from core.onepiece_official_extractor import OnePieceOfficialExtractor
+from core.gundam_official_extractor import GundamOfficialExtractor
 from core.candidate_manager import CandidateManager
 from core.runtime_paths import app_root
 from core.secure_https import build_https_opener
@@ -56,6 +58,8 @@ class SourceManager:
         self.extractor = SourceProductExtractor()
         self.pokemon_extractor = PokemonOfficialExtractor()
         self.yugioh_extractor = YugiohOfficialExtractor()
+        self.onepiece_extractor = OnePieceOfficialExtractor()
+        self.gundam_extractor = GundamOfficialExtractor()
         self.diff_tracker = OfficialDiffTracker()
         self.candidate_manager = CandidateManager()
 
@@ -136,6 +140,9 @@ class SourceManager:
             "last_detected_count": 0,
             "last_added_count": 0,
             "last_detail_pages": 0,
+            "last_duplicate_count": 0,
+            "last_http_status": "未確認",
+            "last_error_reason": "",
             "detected_products": [],
             "official_changes": [],
             "enabled": True,
@@ -277,6 +284,9 @@ class SourceManager:
         source["last_detected_count"] = 0
         source["last_added_count"] = 0
         source["last_detail_pages"] = 0
+        source["last_duplicate_count"] = 0
+        source["last_http_status"] = "未確認"
+        source["last_error_reason"] = ""
         source["detected_products"] = []
         source["official_changes"] = []
 
@@ -284,9 +294,12 @@ class SourceManager:
             checked = self._fetch_page(source.get("url", ""))
             source["last_status"] = checked["status"]
             if not checked["ok"]:
+                source["last_http_status"] = "失敗"
+                source["last_error_reason"] = checked["status"]
                 source["check_state"] = "error"
                 source["changed"] = False
                 return False
+            source["last_http_status"] = "成功"
 
             new_title = checked["title"]
             source["changed"] = bool(old_title and new_title != old_title)
@@ -304,6 +317,20 @@ class SourceManager:
                     checked["html"], source_url, source_name
                 )
                 source["last_detail_pages"] = detail_pages
+            elif self._is_onepiece_official(source_url):
+                discovered, detail_pages, duplicate_count = (
+                    self._extract_onepiece_official_products(
+                        checked["html"], checked.get("url", source_url), source_name
+                    )
+                )
+                source["last_detail_pages"] = detail_pages
+                source["last_duplicate_count"] = duplicate_count
+            elif self._is_gundam_official(source_url):
+                discovered, detail_pages, duplicate_count = (
+                    self._extract_gundam_official_products(source_name)
+                )
+                source["last_detail_pages"] = detail_pages
+                source["last_duplicate_count"] = duplicate_count
             else:
                 discovered = self.extractor.extract(
                     checked["html"], source_url, source_name
@@ -315,6 +342,11 @@ class SourceManager:
                     product["tcg_key"] = source_tcg_key
                     product["tcg"] = display_name(source_tcg_key)
 
+            if not discovered:
+                raise ValueError(
+                    "ページは取得できましたが、商品を解析できませんでした"
+                )
+
             official_changes = self.diff_tracker.compare_and_update(discovered)
             source["official_changes"] = official_changes
             _, added_count = self.candidate_manager.merge_official_candidates(
@@ -325,6 +357,9 @@ class SourceManager:
             )
             source["last_detected_count"] = len(discovered)
             source["last_added_count"] = added_count
+            source["last_duplicate_count"] += max(
+                0, len(discovered) - added_count
+            )
             source["detected_products"] = [
                 {
                     "name": item.get("name", ""),
@@ -337,24 +372,124 @@ class SourceManager:
                 }
                 for item in discovered[:12]
             ]
-            detailed = self._is_pokemon_official(source_url) or self._is_yugioh_official(
-                source_url
-            )
+            detailed = any((
+                self._is_pokemon_official(source_url),
+                self._is_yugioh_official(source_url),
+                self._is_onepiece_official(source_url),
+                self._is_gundam_official(source_url),
+            ))
             detail_text = (
                 f"商品ページ{source['last_detail_pages']}件解析・" if detailed else ""
             )
             source["last_status"] = (
-                f"確認成功・{detail_text}商品{len(discovered)}件検出"
-                f"・新弾候補へ新規{added_count}件追加"
-                f"・公式変更{len(official_changes)}件"
+                "確認成功\n"
+                "HTTP取得: 成功\n"
+                f"商品取得数: {len(discovered)}件\n"
+                f"新規候補: {added_count}件\n"
+                f"重複除外: {source['last_duplicate_count']}件\n"
+                f"{detail_text}公式変更: {len(official_changes)}件"
             )
             source["check_state"] = "checked"
             return bool(source["changed"] or added_count or official_changes)
         except Exception as error:
-            source["last_status"] = f"確認失敗: {error}"
+            source["last_error_reason"] = str(error)
+            source["last_status"] = (
+                "確認失敗\n"
+                f"HTTP取得: {source.get('last_http_status', '失敗')}\n"
+                f"エラー理由: {error}"
+            )
             source["check_state"] = "error"
             source["changed"] = False
             return False
+
+    def _extract_onepiece_official_products(
+        self, top_html: str, source_url: str, source_name: str
+    ) -> tuple[list[dict], int, int]:
+        self.onepiece_extractor.validate_japanese_page(top_html, source_url)
+        all_products = self.onepiece_extractor.extract_list_products(
+            top_html, source_url, source_name
+        )
+        detail_pages = 0
+        for page_url in self.onepiece_extractor.collect_page_urls(top_html, source_url):
+            if self._url_identity(page_url) == self._url_identity(source_url):
+                continue
+            checked = self._fetch_page(page_url)
+            if not checked["ok"]:
+                continue
+            detail_pages += 1
+            all_products.extend(self.onepiece_extractor.extract_list_products(
+                checked["html"], checked.get("url", page_url), source_name
+            ))
+            time.sleep(0.25)
+        products, duplicates = self._deduplicate_products(all_products)
+        for product in [item for item in products if not item.get("release_date")][
+            : self.onepiece_extractor.MAX_DETAIL_PAGES
+        ]:
+            checked = self._fetch_page(product["official_url"])
+            if not checked["ok"]:
+                continue
+            detail_pages += 1
+            supplement = self.onepiece_extractor.supplement_from_detail(
+                checked["html"], checked.get("url", product["official_url"])
+            )
+            product["release_date"] = supplement.get("release_date", "")
+            time.sleep(0.25)
+        return [item for item in products if item.get("release_date")], detail_pages, duplicates
+
+    def _extract_gundam_official_products(
+        self, source_name: str
+    ) -> tuple[list[dict], int, int]:
+        first = self._fetch_page(self.gundam_extractor.LIST_URL)
+        if not first["ok"]:
+            raise ValueError(first["status"])
+        first_url = first.get("url", self.gundam_extractor.LIST_URL)
+        self.gundam_extractor.validate_japanese_page(first["html"], first_url)
+        all_products = self.gundam_extractor.extract_list_products(
+            first["html"], first_url, source_name
+        )
+        detail_pages = 1
+        for page_url in self.gundam_extractor.collect_page_urls(first["html"], first_url):
+            if self._url_identity(page_url) == self._url_identity(first_url):
+                continue
+            checked = self._fetch_page(page_url)
+            if not checked["ok"]:
+                continue
+            detail_pages += 1
+            all_products.extend(self.gundam_extractor.extract_list_products(
+                checked["html"], checked.get("url", page_url), source_name
+            ))
+            time.sleep(0.25)
+        products, duplicates = self._deduplicate_products(all_products)
+        for product in [item for item in products if not item.get("release_date")][
+            : self.gundam_extractor.MAX_DETAIL_PAGES
+        ]:
+            checked = self._fetch_page(product["official_url"])
+            if not checked["ok"]:
+                continue
+            detail_pages += 1
+            supplement = self.gundam_extractor.supplement_from_detail(
+                checked["html"], checked.get("url", product["official_url"])
+            )
+            product["release_date"] = supplement.get("release_date", "")
+            time.sleep(0.25)
+        return [item for item in products if item.get("release_date")], detail_pages, duplicates
+
+    @classmethod
+    def _deduplicate_products(cls, products: list[dict]) -> tuple[list[dict], int]:
+        output = []
+        seen = set()
+        duplicates = 0
+        for product in products:
+            key = str(product.get("official_url", "")).casefold() or (
+                cls._normalize_name(str(product.get("name", ""))),
+                str(product.get("release_date", "")),
+            )
+            if key in seen:
+                duplicates += 1
+                continue
+            seen.add(key)
+            output.append(product)
+        return output, duplicates
 
     def _extract_pokemon_official_products(
         self,
@@ -524,6 +659,7 @@ class SourceManager:
             "title": title or "タイトル未取得",
             "html": html,
             "status": "確認成功",
+            "url": response.geturl(),
         }
 
     @staticmethod
@@ -537,6 +673,14 @@ class SourceManager:
     def _is_yugioh_official(url: str) -> bool:
         host = urlparse(url).netloc.lower().split(":", 1)[0]
         return host == "yugioh-card.com" or host.endswith(".yugioh-card.com")
+
+    @staticmethod
+    def _is_onepiece_official(url: str) -> bool:
+        return (urlparse(url).hostname or "").casefold() == "www.onepiece-cardgame.com"
+
+    @staticmethod
+    def _is_gundam_official(url: str) -> bool:
+        return (urlparse(url).hostname or "").casefold() == "www.gundam-gcg.com"
 
     @staticmethod
     def _normalize_name(name: str) -> str:

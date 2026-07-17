@@ -110,6 +110,16 @@ class OfficialSourceManagerTest(unittest.TestCase):
                     return_value=([_product("遊戯王商品")], 1),
                 ),
                 patch.object(
+                    manager,
+                    "_extract_onepiece_official_products",
+                    return_value=([_product("ワンピース商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_gundam_official_products",
+                    return_value=([_product("ガンダム商品")], 1, 0),
+                ),
+                patch.object(
                     manager.extractor,
                     "extract",
                     side_effect=lambda _html, _url, name: [_product(name)],
@@ -152,6 +162,16 @@ class OfficialSourceManagerTest(unittest.TestCase):
                     manager,
                     "_extract_yugioh_official_products",
                     return_value=([_product("遊戯王商品")], 1),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_onepiece_official_products",
+                    side_effect=ValueError("解析エラー"),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_gundam_official_products",
+                    return_value=([_product("ガンダム商品")], 1, 0),
                 ),
                 patch.object(manager.extractor, "extract", side_effect=generic_extract),
                 patch.object(manager.diff_tracker, "compare_and_update", return_value=[]),
