@@ -1,0 +1,32 @@
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 25, 0, 3),
+    prodvers=(1, 25, 0, 3),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          '041104B0',
+          [
+            StringStruct('CompanyName', 'PokeyoyaKun Project'),
+            StringStruct('FileDescription', 'ポケヨヤ君 Owner Edition - 開発者専用・配布禁止'),
+            StringStruct('FileVersion', '1.25.0.3'),
+            StringStruct('InternalName', 'PokeyoyaKunOwnerEdition'),
+            StringStruct('LegalCopyright', 'Copyright (C) 2026 PokeyoyaKun Project'),
+            StringStruct('OriginalFilename', 'PokeyoyaKun_OwnerEdition.exe'),
+            StringStruct('ProductName', 'ポケヨヤ君 Owner Edition'),
+            StringStruct('ProductVersion', '1.25.0 RC3 Owner')
+          ]
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct('Translation', [0x0411, 1200])])
+  ]
+)

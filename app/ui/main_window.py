@@ -28,7 +28,6 @@ from ui.lottery_page import LotteryPage
 from ui.migration_page import MigrationPage
 from ui.notification_center_page import NotificationCenterPage
 from ui.notification_page import NotificationPage
-from ui.online_license_page import OnlineLicensePage
 from ui.plugin_page import PluginPage
 from ui.plugin_distribution_page import PluginDistributionPage
 from ui.product_page import ProductPage
@@ -45,11 +44,11 @@ from ui.support_page import SupportPage
 from ui.update_page import UpdatePage
 
 class MainWindow(QMainWindow):
+    SETTINGS_EXECUTABLE = "ポケヨヤ君_設定.exe"
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(
-            f"ポケヨヤ君 Ver.{APP_VERSION} {APP_CHANNEL.upper()}"
-        )
+        self.setWindowTitle(self._window_title())
         self.resize(1280, 780)
         self.setMinimumSize(980, 620)
 
@@ -62,46 +61,35 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
-        root = QHBoxLayout(central)
+        root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+
+        edition_banner = self._edition_banner()
+        if edition_banner is not None:
+            root.addWidget(edition_banner)
+
+        content = QWidget()
+        content_layout = QHBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
 
         sidebar = self._build_sidebar()
         self.pages = self._build_pages()
         self._connect_navigation()
 
-        root.addWidget(sidebar)
-        root.addWidget(self.pages, 1)
+        content_layout.addWidget(sidebar)
+        content_layout.addWidget(self.pages, 1)
+        root.addWidget(content, 1)
 
-    def _build_sidebar(self):
-        sidebar = QFrame()
-        sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(270)
+    def _window_title(self):
+        return f"ポケヨヤ君 Ver.{APP_VERSION} {APP_CHANNEL.upper()}"
 
-        outer = QVBoxLayout(sidebar)
-        outer.setContentsMargins(14, 18, 14, 14)
-        outer.setSpacing(10)
+    def _edition_banner(self):
+        return None
 
-        title = QLabel("ポケヨヤ君")
-        title.setObjectName("AppTitle")
-        subtitle = QLabel("TCG Reservation Assistant")
-        subtitle.setObjectName("VersionLabel")
-        outer.addWidget(title)
-        outer.addWidget(subtitle)
-
-        scroll = QScrollArea()
-        scroll.setObjectName("SidebarScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        container = QWidget()
-        container.setObjectName("SidebarMenuContainer")
-        menu = QVBoxLayout(container)
-        menu.setContentsMargins(4, 6, 4, 6)
-        menu.setSpacing(6)
-
-        labels = [
+    def _navigation_labels(self):
+        return [
             ("home_button", "ホーム"),
             ("product_button", "商品一覧"),
             ("application_dashboard_button", "応募ダッシュボード"),
@@ -132,6 +120,50 @@ class MainWindow(QMainWindow):
             ("public_roadmap_button", "人気要望・開発状況"),
             ("about_button", "アプリ情報"),
         ]
+
+    def _system_navigation_buttons(self):
+        return [
+            self.resident_button, self.update_button,
+            self.online_license_button,
+            self.history_button, self.self_test_button,
+            self.regression_button, self.release_readiness_button,
+            self.support_button, self.feedback_button,
+            self.public_roadmap_button, self.about_button,
+            self.open_settings_button,
+        ]
+
+    def _version_text(self):
+        return f"Version {APP_VERSION} {APP_CHANNEL.upper()}"
+
+    def _build_sidebar(self):
+        sidebar = QFrame()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setFixedWidth(270)
+
+        outer = QVBoxLayout(sidebar)
+        outer.setContentsMargins(14, 18, 14, 14)
+        outer.setSpacing(10)
+
+        title = QLabel("ポケヨヤ君")
+        title.setObjectName("AppTitle")
+        subtitle = QLabel("TCG Reservation Assistant")
+        subtitle.setObjectName("VersionLabel")
+        outer.addWidget(title)
+        outer.addWidget(subtitle)
+
+        scroll = QScrollArea()
+        scroll.setObjectName("SidebarScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        container = QWidget()
+        container.setObjectName("SidebarMenuContainer")
+        menu = QVBoxLayout(container)
+        menu.setContentsMargins(4, 6, 4, 6)
+        menu.setSpacing(6)
+
+        labels = self._navigation_labels()
         for attr, label in labels:
             setattr(self, attr, self._make_nav_button(label))
 
@@ -166,21 +198,15 @@ class MainWindow(QMainWindow):
         self._add_menu_section(menu, "データ管理", [
             self.storage_button, self.migration_button, self.backup_button,
         ])
-        self._add_menu_section(menu, "システム", [
-            self.resident_button, self.update_button,
-            self.online_license_button,
-            self.history_button, self.self_test_button,
-            self.regression_button, self.release_readiness_button,
-            self.support_button, self.feedback_button,
-            self.public_roadmap_button, self.about_button,
-            self.open_settings_button,
-        ])
+        self._add_menu_section(
+            menu, "システム", self._system_navigation_buttons()
+        )
         menu.addStretch()
 
         scroll.setWidget(container)
         outer.addWidget(scroll, 1)
 
-        version = QLabel(f"Version {APP_VERSION} {APP_CHANNEL.upper()}")
+        version = QLabel(self._version_text())
         version.setObjectName("VersionLabel")
         version.setAlignment(Qt.AlignCenter)
         self.exit_button = QPushButton("終了")
@@ -236,7 +262,6 @@ class MainWindow(QMainWindow):
         self.backup_page = BackupPage()
         self.resident_page = ResidentPage()
         self.update_page = UpdatePage()
-        self.online_license_page = OnlineLicensePage()
         self.history_page = HistoryPage()
         self.self_test_page = SelfTestPage()
         self.regression_page = RegressionPage()
@@ -267,7 +292,6 @@ class MainWindow(QMainWindow):
             self.backup_button: self.backup_page,
             self.resident_button: self.resident_page,
             self.update_button: self.update_page,
-            self.online_license_button: self.online_license_page,
             self.history_button: self.history_page,
             self.self_test_button: self.self_test_page,
             self.regression_button: self.regression_page,
@@ -278,10 +302,18 @@ class MainWindow(QMainWindow):
             self.about_button: self.about_page,
         }
 
+        self._add_license_page(self.page_map)
+
         for page in self.page_map.values():
             pages.addWidget(page)
         pages.setCurrentWidget(self.home_page)
         return pages
+
+    def _add_license_page(self, page_map):
+        from ui.online_license_page import OnlineLicensePage
+
+        self.online_license_page = OnlineLicensePage()
+        page_map[self.online_license_button] = self.online_license_page
 
     def _connect_navigation(self):
         for button, page in self.page_map.items():
@@ -308,12 +340,12 @@ class MainWindow(QMainWindow):
         if is_frozen():
             settings_exe = (
                 Path(sys.executable).resolve().parent
-                / "ポケヨヤ君_設定.exe"
+                / self.SETTINGS_EXECUTABLE
             )
             if not settings_exe.exists():
                 QMessageBox.warning(
                     self, "設定ソフトが見つかりません",
-                    "ポケヨヤ君_設定.exeが同じフォルダーにありません。",
+                    f"{self.SETTINGS_EXECUTABLE}が同じフォルダーにありません。",
                 )
                 return
             subprocess.Popen([str(settings_exe)])

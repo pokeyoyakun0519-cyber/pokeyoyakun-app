@@ -13,6 +13,7 @@ from release_security import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BUILD_OWNER_EDITION = False
 APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
