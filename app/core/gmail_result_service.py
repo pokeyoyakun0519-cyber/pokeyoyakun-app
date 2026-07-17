@@ -133,8 +133,8 @@ class GmailResultService:
     ) -> dict[str, Any]:
         if not self.dependencies_available():
             raise RuntimeError(
-                "Gmail連携ライブラリがありません。"
-                "FULL_RELEASE_TESTまたはbuild_exe.pyを実行してください。"
+                "Gmail連携に必要なコンポーネントを読み込めません。"
+                "最新版のアプリを再インストールしてから、もう一度お試しください。"
             )
 
         if not self.client_secret_exists():
@@ -328,7 +328,7 @@ class GmailResultService:
     ):
         if not self.dependencies_available():
             raise RuntimeError(
-                "Gmail連携ライブラリがありません。"
+                "Gmail連携に必要なコンポーネントを読み込めません。"
             )
 
         token_path = self._token_path(account_id)

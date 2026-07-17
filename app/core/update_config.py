@@ -1,22 +1,17 @@
 import json
-from pathlib import Path
+from core.runtime_paths import app_root
 
 
 DEFAULT_UPDATE_CONFIG = {
-    "manifest_url": "",
-    "channel": "stable",
     "check_on_startup": True,
-    "allow_beta": False,
+    "allow_prerelease": False,
 }
 
 
 class UpdateConfig:
-    def __init__(self):
-        self.path = (
-            Path(__file__).resolve().parents[2]
-            / "config"
-            / "update_settings.json"
-        )
+    def __init__(self, edition_id: str = "user"):
+        filename = "owner_update_settings.json" if edition_id == "owner" else "update_settings.json"
+        self.path = app_root() / "config" / filename
 
     def load(self):
         if not self.path.exists():

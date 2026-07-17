@@ -61,3 +61,9 @@ class OwnerMainWindow(MainWindow):
     def _add_license_page(self, page_map):
         # Owner用バイナリには認証画面・認証ページを生成しない。
         return None
+
+    def _create_update_page(self):
+        from core.owner_update_manager import OwnerUpdateManager
+        from ui.update_page import UpdatePage
+
+        return UpdatePage(OwnerUpdateManager())

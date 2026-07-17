@@ -1,45 +1,51 @@
 from __future__ import annotations
 
+from threading import Event
+
 from PySide6.QtCore import QObject, Signal, Slot
 
-from core.update_manager import UpdateManager
 
-
-class UpdateWorker(QObject):
-    progress = Signal(str)
+class UpdateCheckWorker(QObject):
     completed = Signal(dict)
     failed = Signal(str)
 
-    def __init__(
-        self,
-        manifest: dict,
-    ):
+    def __init__(self, manager, allow_prerelease: bool):
         super().__init__()
-        self.manifest = dict(manifest)
+        self.manager = manager
+        self.allow_prerelease = allow_prerelease
 
     @Slot()
     def run(self):
         try:
-            self.progress.emit(
-                "更新ファイルをダウンロードしています…"
-            )
-            manager = UpdateManager()
-            zip_path = manager.download(
-                self.manifest
-            )
-
-            self.progress.emit(
-                "更新ファイルを検証・展開しています…"
-            )
-            source = manager.prepare_update(
-                zip_path
-            )
-
             self.completed.emit(
-                {
-                    "zip_path": str(zip_path),
-                    "source_path": str(source),
-                }
+                self.manager.check(allow_prerelease=self.allow_prerelease)
             )
+        except Exception as error:
+            self.failed.emit(str(error))
+
+
+class UpdateDownloadWorker(QObject):
+    progress = Signal(int)
+    completed = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, manager, release: dict):
+        super().__init__()
+        self.manager = manager
+        self.release = dict(release)
+        self.cancel_event = Event()
+
+    def cancel(self):
+        self.cancel_event.set()
+
+    @Slot()
+    def run(self):
+        try:
+            path = self.manager.download(
+                self.release,
+                progress=self.progress.emit,
+                cancel=self.cancel_event,
+            )
+            self.completed.emit(str(path))
         except Exception as error:
             self.failed.emit(str(error))

@@ -17,7 +17,7 @@ BUILD_ROOT = Path(tempfile.gettempdir()) / "PokeyoyaKun_Nuitka_Ver1.25.0_RC3"
 ICON_PATH = ASSETS_DIR / "pokeyoya_icon.ico"
 
 TARGETS = (
-    ("ポケヨヤ君_Updater", PROJECT_ROOT / "tools" / "apply_update.py"),
+    ("PokeyoyaKunUpdater", PROJECT_ROOT / "tools" / "user_updater_main.py"),
     ("ポケヨヤ君", APP_DIR / "monitor_main.py"),
     ("ポケヨヤ君_設定", APP_DIR / "settings_main.py"),
 )
@@ -71,6 +71,10 @@ def build_target(name: str, script: Path) -> None:
         "--include-package=googleapiclient",
         "--include-package=google_auth_oauthlib",
         "--include-package=google.oauth2",
+        "--include-module=google.auth.transport.requests",
+        "--include-module=google.oauth2.credentials",
+        "--include-module=google_auth_oauthlib.flow",
+        "--include-module=googleapiclient.discovery",
         "--include-package=certifi",
         "--include-package-data=certifi",
         "--nofollow-import-to=tests,unittest,pdb,core.admin_auth,core.license_crypto",

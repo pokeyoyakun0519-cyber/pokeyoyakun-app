@@ -261,7 +261,7 @@ class MainWindow(QMainWindow):
         self.migration_page = MigrationPage()
         self.backup_page = BackupPage()
         self.resident_page = ResidentPage()
-        self.update_page = UpdatePage()
+        self.update_page = self._create_update_page()
         self.history_page = HistoryPage()
         self.self_test_page = SelfTestPage()
         self.regression_page = RegressionPage()
@@ -314,6 +314,11 @@ class MainWindow(QMainWindow):
 
         self.online_license_page = OnlineLicensePage()
         page_map[self.online_license_button] = self.online_license_page
+
+    def _create_update_page(self):
+        from core.update_manager import UpdateManager
+
+        return UpdatePage(UpdateManager())
 
     def _connect_navigation(self):
         for button, page in self.page_map.items():

@@ -26,6 +26,10 @@ VERSION_FILE = INSTALLER_DIR / "owner_version_info.txt"
 
 TARGETS = (
     {
+        "name": "PokeyoyaKunOwnerUpdater",
+        "script": PROJECT_ROOT / "tools" / "owner_updater_main.py",
+    },
+    {
         "name": "PokeyoyaKun_OwnerEdition",
         "script": APP_DIR / "owner_main.py",
     },
@@ -42,6 +46,8 @@ LICENSE_MODULE_EXCLUSIONS = (
     "core.online_license_client",
     "core.online_license_config",
     "core.offline_license",
+    "core.update_manager",
+    "core.user_update_profile",
 )
 
 
@@ -66,6 +72,7 @@ def ensure_dependencies() -> None:
         "google-api-python-client",
         "google-auth-oauthlib",
         "google-auth-httplib2",
+        "keyring",
     ])
 
 
@@ -114,6 +121,16 @@ def build_target(target: dict[str, Path | str]) -> None:
         "google_auth_oauthlib",
         "--collect-all",
         "google.oauth2",
+        "--hidden-import",
+        "google.auth.transport.requests",
+        "--hidden-import",
+        "google.oauth2.credentials",
+        "--hidden-import",
+        "google_auth_oauthlib.flow",
+        "--hidden-import",
+        "googleapiclient.discovery",
+        "--collect-all",
+        "keyring",
         "--collect-data",
         "certifi",
         "--exclude-module",

@@ -30,8 +30,8 @@ VERSION_FILE = INSTALLER_DIR / "version_info.txt"
 
 TARGETS = (
     {
-        "name": "ポケヨヤ君_Updater",
-        "script": PROJECT_ROOT / "tools" / "apply_update.py",
+        "name": "PokeyoyaKunUpdater",
+        "script": PROJECT_ROOT / "tools" / "user_updater_main.py",
     },
     {
         "name": "ポケヨヤ君",
@@ -140,6 +140,14 @@ def build_target(
         "google_auth_oauthlib",
         "--collect-all",
         "google.oauth2",
+        "--hidden-import",
+        "google.auth.transport.requests",
+        "--hidden-import",
+        "google.oauth2.credentials",
+        "--hidden-import",
+        "google_auth_oauthlib.flow",
+        "--hidden-import",
+        "googleapiclient.discovery",
         "--collect-data",
         "certifi",
         "--exclude-module",
@@ -152,6 +160,10 @@ def build_target(
         "core.admin_auth",
         "--exclude-module",
         "core.license_crypto",
+        "--exclude-module",
+        "core.owner_update_manager",
+        "--exclude-module",
+        "core.owner_update_profile",
         str(target["script"]),
     ]
     run(command)
@@ -161,7 +173,7 @@ def verify_user_edition() -> None:
     required = (
         "ポケヨヤ君.exe",
         "ポケヨヤ君_設定.exe",
-        "ポケヨヤ君_Updater.exe",
+        "PokeyoyaKunUpdater.exe",
         "release-integrity.json",
     )
     missing = [

@@ -29,6 +29,7 @@ Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 [Files]
 Source: "..\release\owner_dist_rc3\PokeyoyaKun_OwnerEdition.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\owner_dist_rc3\PokeyoyaKun_Owner_Settings.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\owner_dist_rc3\PokeyoyaKunOwnerUpdater.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\owner_dist_rc3\release-integrity.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\owner_dist_rc3\OWNER_EDITION_README.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\owner_dist_rc3\pokeyoya_icon.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist

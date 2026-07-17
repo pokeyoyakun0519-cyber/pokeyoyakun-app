@@ -18,8 +18,8 @@ class StartupCheck:
 
     JSON_DEFAULTS = {
         "config/update_settings.json": {
-            "manifest_url": "",
-            "channel": "dev",
+            "check_on_startup": True,
+            "allow_prerelease": False,
         },
         "config/user_state.json": {
             "reserved_product_ids": [],
