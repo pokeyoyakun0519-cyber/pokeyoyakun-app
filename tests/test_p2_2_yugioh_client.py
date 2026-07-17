@@ -158,7 +158,11 @@ class YugiohClientCoreTest(unittest.TestCase):
                 SourceManager.YUGIOH_OFFICIAL_PRODUCTS_URL,
                 "yugioh",
             )
-            source = manager.load_sources()[0]
+            source = next(
+                item
+                for item in manager.load_sources()
+                if item["url"] == SourceManager.YUGIOH_OFFICIAL_PRODUCTS_URL
+            )
             self.assertEqual(source["tcg_key"], "yugioh")
             self.assertEqual(source["tcg"], "遊戯王OCG")
 

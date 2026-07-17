@@ -1,7 +1,8 @@
 import webbrowser
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -73,6 +74,7 @@ class SourceCard(QFrame):
         self,
         source: dict,
         edit_callback,
+        check_callback,
         toggle_callback,
         remove_callback,
     ):
@@ -112,15 +114,26 @@ class SourceCard(QFrame):
             else "StatusClosed"
         )
 
-        status = QLabel(
-            str(
-                source.get(
-                    "last_status",
-                    "未確認",
-                )
-            )
+        state = str(source.get("check_state", "")).strip().lower()
+        if not state:
+            last_status = str(source.get("last_status", "未確認"))
+            if last_status.startswith(("確認失敗", "接続失敗", "HTTPエラー")):
+                state = "error"
+            elif last_status.startswith("確認成功"):
+                state = "checked"
+            else:
+                state = "unchecked"
+        status_labels = {
+            "checked": ("🟢 確認済み", "StatusOpen"),
+            "checking": ("🟡 確認中", "StatusOther"),
+            "error": ("🔴 エラー", "StatusClosed"),
+            "unchecked": ("⚪ 未確認", "StatusOther"),
+        }
+        status_text, status_object = status_labels.get(
+            state, status_labels["unchecked"]
         )
-        status.setObjectName("StatusOther")
+        status = QLabel(status_text)
+        status.setObjectName(status_object)
 
         open_button = QPushButton(
             "ページを開く"
@@ -130,6 +143,11 @@ class SourceCard(QFrame):
                 source.get("url", "")
             )
         )
+
+        check_button = QPushButton("確認")
+        check_button.setObjectName("AccentButton")
+        check_button.setEnabled(enabled and state != "checking")
+        check_button.clicked.connect(lambda: check_callback(source))
 
         edit_button = QPushButton("編集")
         edit_button.clicked.connect(
@@ -159,6 +177,7 @@ class SourceCard(QFrame):
         header.addStretch()
         header.addWidget(enabled_label)
         header.addWidget(status)
+        header.addWidget(check_button)
         header.addWidget(open_button)
         header.addWidget(edit_button)
         header.addWidget(toggle_button)
@@ -179,8 +198,13 @@ class SourceCard(QFrame):
         )
         checked.setObjectName("MutedText")
 
+        detail = QLabel(str(source.get("last_status", "未確認")))
+        detail.setObjectName("MutedText")
+        detail.setWordWrap(True)
+
         layout.addLayout(header)
         layout.addWidget(url_label)
+        layout.addWidget(detail)
         layout.addWidget(checked)
 
 
@@ -194,6 +218,11 @@ class SourcesPage(QFrame):
         self.notification_manager = (
             NotificationManager()
         )
+        self._checking = False
+        self._check_queue: list[str] = []
+        self._check_total = 0
+        self._check_done = 0
+        self._check_changed = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(
@@ -208,19 +237,19 @@ class SourcesPage(QFrame):
         title = QLabel("公式情報ソース")
         title.setObjectName("PageTitle")
 
-        check_button = QPushButton(
-            "登録ページを手動確認"
+        self.check_all_button = QPushButton(
+            "すべて確認"
         )
-        check_button.setObjectName(
+        self.check_all_button.setObjectName(
             "AccentButton"
         )
-        check_button.clicked.connect(
+        self.check_all_button.clicked.connect(
             self.check_sources
         )
 
         header.addWidget(title)
         header.addStretch()
-        header.addWidget(check_button)
+        header.addWidget(self.check_all_button)
         layout.addLayout(header)
 
         description = QLabel(
@@ -420,12 +449,70 @@ class SourcesPage(QFrame):
             )
             return
 
-        checked, changed = (
-            self.source_manager.check_all()
+        self._start_checks([
+            str(source.get("id", ""))
+            for source in sources
+        ])
+
+    def check_source(self, source: dict) -> None:
+        if not source.get("enabled", True):
+            return
+        self._start_checks([str(source.get("id", ""))])
+
+    def _start_checks(self, source_ids: list[str]) -> None:
+        if self._checking:
+            self.result_label.setText("確認処理中です。完了までお待ちください。")
+            return
+        self._check_queue = [source_id for source_id in source_ids if source_id]
+        if not self._check_queue:
+            return
+        self._checking = True
+        self._check_total = len(self._check_queue)
+        self._check_done = 0
+        self._check_changed = 0
+        self.check_all_button.setEnabled(False)
+        self._prepare_next_check()
+
+    def _prepare_next_check(self) -> None:
+        if not self._check_queue:
+            self._finish_checks()
+            return
+        source_id = self._check_queue[0]
+        sources = self.source_manager.load_sources()
+        source = next(
+            (
+                item for item in sources
+                if str(item.get("id", "")) == source_id
+            ),
+            {},
         )
+        self.source_manager.mark_checking(source_id)
         self.result_label.setText(
-            f"{len(sources)}件を確認し、"
-            f"{len(changed)}件で変更または商品追加がありました。"
+            f"確認中 {self._check_done + 1}/{self._check_total}："
+            f"{source.get('name', '公式情報ソース')}"
+        )
+        self.reload_sources()
+        QApplication.processEvents()
+        QTimer.singleShot(0, self._execute_next_check)
+
+    def _execute_next_check(self) -> None:
+        if not self._check_queue:
+            self._finish_checks()
+            return
+        source_id = self._check_queue.pop(0)
+        _source, changed = self.source_manager.check_source(source_id)
+        self._check_done += 1
+        if changed:
+            self._check_changed += 1
+        self.reload_sources()
+        self._prepare_next_check()
+
+    def _finish_checks(self) -> None:
+        self._checking = False
+        self.check_all_button.setEnabled(True)
+        self.result_label.setText(
+            f"{self._check_done}件の確認が完了しました。"
+            f"{self._check_changed}件で変更または商品追加がありました。"
         )
         self.reload_sources()
 
@@ -462,6 +549,7 @@ class SourcesPage(QFrame):
                     SourceCard(
                         source,
                         self.edit_source,
+                        self.check_source,
                         self.toggle_source,
                         self.remove_source,
                     )

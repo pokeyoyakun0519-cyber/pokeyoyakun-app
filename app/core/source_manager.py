@@ -14,11 +14,34 @@ from core.pokemon_official_extractor import PokemonOfficialExtractor
 from core.yugioh_official_extractor import YugiohOfficialExtractor
 from core.candidate_manager import CandidateManager
 from core.runtime_paths import app_root
+from core.secure_https import build_https_opener
 from core.tcg_categories import display_name, normalize_key, normalize_record
 from core.source_product_extractor import SourceProductExtractor
 
 
 class SourceManager:
+    DEFAULT_SOURCES = (
+        {
+            "name": "ポケモンカードゲーム トレーナーズウェブサイト",
+            "url": "https://www.pokemon-card.com/",
+            "tcg_key": "pokemon",
+        },
+        {
+            "name": "ワンピースカードゲーム公式",
+            "url": "https://www.onepiece-cardgame.com/products/?view=normal",
+            "tcg_key": "onepiece",
+        },
+        {
+            "name": "遊戯王OCG公式 商品情報",
+            "url": "https://www.yugioh-card.com/japan/products/",
+            "tcg_key": "yugioh",
+        },
+        {
+            "name": "ガンダムカードゲーム公式",
+            "url": "https://www.gundam-gcg.com/jp/products/",
+            "tcg_key": "gundam",
+        },
+    )
     YUGIOH_OFFICIAL_PRODUCTS_URL = (
         "https://www.yugioh-card.com/japan/products/"
     )
@@ -37,19 +60,90 @@ class SourceManager:
         self.candidate_manager = CandidateManager()
 
     def load_sources(self) -> list[dict[str, Any]]:
-        if not self.sources_path.exists():
-            return []
+        if self.sources_path.exists():
+            try:
+                with self.sources_path.open("r", encoding="utf-8") as file:
+                    data = json.load(file)
+            except (OSError, json.JSONDecodeError):
+                # 壊れた既存ファイルを初期値で上書きしない。
+                return []
+            if not isinstance(data, list):
+                return []
+            sources = [normalize_record(item)[0] for item in data]
+        else:
+            sources = []
 
-        try:
-            with self.sources_path.open("r", encoding="utf-8") as file:
-                data = json.load(file)
-            return (
-                [normalize_record(item)[0] for item in data]
-                if isinstance(data, list)
-                else []
-            )
-        except (OSError, json.JSONDecodeError):
-            return []
+        merged, changed = self._merge_default_sources(sources)
+        if changed:
+            self.save_sources(merged)
+        return merged
+
+    def _merge_default_sources(
+        self,
+        sources: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        merged = [dict(source) for source in sources]
+        identities = {
+            self._url_identity(str(source.get("url", "")))
+            for source in merged
+        }
+        changed = False
+        for default in self.DEFAULT_SOURCES:
+            identity = self._url_identity(default["url"])
+            if identity in identities:
+                continue
+            merged.append(self._new_source_record(
+                default["name"],
+                default["url"],
+                default["tcg_key"],
+                len(merged) + 1,
+                builtin=True,
+            ))
+            identities.add(identity)
+            changed = True
+        return merged, changed
+
+    @staticmethod
+    def _url_identity(url: str) -> str:
+        parsed = urlparse(url.strip())
+        if not parsed.scheme or not parsed.netloc:
+            return url.strip().casefold().rstrip("/")
+        path = parsed.path.rstrip("/") or "/"
+        return (
+            f"{parsed.scheme.casefold()}://{parsed.netloc.casefold()}"
+            f"{path}?{parsed.query}".rstrip("?")
+        )
+
+    def _new_source_record(
+        self,
+        name: str,
+        url: str,
+        tcg_key: str,
+        priority: int,
+        *,
+        builtin: bool = False,
+    ) -> dict[str, Any]:
+        normalized_key = normalize_key(tcg_key)[0]
+        return {
+            "id": self._make_id(url),
+            "name": name.strip() or "名称未設定",
+            "url": url.strip(),
+            "last_title": "",
+            "last_checked": "",
+            "last_status": "未確認",
+            "check_state": "unchecked",
+            "changed": False,
+            "last_detected_count": 0,
+            "last_added_count": 0,
+            "last_detail_pages": 0,
+            "detected_products": [],
+            "official_changes": [],
+            "enabled": True,
+            "priority": priority,
+            "tcg_key": normalized_key,
+            "tcg": display_name(normalized_key),
+            "builtin": builtin,
+        }
 
     def save_sources(self, sources: list[dict[str, Any]]) -> None:
         self.sources_path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,26 +157,12 @@ class SourceManager:
         if any(source.get("id") == source_id for source in sources):
             return
 
-        sources.append(
-            {
-                "id": source_id,
-                "name": name.strip() or "名称未設定",
-                "url": url.strip(),
-                "last_title": "",
-                "last_checked": "",
-                "last_status": "未確認",
-                "changed": False,
-                "last_detected_count": 0,
-                "last_added_count": 0,
-                "last_detail_pages": 0,
-                "detected_products": [],
-                "official_changes": [],
-                "enabled": True,
-                "priority": len(sources) + 1,
-                "tcg_key": normalize_key(tcg_key)[0],
-                "tcg": display_name(normalize_key(tcg_key)[0]),
-            }
-        )
+        sources.append(self._new_source_record(
+            name,
+            url,
+            tcg_key,
+            len(sources) + 1,
+        ))
         self.save_sources(sources)
 
 
@@ -154,42 +234,69 @@ class SourceManager:
         for source in sources:
             if not source.get("enabled", True):
                 source["last_status"] = "無効"
+                source["check_state"] = "unchecked"
                 source["changed"] = False
                 continue
+            if self._check_source_record(source):
+                changed_sources.append(source.copy())
 
-            old_title = source.get("last_title", "")
+        self.save_sources(sources)
+        return sources, changed_sources
+
+    def mark_checking(self, source_id: str) -> bool:
+        sources = self.load_sources()
+        for source in sources:
+            if str(source.get("id", "")) == source_id:
+                source["check_state"] = "checking"
+                source["last_status"] = "確認中"
+                self.save_sources(sources)
+                return True
+        return False
+
+    def check_source(
+        self,
+        source_id: str,
+    ) -> tuple[dict[str, Any] | None, bool]:
+        sources = self.load_sources()
+        for source in sources:
+            if str(source.get("id", "")) != source_id:
+                continue
+            if not source.get("enabled", True):
+                source["last_status"] = "無効"
+                source["check_state"] = "unchecked"
+                changed = False
+            else:
+                changed = self._check_source_record(source)
+            self.save_sources(sources)
+            return source.copy(), changed
+        return None, False
+
+    def _check_source_record(self, source: dict[str, Any]) -> bool:
+        old_title = source.get("last_title", "")
+        source["last_checked"] = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        source["last_detected_count"] = 0
+        source["last_added_count"] = 0
+        source["last_detail_pages"] = 0
+        source["detected_products"] = []
+        source["official_changes"] = []
+
+        try:
             checked = self._fetch_page(source.get("url", ""))
-
-            source["last_checked"] = datetime.now().strftime(
-                "%Y/%m/%d %H:%M:%S"
-            )
             source["last_status"] = checked["status"]
-            source["last_detected_count"] = 0
-            source["last_added_count"] = 0
-            source["last_detail_pages"] = 0
-            source["detected_products"] = []
-            source["official_changes"] = []
-
             if not checked["ok"]:
+                source["check_state"] = "error"
                 source["changed"] = False
-                continue
+                return False
 
             new_title = checked["title"]
-            source["changed"] = bool(
-                old_title and new_title != old_title
-            )
+            source["changed"] = bool(old_title and new_title != old_title)
             source["last_title"] = new_title
-
             source_url = source.get("url", "")
             source_name = source.get("name", "公式情報ソース")
 
             if self._is_pokemon_official(source_url):
-                discovered, detail_pages = (
-                    self._extract_pokemon_official_products(
-                        checked["html"],
-                        source_url,
-                        source_name,
-                    )
+                discovered, detail_pages = self._extract_pokemon_official_products(
+                    checked["html"], source_url, source_name
                 )
                 source["last_detail_pages"] = detail_pages
             elif self._is_yugioh_official(source_url):
@@ -199,9 +306,7 @@ class SourceManager:
                 source["last_detail_pages"] = detail_pages
             else:
                 discovered = self.extractor.extract(
-                    checked["html"],
-                    source_url,
-                    source_name,
+                    checked["html"], source_url, source_name
                 )
                 source_tcg_key = normalize_key(
                     source.get("tcg_key"), source.get("tcg")
@@ -210,22 +315,14 @@ class SourceManager:
                     product["tcg_key"] = source_tcg_key
                     product["tcg"] = display_name(source_tcg_key)
 
-            official_changes = (
-                self.diff_tracker.compare_and_update(
-                    discovered
-                )
-            )
+            official_changes = self.diff_tracker.compare_and_update(discovered)
             source["official_changes"] = official_changes
-
-            _, added_count = (
-                self.candidate_manager.merge_official_candidates(
-                    discovered,
-                    source_id=str(source.get("id", "")),
-                    source_name=source_name,
-                    source_url=source_url,
-                )
+            _, added_count = self.candidate_manager.merge_official_candidates(
+                discovered,
+                source_id=str(source.get("id", "")),
+                source_name=source_name,
+                source_url=source_url,
             )
-
             source["last_detected_count"] = len(discovered)
             source["last_added_count"] = added_count
             source["detected_products"] = [
@@ -240,32 +337,24 @@ class SourceManager:
                 }
                 for item in discovered[:12]
             ]
-
-            if self._is_pokemon_official(source_url) or self._is_yugioh_official(
+            detailed = self._is_pokemon_official(source_url) or self._is_yugioh_official(
                 source_url
-            ):
-                source["last_status"] = (
-                    f"確認成功・商品ページ{source['last_detail_pages']}件解析"
-                    f"・商品{len(discovered)}件検出"
-                    f"・新弾候補へ新規{added_count}件追加"
-                    f"・公式変更{len(official_changes)}件"
-                )
-            else:
-                source["last_status"] = (
-                    f"確認成功・商品{len(discovered)}件検出"
-                    f"・新弾候補へ新規{added_count}件追加"
-                    f"・公式変更{len(official_changes)}件"
-                )
-
-            if (
-                source["changed"]
-                or added_count
-                or official_changes
-            ):
-                changed_sources.append(source.copy())
-
-        self.save_sources(sources)
-        return sources, changed_sources
+            )
+            detail_text = (
+                f"商品ページ{source['last_detail_pages']}件解析・" if detailed else ""
+            )
+            source["last_status"] = (
+                f"確認成功・{detail_text}商品{len(discovered)}件検出"
+                f"・新弾候補へ新規{added_count}件追加"
+                f"・公式変更{len(official_changes)}件"
+            )
+            source["check_state"] = "checked"
+            return bool(source["changed"] or added_count or official_changes)
+        except Exception as error:
+            source["last_status"] = f"確認失敗: {error}"
+            source["check_state"] = "error"
+            source["changed"] = False
+            return False
 
     def _extract_pokemon_official_products(
         self,
@@ -382,7 +471,8 @@ class SourceManager:
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=20) as response:
+            opener = build_https_opener()
+            with opener.open(request, timeout=20) as response:
                 raw = response.read(3_000_000)
                 charset = (
                     response.headers.get_content_charset()
