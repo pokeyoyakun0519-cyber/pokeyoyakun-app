@@ -8,12 +8,20 @@ from core.behavior_config import BehaviorConfig
 from core.crash_handler import install_crash_handler
 from core.release_config import ReleaseConfig
 from core.release_integrity import verify_runtime_integrity
+from core.secure_https import create_tls_context
 from core.startup_check import StartupCheck
 from core.startup_diagnostics import StartupDiagnostics
 from core.whats_new_manager import WhatsNewManager
 
 
 def main():
+    if "--tls-ca-self-test" in sys.argv:
+        try:
+            create_tls_context()
+        except Exception:
+            raise SystemExit(1)
+        raise SystemExit(0)
+
     diagnostics = StartupDiagnostics()
     diagnostics.write("監視ソフトの起動を開始")
 

@@ -10,6 +10,10 @@ class HistoryPage(QFrame):
         title = QLabel("更新履歴")
         title.setObjectName("PageTitle")
         text = QLabel(
+            "Ver.1.25.0 RC3\n"
+            "・certifi CAを使う共通TLS検証へ統一\n"
+            "・ライセンス、Feedback、Roadmapの証明書検証を修正\n"
+            "・CA欠損時の通信拒否とfrozen自己診断を追加\n\n"
             "Ver.1.25.0 RC2\n"
             "・遊戯王OCGカテゴリと商品表示に対応\n"
             "・遊戯王OCG公式の商品情報取得に対応\n"

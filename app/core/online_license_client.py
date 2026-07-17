@@ -12,6 +12,7 @@ from core.online_license_config import (
     OnlineLicenseConfig,
     validate_public_server_url,
 )
+from core.secure_https import TlsConfigurationError, build_https_opener
 from core.version import APP_VERSION
 
 
@@ -95,7 +96,7 @@ class OnlineLicenseClient:
         )
 
         try:
-            opener = urllib.request.build_opener(
+            opener = build_https_opener(
                 HttpsOnlyRedirectHandler(approved_server_url)
             )
             with opener.open(
@@ -114,6 +115,8 @@ class OnlineLicenseClient:
             )
         except urllib.error.URLError as error:
             return False, self._friendly_connection_error(error)
+        except TlsConfigurationError as error:
+            return False, str(error)
         except (TimeoutError, socket.timeout):
             return False, self._timeout_message()
         except json.JSONDecodeError:
@@ -238,7 +241,7 @@ class OnlineLicenseClient:
         )
 
         try:
-            opener = urllib.request.build_opener(
+            opener = build_https_opener(
                 HttpsOnlyRedirectHandler(approved_server_url)
             )
             with opener.open(
@@ -279,6 +282,8 @@ class OnlineLicenseClient:
                 {},
                 True,
             )
+        except TlsConfigurationError as error:
+            return False, str(error), {}, True
         except (TimeoutError, socket.timeout):
             return False, self._timeout_message(), {}, True
         except json.JSONDecodeError:

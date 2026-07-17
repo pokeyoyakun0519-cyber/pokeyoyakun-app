@@ -136,7 +136,7 @@ class OnlineLicenseClientTest(unittest.TestCase):
             "offline_grace_hours": 0,
         }
 
-    @patch("core.online_license_client.urllib.request.build_opener")
+    @patch("core.online_license_client.build_https_opener")
     def test_connection_uses_https_health_endpoint(self, build_opener):
         opener = FakeOpener(FakeResponse({"ok": True, "message": "ready"}))
         build_opener.return_value = opener
@@ -150,7 +150,7 @@ class OnlineLicenseClientTest(unittest.TestCase):
         )
 
     @patch("core.online_license_client.get_device_id", return_value="PC-1")
-    @patch("core.online_license_client.urllib.request.build_opener")
+    @patch("core.online_license_client.build_https_opener")
     def test_activate_posts_expected_https_payload(self, build_opener, _device_id):
         opener = FakeOpener(
             FakeResponse({"ok": True, "message": "認証成功"})
@@ -191,7 +191,7 @@ class OnlineLicenseClientTest(unittest.TestCase):
                         target,
                     )
 
-    @patch("core.online_license_client.urllib.request.build_opener")
+    @patch("core.online_license_client.build_https_opener")
     def test_server_rejection_is_not_replaced_by_local_success(self, build_opener):
         build_opener.return_value = FakeOpener(
             FakeResponse({"ok": False, "message": "このライセンスは停止されています。"})
@@ -201,7 +201,7 @@ class OnlineLicenseClientTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("停止", message)
 
-    @patch("core.online_license_client.urllib.request.build_opener")
+    @patch("core.online_license_client.build_https_opener")
     def test_network_failure_never_grants_access(self, build_opener):
         build_opener.return_value = FakeOpener(
             error=urllib.error.URLError("timed out")

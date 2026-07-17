@@ -12,6 +12,7 @@ from urllib.parse import urlencode, urlsplit
 
 from core.runtime_paths import app_root
 from core.version import APP_VERSION
+from core.secure_https import TlsConfigurationError, build_https_opener
 
 
 PUBLIC_ROADMAP_ORIGIN = "https://pokeyoyakun.duckdns.org"
@@ -281,10 +282,10 @@ class PublicRoadmapClient:
         request = urllib.request.Request(
             PUBLIC_ROADMAP_ORIGIN + path, headers=headers, method="GET"
         )
-        opener = self._opener or urllib.request.build_opener(
-            PublicRoadmapHttpsRedirectHandler()
-        )
         try:
+            opener = self._opener or build_https_opener(
+                PublicRoadmapHttpsRedirectHandler()
+            )
             with opener.open(request, timeout=self.timeout_seconds) as response:
                 status_code = getattr(response, "status", None)
                 if status_code is None:
@@ -314,6 +315,8 @@ class PublicRoadmapClient:
             return self._offline_or_raise(
                 cached, f"公開ロードマップへ接続できません: {reason}", error
             )
+        except TlsConfigurationError as error:
+            return self._offline_or_raise(cached, str(error), error)
         except (TimeoutError, socket.timeout) as error:
             return self._offline_or_raise(
                 cached, "接続がタイムアウトしました。", error

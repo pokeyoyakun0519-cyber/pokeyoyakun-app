@@ -57,7 +57,7 @@ class FakeOpener:
 
 
 class FeedbackApiClientTest(unittest.TestCase):
-    @patch("core.feedback_api.urllib.request.build_opener")
+    @patch("core.feedback_api.build_https_opener")
     def test_normal_feedback_submission(self, build_opener):
         opener = FakeOpener({"receipt_id": "FB-20260717-ABCDEF123456", "status": "pending"})
         build_opener.return_value = opener
@@ -77,7 +77,7 @@ class FeedbackApiClientTest(unittest.TestCase):
         self.assertEqual(sent["message_type"], "other")
         self.assertEqual(sent["tcg_keys"], ["pokemon"])
 
-    @patch("core.feedback_api.urllib.request.build_opener")
+    @patch("core.feedback_api.build_https_opener")
     def test_store_request_submission(self, build_opener):
         opener = FakeOpener({"receipt_id": "SR-20260717-ABCDEF123456", "status": "pending"})
         build_opener.return_value = opener
@@ -174,7 +174,7 @@ class FeedbackApiClientTest(unittest.TestCase):
                 with self.assertRaises(urllib.error.URLError):
                     handler.redirect_request(request, None, 307, "redirect", {}, target)
 
-    @patch("core.feedback_api.urllib.request.build_opener")
+    @patch("core.feedback_api.build_https_opener")
     def test_receipt_status_uses_kind_specific_endpoint(self, build_opener):
         opener = FakeOpener(
             {

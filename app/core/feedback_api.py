@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from core.version import APP_VERSION
+from core.secure_https import TlsConfigurationError, build_https_opener
 
 
 FEEDBACK_API_ORIGIN = "https://pokeyoyakun.duckdns.org"
@@ -269,8 +270,8 @@ class FeedbackApiClient:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(url, data=body, headers=headers, method=method)
-        opener = urllib.request.build_opener(FeedbackHttpsRedirectHandler())
         try:
+            opener = build_https_opener(FeedbackHttpsRedirectHandler())
             with opener.open(request, timeout=self.timeout_seconds) as response:
                 data = json.loads(response.read().decode("utf-8", errors="replace"))
         except urllib.error.HTTPError as error:
@@ -286,6 +287,8 @@ class FeedbackApiClient:
             if "timed out" in str(reason).lower():
                 raise FeedbackApiError("接続がタイムアウトしました。時間をおいて再度お試しください。") from error
             raise FeedbackApiError(f"フィードバック受付へ接続できません: {reason}") from error
+        except TlsConfigurationError as error:
+            raise FeedbackApiError(str(error)) from error
         except (TimeoutError, socket.timeout) as error:
             raise FeedbackApiError("接続がタイムアウトしました。時間をおいて再度お試しください。") from error
         except (json.JSONDecodeError, OSError) as error:

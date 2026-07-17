@@ -66,8 +66,8 @@ def main() -> None:
     print(
         PROJECT_ROOT
         / "release"
-        / "user_installer"
-        / "PokeyoyaKun_User_Setup_Ver1.25.0_RC2.exe"
+        / "user_installer_rc3"
+        / "PokeyoyaKun_User_Setup_Ver1.25.0_RC3.exe"
     )
 
 

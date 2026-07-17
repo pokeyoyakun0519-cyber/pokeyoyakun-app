@@ -1,5 +1,5 @@
 ﻿#define MyAppName "ポケヨヤ君"
-#define MyAppVersion "1.25.0 RC2 User Edition"
+#define MyAppVersion "1.25.0 RC3 User Edition"
 #define MyAppPublisher "PokeyoyaKun Project"
 #define MyAppExeName "ポケヨヤ君.exe"
 
@@ -11,8 +11,8 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\PokeyoyaKun
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=..\release\user_installer
-OutputBaseFilename=PokeyoyaKun_User_Setup_Ver1.25.0_RC2
+OutputDir=..\release\user_installer_rc3
+OutputBaseFilename=PokeyoyaKun_User_Setup_Ver1.25.0_RC3
 SetupIconFile=..\assets\pokeyoya_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
@@ -31,13 +31,13 @@ Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 Name: "desktopicon"; Description: "デスクトップにショートカットを作成"; GroupDescription: "追加オプション:"; Flags: checkedonce
 
 [Files]
-Source: "..\release\user_dist\ポケヨヤ君.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\release\user_dist\ポケヨヤ君_設定.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\release\user_dist\ポケヨヤ君_Updater.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\release\user_dist\release-integrity.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\release\user_dist\README.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\release\user_dist\使用方法.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\release\user_dist\pokeyoya_icon.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\release\user_dist_rc3\ポケヨヤ君.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\user_dist_rc3\ポケヨヤ君_設定.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\user_dist_rc3\ポケヨヤ君_Updater.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\user_dist_rc3\release-integrity.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\user_dist_rc3\README.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\release\user_dist_rc3\使用方法.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\release\user_dist_rc3\pokeyoya_icon.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\ポケヨヤ君"; Filename: "{app}\ポケヨヤ君.exe"; WorkingDir: "{app}"

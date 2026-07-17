@@ -16,10 +16,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
-DIST_DIR = PROJECT_ROOT / "release" / "user_dist"
+DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc3"
 TEMP_BUILD_ROOT = (
     Path(tempfile.gettempdir())
-    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC2"
+    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC3"
 )
 BUILD_DIR = TEMP_BUILD_ROOT / "build"
 SPEC_DIR = TEMP_BUILD_ROOT / "spec"
@@ -56,6 +56,7 @@ def ensure_dependencies() -> None:
     packages = (
         "pyinstaller",
         "PySide6",
+        "certifi",
         "google-api-python-client",
         "google-auth-oauthlib",
         "google-auth-httplib2",
@@ -138,6 +139,8 @@ def build_target(
         "google_auth_oauthlib",
         "--collect-all",
         "google.oauth2",
+        "--collect-data",
+        "certifi",
         "--exclude-module",
         "tests",
         "--exclude-module",
