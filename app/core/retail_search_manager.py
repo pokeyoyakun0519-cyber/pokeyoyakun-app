@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 from typing import Any
 
 from core.application_period import ApplicationPeriodParser
+from core.application_site import normalize_application_site
 from urllib.parse import urljoin, urlparse
 
 from core.builtin_store_catalog import load_builtin_store_catalog, match_builtin_store
@@ -17,6 +18,7 @@ from core.retail_price_policy import RetailPricePolicy
 from core.secure_https import build_https_opener
 from core.store_candidate_manager import StoreCandidateManager
 from core.store_discovery import StoreDiscovery
+from core.tcg_categories import normalize_key
 
 
 POKEMON_CENTER_LOTTERY_INDEX = (
@@ -120,7 +122,10 @@ class RetailSearchManager:
             "failure_reasons": [],
         }
 
-        tcg_key = str(candidate.get("tcg_key", "other"))
+        tcg_key = normalize_key(
+            candidate.get("tcg_key"),
+            candidate.get("tcg") or candidate.get("category"),
+        )[0]
         searchers = [self._search_yodobashi]
         if tcg_key == "pokemon":
             searchers.insert(0, self._search_pokemon_center)
@@ -513,7 +518,7 @@ class RetailSearchManager:
                 site_name=plugin_name,
                 url=product_url,
                 text=match_text,
-                default_status="販売・抽選情報あり",
+                default_status="商品掲載あり",
                 confidence=confidence,
             )
             hit.update({
@@ -688,7 +693,9 @@ class RetailSearchManager:
             ),
             "text": text,
         }
-        return ApplicationPeriodParser().enrich_site(hit, text)
+        return normalize_application_site(
+            ApplicationPeriodParser().enrich_site(hit, text)
+        )
 
     @staticmethod
     def _extract_seller(text: str, fallback: str) -> str:

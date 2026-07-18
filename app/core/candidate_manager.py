@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.application_period import ApplicationPeriodParser
+from core.application_site import normalize_application_site
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
 
@@ -358,8 +359,9 @@ class CandidateManager:
             if candidate.get("id") != candidate_id:
                 continue
 
-            candidate["tcg_key"] = tcg_key
-            candidate["tcg"] = tcg_label
+            normalized_key = normalize_key(tcg_key, tcg_label)[0]
+            candidate["tcg_key"] = normalized_key
+            candidate["tcg"] = display_name(normalized_key, tcg_label)
 
             if release_date:
                 candidate["release_date"] = release_date
@@ -411,6 +413,7 @@ class CandidateManager:
                 evidence_text,
                 release_date=str(candidate.get("release_date", "")),
             )
+            hit = normalize_application_site(hit, product=candidate)
             hits.append(hit)
         if not hits:
             return

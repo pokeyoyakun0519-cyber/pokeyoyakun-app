@@ -299,7 +299,12 @@ class ApplicationUrlSafetyTest(unittest.TestCase):
         dashboard.store.load_products = lambda: [{
             "id": "p", "name": "商品", "tcg_key": "yugioh",
             "official_url": "https://www.yugioh-card.com/japan/products/a/",
-            "sites": [{"site_key": "shop", "url": "https://www.yodobashi.com/product/a"}],
+            "sites": [{
+                "site_key": "shop",
+                "url": "https://www.yodobashi.com/product/a",
+                "product_url": "https://www.yodobashi.com/product/a",
+                "application_url": "https://limited.yodobashi.com/entry/a",
+            }],
         }]
         row = dashboard.build()["rows"][0]
         self.assertNotEqual(row["product_url"], row["application_url"])

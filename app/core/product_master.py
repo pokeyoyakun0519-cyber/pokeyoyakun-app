@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from core.runtime_paths import app_root
-from core.tcg_categories import normalize_key
+from core.application_site import normalize_application_site
+from core.tcg_categories import display_name, normalize_key
 
 
 class ProductMasterManager:
@@ -60,7 +61,17 @@ class ProductMasterManager:
 
         for raw in products:
             product = dict(raw)
-            tcg_key = normalize_key(product.get("tcg_key"), product.get("tcg"))[0]
+            tcg_key = normalize_key(
+                product.get("tcg_key"),
+                product.get("tcg") or product.get("category"),
+            )[0]
+            product["tcg_key"] = tcg_key
+            product["tcg"] = display_name(tcg_key, product.get("tcg"))
+            product["sites"] = [
+                normalize_application_site(site, product=product)
+                for site in product.get("sites", [])
+                if isinstance(site, dict)
+            ]
             alias = str(product.get("name", "商品名未設定")).strip()
             identity = self.identity_key(product)
             record = by_identity.get(identity) or by_alias.get((tcg_key, self.normalize_name(alias)))

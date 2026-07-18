@@ -2,6 +2,7 @@ from collections import Counter
 from typing import Any
 
 from core.application_period import ApplicationPeriodParser
+from core.application_site import has_application_evidence, normalize_application_site
 from core.application_change_tracker import ApplicationChangeTracker
 from core.application_condition_detector import ApplicationConditionDetector
 from core.application_status import evaluate_application_period
@@ -54,6 +55,9 @@ class ApplicationDashboard:
                     ),
                     release_date=str(product.get("release_date", "")),
                 )
+                site = normalize_application_site(site, product=product)
+                if not has_application_evidence(site):
+                    continue
                 period = evaluate_application_period(site, now=now)
                 state = self._display_state(str(
                     site.get(
@@ -88,7 +92,7 @@ class ApplicationDashboard:
                         "店舗名未設定",
                     ),
                     "site_url": site.get("url", ""),
-                    "application_url": site.get("application_url", site.get("url", "")),
+                    "application_url": site.get("application_url", ""),
                     "product_url": site.get(
                         "product_url", product.get("official_url", "")
                     ),

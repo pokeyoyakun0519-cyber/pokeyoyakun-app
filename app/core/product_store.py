@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.plugin_manager import PluginManager
+from core.application_site import normalize_application_site
 from core.retail_price_policy import RetailPricePolicy
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
@@ -368,6 +369,12 @@ class ProductStore:
             product["reserved"] = (
                 product.get("id") in reserved_ids
             )
+
+            product["sites"] = [
+                normalize_application_site(site, product=product)
+                for site in product.get("sites", [])
+                if isinstance(site, dict)
+            ]
 
             for site in product.get("sites", []):
                 key = self._site_state_key(

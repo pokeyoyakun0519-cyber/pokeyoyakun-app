@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Iterable
+import re
+import unicodedata
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,18 @@ _LABEL_ALIASES = {
     "yu-gi-oh!": "yugioh",
     "ガンダム": "gundam",
     "ガンダムカードゲーム": "gundam",
+    "pokemon card game": "pokemon",
+    "pokémon card game": "pokemon",
+    "onepiece": "onepiece",
+    "one piece card game": "onepiece",
+    "opcg": "onepiece",
+    "yugioh": "yugioh",
+    "yu gi oh": "yugioh",
+    "yu-gi-oh": "yugioh",
+    "遊戯王カードゲーム": "yugioh",
+    "gundam": "gundam",
+    "gundam card game": "gundam",
+    "gundam gcg": "gundam",
 }
 for _item in _CATEGORIES:
     _LABEL_ALIASES[_item.display_name.lower()] = _item.key
@@ -49,7 +63,15 @@ def category_for_key(key: object) -> TcgCategory | None:
 
 
 def key_from_label(label: object) -> str | None:
-    return _LABEL_ALIASES.get(str(label or "").strip().lower())
+    clean = unicodedata.normalize("NFKC", str(label or "")).strip().casefold()
+    direct = _LABEL_ALIASES.get(clean)
+    if direct:
+        return direct
+    compact = re.sub(r"[\s_\-‐―!！]+", "", clean)
+    for alias, key in _LABEL_ALIASES.items():
+        if re.sub(r"[\s_\-‐―!！]+", "", alias.casefold()) == compact:
+            return key
+    return None
 
 
 def normalize_key(key: object, label: object = "") -> tuple[str, bool]:
@@ -69,7 +91,9 @@ def display_name(key: object, fallback: object = "") -> str:
 
 def normalize_record(record: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     value = dict(record)
-    key, unknown = normalize_key(value.get("tcg_key"), value.get("tcg"))
+    key, unknown = normalize_key(
+        value.get("tcg_key"), value.get("tcg") or value.get("category")
+    )
     value["tcg_key"] = key
     value["tcg"] = display_name(key, value.get("tcg"))
     return value, key if unknown else None
