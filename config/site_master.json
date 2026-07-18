@@ -1,0 +1,56 @@
+[
+  {
+    "id": "pokemon_center",
+    "name": "ポケモンセンターオンライン",
+    "enabled": true,
+    "sales_type": "抽選・通常販売",
+    "purchase_history_required": false,
+    "membership_required": true,
+    "notes": "販売方式は商品ごとに異なります。"
+  },
+  {
+    "id": "amazon",
+    "name": "Amazon",
+    "enabled": true,
+    "sales_type": "通常販売・招待販売",
+    "purchase_history_required": false,
+    "membership_required": true,
+    "notes": "招待販売の場合があります。"
+  },
+  {
+    "id": "rakuten",
+    "name": "楽天",
+    "enabled": true,
+    "sales_type": "通常販売",
+    "purchase_history_required": false,
+    "membership_required": true,
+    "notes": ""
+  },
+  {
+    "id": "yodobashi",
+    "name": "ヨドバシ",
+    "enabled": true,
+    "sales_type": "抽選・通常販売",
+    "purchase_history_required": true,
+    "membership_required": true,
+    "notes": "購入履歴や会員条件が設定される場合があります。"
+  },
+  {
+    "id": "biccamera",
+    "name": "ビックカメラ",
+    "enabled": true,
+    "sales_type": "抽選・通常販売",
+    "purchase_history_required": true,
+    "membership_required": true,
+    "notes": "抽選条件は時期によって異なります。"
+  },
+  {
+    "id": "amiami",
+    "name": "あみあみ",
+    "enabled": false,
+    "sales_type": "通常販売",
+    "purchase_history_required": false,
+    "membership_required": false,
+    "notes": ""
+  }
+]

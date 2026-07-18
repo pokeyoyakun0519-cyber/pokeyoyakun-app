@@ -17,8 +17,11 @@ from PySide6.QtWidgets import (
 )
 
 from core.log_manager import LogManager
+from core.favorites_manager import FavoritesManager
+from core.phase3_dashboard import is_new
 from core.site_master_manager import SiteMasterManager
 from core.site_monitor_sync import SiteMonitorSync
+from core.store_history import StoreHistoryManager
 
 
 SALES_TYPES = [
@@ -33,7 +36,7 @@ SALES_TYPES = [
 
 
 class SiteEditorCard(QFrame):
-    def __init__(self, site: dict, save_callback, delete_callback):
+    def __init__(self, site: dict, save_callback, delete_callback, favorites, history, reload_callback):
         super().__init__()
         self.site = site
         self.setObjectName("ProductCard")
@@ -46,6 +49,10 @@ class SiteEditorCard(QFrame):
 
         title = QLabel(site.get("name", "名称未設定"))
         title.setObjectName("ProductName")
+        if is_new(site.get("created_at")):
+            new_label = QLabel("NEW")
+            new_label.setObjectName("StatusOpen")
+            header.addWidget(new_label)
 
         self.enabled = QCheckBox("有効")
         self.enabled.setChecked(bool(site.get("enabled", True)))
@@ -58,6 +65,11 @@ class SiteEditorCard(QFrame):
 
         header.addWidget(title)
         header.addStretch()
+        favorite_button = QPushButton("★ お気に入り" if favorites.is_favorite("store", site.get("id")) else "☆ お気に入り")
+        favorite_button.clicked.connect(
+            lambda: (favorites.set_favorite("store", site.get("id"), not favorites.is_favorite("store", site.get("id"))), reload_callback())
+        )
+        header.addWidget(favorite_button)
         header.addWidget(self.enabled)
         header.addWidget(save_button)
         header.addWidget(delete_button)
@@ -123,6 +135,16 @@ class SiteEditorCard(QFrame):
 
         layout.addLayout(header)
         layout.addLayout(form)
+        history_items = history.history(site.get("id", ""))
+        history_label = QLabel(
+            "更新履歴\n" + ("\n".join(
+                f'{str(item.get("occurred_at", ""))[:10].replace("-", "/")}　{item.get("action", "更新")} {item.get("detail", "")}'
+                for item in history_items[:8]
+            ) if history_items else "履歴はありません。")
+        )
+        history_label.setObjectName("MutedText")
+        history_label.setWordWrap(True)
+        layout.addWidget(history_label)
 
 
 class SiteMasterPage(QFrame):
@@ -133,6 +155,8 @@ class SiteMasterPage(QFrame):
         self.manager = SiteMasterManager()
         self.site_sync = SiteMonitorSync(site_manager=self.manager)
         self.log_manager = LogManager()
+        self.favorites = FavoritesManager(self.manager.root)
+        self.history = StoreHistoryManager(self.manager.root)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 26, 28, 26)
@@ -149,6 +173,10 @@ class SiteMasterPage(QFrame):
         description.setObjectName("MutedText")
         description.setWordWrap(True)
         layout.addWidget(description)
+
+        self.favorite_only = QCheckBox("お気に入り店舗だけ表示")
+        self.favorite_only.toggled.connect(self.reload_sites)
+        layout.addWidget(self.favorite_only)
 
         add_card = QFrame()
         add_card.setObjectName("SettingsCard")
@@ -263,6 +291,9 @@ class SiteMasterPage(QFrame):
 
     def reload_sites(self) -> None:
         sites = self.manager.load_sites()
+        if self.favorite_only.isChecked():
+            favorite_ids = set(self.favorites.load()["stores"])
+            sites = [site for site in sites if str(site.get("id", "")) in favorite_ids]
 
         container = QWidget()
         list_layout = QVBoxLayout(container)
@@ -275,6 +306,9 @@ class SiteMasterPage(QFrame):
                     site,
                     self.save_site,
                     self.delete_site,
+                    self.favorites,
+                    self.history,
+                    self.reload_sites,
                 )
             )
 

@@ -23,6 +23,42 @@ class ProductStore:
 
     def load_products(self) -> list[dict[str, Any]]:
         products = [normalize_record(item)[0] for item in self._load_product_file()]
+        from core.activity_timeline import ActivityTimeline
+        from core.product_master import ProductMasterManager
+
+        master = ProductMasterManager(self.root)
+        products = master.synchronize(products)
+        timeline = ActivityTimeline(self.root)
+        for record in master.last_new_records:
+            timeline.add(
+                "新商品",
+                f'{record.get("canonical_name", "商品")}追加',
+                product_id=str(record.get("product_id", "")),
+                occurred_at=str(record.get("created_at", "")),
+            )
+        from core.store_history import StoreHistoryManager
+
+        store_history = StoreHistoryManager(self.root)
+        for product in products:
+            product_id = str(product.get("product_id", product.get("id", "")))
+            for site in product.get("sites", []):
+                occurred = str(site.get("created_at") or site.get("detected_at") or site.get("candidate_added_at") or "")
+                if not occurred:
+                    continue
+                status = str(site.get("status", ""))
+                action = "抽選追加" if "抽選" in status else "予約追加" if "予約" in status else "商品追加"
+                store_id = str(site.get("site_key", site.get("id", "")))
+                detail = str(product.get("canonical_name", product.get("name", "商品")))
+                store_history.record(store_id, action, detail, occurred_at=occurred)
+                timeline.add(action, f'{site.get("name", "店舗")} {action}', product_id=product_id, store_id=store_id, occurred_at=occurred)
+        from core.product_image_cache import ProductImageCache
+
+        ProductImageCache(self.root).cleanup(
+            active_product_ids={
+                str(product.get("product_id", product.get("id", "")))
+                for product in products
+            }
+        )
         return self._apply_user_state_and_archive(products)
 
     def update_from_plugins(
@@ -33,7 +69,7 @@ class ProductStore:
         )
         self._save_product_file(products)
         return (
-            self._apply_user_state_and_archive(products),
+            self.load_products(),
             messages,
         )
 
@@ -48,24 +84,13 @@ class ProductStore:
             str(product.get("id", ""))
             for product in products
         }
-        existing_keys = {
-            (
-                self._normalize_name(
-                    str(product.get("name", ""))
-                ),
-                str(product.get("release_date", "")),
-            )
-            for product in products
-        }
+        from core.product_master import ProductMasterManager
+
+        existing_keys = {ProductMasterManager.identity_key(product) for product in products}
 
         for product in discovered:
             product_id = str(product.get("id", ""))
-            key = (
-                self._normalize_name(
-                    str(product.get("name", ""))
-                ),
-                str(product.get("release_date", "")),
-            )
+            key = ProductMasterManager.identity_key(product)
 
             if (
                 product_id in existing_ids
@@ -93,7 +118,7 @@ class ProductStore:
             self._save_product_file(products)
 
         return (
-            self._apply_user_state_and_archive(products),
+            self.load_products(),
             added,
         )
 

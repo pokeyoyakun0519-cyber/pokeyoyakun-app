@@ -82,6 +82,10 @@ class ApplicationRow(QFrame):
         application_button.clicked.connect(self._open_application_page)
 
         header.addWidget(title, 1)
+        if row.get("is_new"):
+            new_label = QLabel("NEW")
+            new_label.setObjectName("StatusOpen")
+            header.addWidget(new_label)
         header.addWidget(state)
         header.addWidget(product_button)
         header.addWidget(application_button)

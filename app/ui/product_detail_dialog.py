@@ -1,9 +1,12 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
+from core.favorites_manager import FavoritesManager
+from core.product_image_cache import ProductImageCache
 from core.site_master_manager import SiteMasterManager
 from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import display_name
@@ -16,6 +19,8 @@ class ProductDetailDialog(QDialog):
         super().__init__(parent)
         self.product = product
         self.site_master = SiteMasterManager()
+        self.favorites = FavoritesManager()
+        self.image_cache = ProductImageCache()
 
         self.setWindowTitle(f'{product.get("name", "商品詳細")} - ポケヨヤ君')
         self.resize(820, 650)
@@ -39,6 +44,24 @@ class ProductDetailDialog(QDialog):
         header.addWidget(status)
         root.addLayout(header)
 
+        self.image_label = QLabel("")
+        self.image_label.setAlignment(Qt.AlignCenter)
+        image_url = str(self.product.get("image_url", self.product.get("product_image_url", "")))
+        image_version = str(self.product.get("image_version", self.product.get("image_updated_at", "")))
+        cached = self.image_cache.cached_path(
+            self.product.get("product_id", self.product.get("id", "")), image_url,
+            version=image_version,
+        )
+        if cached:
+            self._show_image(cached)
+            root.addWidget(self.image_label)
+        elif image_url:
+            image_button = QPushButton("商品画像を取得")
+            image_button.setObjectName("SmallButton")
+            image_button.clicked.connect(lambda: self._load_image(image_url, image_version, image_button))
+            root.addWidget(image_button)
+            root.addWidget(self.image_label)
+
         info = QLabel(
             f'TCG：{display_name(self.product.get("tcg_key"), self.product.get("tcg"))}\n'
             f'発売日：{self.product.get("release_date", "未設定")}'
@@ -51,8 +74,9 @@ class ProductDetailDialog(QDialog):
         reserved.setChecked(bool(self.product.get("reserved", False)))
         reserved.setEnabled(False)
         favorite = QCheckBox("お気に入り")
-        favorite.setChecked(bool(self.product.get("favorite", False)))
-        favorite.setEnabled(False)
+        product_id = self.product.get("product_id", self.product.get("id", ""))
+        favorite.setChecked(self.favorites.is_favorite("product", product_id))
+        favorite.toggled.connect(lambda enabled: self.favorites.set_favorite("product", product_id, enabled))
         flags.addWidget(reserved); flags.addWidget(favorite); flags.addStretch()
         root.addLayout(flags)
 
@@ -79,6 +103,27 @@ class ProductDetailDialog(QDialog):
         close_row = QHBoxLayout(); close_row.addStretch()
         close_button = QPushButton("閉じる"); close_button.clicked.connect(self.accept)
         close_row.addWidget(close_button); root.addLayout(close_row)
+
+    def _load_image(self, image_url: str, version: str, button: QPushButton) -> None:
+        try:
+            path = self.image_cache.get(
+                self.product.get("product_id", self.product.get("id", "")),
+                image_url,
+                version=version,
+            )
+        except (OSError, ValueError):
+            path = None
+        if path:
+            self._show_image(path)
+            button.setVisible(False)
+        else:
+            button.setText("画像を取得できませんでした")
+            button.setEnabled(False)
+
+    def _show_image(self, path) -> None:
+        pixmap = QPixmap(str(path))
+        if not pixmap.isNull():
+            self.image_label.setPixmap(pixmap.scaled(360, 240, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     def _make_site_card(self, site: dict, master: dict) -> QFrame:
         card = QFrame(); card.setObjectName("ProductCard")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -184,12 +185,22 @@ class SiteMasterManager:
         return True
 
     def add_site(self, site: dict[str, Any]) -> bool:
-        candidate = self._normalize_site(site)
+        raw = dict(site)
+        raw.setdefault("created_at", datetime.now().isoformat(timespec="seconds"))
+        candidate = self._normalize_site(raw)
         sites = self.load_sites()
         if any(item.get("id") == candidate["id"] for item in sites):
             return False
         sites.append(candidate)
         self.save_sites(sites)
+        from core.activity_timeline import ActivityTimeline
+        from core.store_history import StoreHistoryManager
+
+        StoreHistoryManager(self.root).record(candidate["id"], "店舗追加", candidate["name"])
+        ActivityTimeline(self.root).add(
+            "新店舗", f'{candidate["name"]}追加', store_id=candidate["id"],
+            occurred_at=str(candidate.get("created_at", "")),
+        )
         return True
 
     def update_site(self, site_id: str, updated: dict[str, Any]) -> None:
@@ -199,6 +210,16 @@ class SiteMasterManager:
             if site.get("id") == canonical:
                 merged = {**site, **updated, "id": canonical}
                 sites[index] = self._normalize_site(merged)
+                changes = [
+                    key for key in ("name", "enabled", "active", "site_url", "tcg_keys", "application_method", "sales_type", "notes")
+                    if site.get(key) != sites[index].get(key)
+                ]
+                if changes:
+                    from core.store_history import StoreHistoryManager
+
+                    StoreHistoryManager(self.root).record(
+                        canonical, "店舗情報更新", "、".join(changes)
+                    )
                 break
         self.save_sites(sites)
 

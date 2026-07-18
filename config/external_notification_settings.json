@@ -1,0 +1,15 @@
+{
+  "discord_enabled": false,
+  "discord_webhook_url": "",
+  "email_enabled": false,
+  "smtp_host": "",
+  "smtp_port": 587,
+  "smtp_use_tls": true,
+  "smtp_username": "",
+  "smtp_password": "",
+  "email_from": "",
+  "email_to": "",
+  "notify_source_changes": true,
+  "notify_lottery_wins": true,
+  "notify_errors": true
+}

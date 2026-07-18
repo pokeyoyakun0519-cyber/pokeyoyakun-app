@@ -1,360 +1,240 @@
-from datetime import datetime, timedelta
+from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
+from datetime import datetime
+
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtWidgets import (
-    QFrame,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QVBoxLayout,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
+    QToolButton, QVBoxLayout, QWidget,
 )
 
-from core.daily_task_manager import DailyTaskManager
-from core.external_notification_config import ExternalNotificationConfig
-from core.lottery_manager import LotteryManager
-from core.notification_store import NotificationStore
-from core.scheduler_config import SchedulerConfig
-from core.source_manager import SourceManager
+from core.phase3_dashboard import HomeDashboardService
 from core.version import APP_CHANNEL, APP_VERSION
 
 
 class StatusCard(QFrame):
-    def __init__(self, title: str):
+    clicked = Signal(str)
+
+    def __init__(self, title: str, target: str = ""):
         super().__init__()
+        self.target = target
         self.setObjectName("DashboardCard")
-
+        self.setCursor(Qt.PointingHandCursor if target else Qt.ArrowCursor)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(8)
-
+        layout.setContentsMargins(16, 14, 16, 14)
         title_label = QLabel(title)
         title_label.setObjectName("DashboardCardTitle")
-
         self.value_label = QLabel("-")
         self.value_label.setObjectName("DashboardCardValue")
-        self.value_label.setWordWrap(True)
-
         self.detail_label = QLabel("")
         self.detail_label.setObjectName("MutedText")
         self.detail_label.setWordWrap(True)
-
         layout.addWidget(title_label)
         layout.addWidget(self.value_label)
         layout.addWidget(self.detail_label)
-        layout.addStretch()
 
-    def set_status(
-        self,
-        value: str,
-        detail: str = "",
-        level: str = "normal",
-    ):
+    def set_status(self, value: str, detail: str = "", level: str = "normal"):
         self.value_label.setText(value)
         self.detail_label.setText(detail)
         self.value_label.setProperty("statusLevel", level)
         self.value_label.style().unpolish(self.value_label)
         self.value_label.style().polish(self.value_label)
 
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if self.target and event.button() == Qt.LeftButton:
+            self.clicked.emit(self.target)
+
 
 class HomePage(QFrame):
+    navigate_requested = Signal(str, str)
+
     def __init__(self, scheduler):
         super().__init__()
         self.setObjectName("ContentPanel")
-
         self.scheduler = scheduler
-        self.scheduler_config = SchedulerConfig()
-        self.external_config = ExternalNotificationConfig()
-        self.notification_store = NotificationStore()
-        self.source_manager = SourceManager()
-        self.lottery_manager = LotteryManager()
-        self.daily_task_manager = DailyTaskManager()
+        self.service = HomeDashboardService()
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 26, 28, 26)
-        layout.setSpacing(16)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        self.layout = QVBoxLayout(content)
+        self.layout.setContentsMargins(28, 26, 28, 26)
+        self.layout.setSpacing(16)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
 
         header = QHBoxLayout()
-
         title_box = QVBoxLayout()
-        title = QLabel("ダッシュボード")
+        title = QLabel("ホーム")
         title.setObjectName("PageTitle")
-
-        subtitle = QLabel(
-            f"ポケヨヤ君 Ver.{APP_VERSION} {APP_CHANNEL.upper()}"
-        )
+        subtitle = QLabel(f"今日やることが一目で分かります　Ver.{APP_VERSION} {APP_CHANNEL.upper()}")
         subtitle.setObjectName("MutedText")
-
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
-
+        run_button = QPushButton("今すぐ監視")
+        run_button.clicked.connect(self.scheduler.run_now)
         refresh_button = QPushButton("状態を更新")
         refresh_button.setObjectName("AccentButton")
         refresh_button.clicked.connect(self.refresh_dashboard)
-
-        run_button = QPushButton("今すぐ監視")
-        run_button.clicked.connect(self.scheduler.run_now)
-
         header.addLayout(title_box)
         header.addStretch()
         header.addWidget(run_button)
         header.addWidget(refresh_button)
-        layout.addLayout(header)
+        self.layout.addLayout(header)
 
         self.scheduler_status = QLabel("自動監視：状態確認中")
         self.scheduler_status.setObjectName("DashboardStatusBar")
-        self.scheduler_status.setWordWrap(True)
-        layout.addWidget(self.scheduler_status)
+        self.layout.addWidget(self.scheduler_status)
 
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(14)
-        grid.setVerticalSpacing(14)
+        heading = QLabel("今日やること")
+        heading.setObjectName("SectionTitle")
+        self.layout.addWidget(heading)
+        self.action_container = QVBoxLayout()
+        self.layout.addLayout(self.action_container)
 
-        self.monitor_card = StatusCard("監視状態")
-        self.sources_card = StatusCard("公式情報ソース")
-        self.lotteries_card = StatusCard("抽選結果ページ")
-        self.notifications_card = StatusCard("通知センター")
-        self.discord_card = StatusCard("Discord通知")
-        self.email_card = StatusCard("メール通知")
-        self.last_run_card = StatusCard("最終監視")
-        self.next_run_card = StatusCard("次回監視")
-
-        cards = [
-            self.monitor_card,
-            self.sources_card,
-            self.lotteries_card,
-            self.notifications_card,
-            self.discord_card,
-            self.email_card,
-            self.last_run_card,
-            self.next_run_card,
-        ]
-
-        for index, card in enumerate(cards):
-            grid.addWidget(card, index // 4, index % 4)
-
-        layout.addLayout(grid)
-
-        task_header = QHBoxLayout()
-        task_title = QLabel("今日・明日の予定")
-        task_title.setObjectName("SectionTitle")
-        self.task_count = QLabel("")
-        self.task_count.setObjectName("MutedText")
-        task_header.addWidget(task_title)
-        task_header.addStretch()
-        task_header.addWidget(self.task_count)
-        layout.addLayout(task_header)
-
-        self.task_list = QLabel("")
-        self.task_list.setObjectName("DashboardStatusBar")
-        self.task_list.setWordWrap(True)
-        self.task_list.setTextInteractionFlags(
-            Qt.TextSelectableByMouse
+        metric_title = QLabel("ホームダッシュボード")
+        metric_title.setObjectName("SectionTitle")
+        self.layout.addWidget(metric_title)
+        self.metric_grid = QGridLayout()
+        definitions = (
+            ("today_deadlines", "今日締切", "application"),
+            ("open_applications", "応募受付中", "application"),
+            ("waiting_results", "結果待ち", "application"),
+            ("new_products", "新商品", "product"),
+            ("new_stores", "新店舗", "site_master"),
+            ("monitored_stores", "監視中店舗", "site_master"),
+            ("monitor_errors", "監視エラー", "log"),
+            ("sources", "公式情報ソース", "sources"),
+            ("notifications", "通知センター", "notifications"),
+            ("update", "アップデート確認", "update"),
         )
-        layout.addWidget(self.task_list)
+        self.metric_cards = {}
+        for index, (key, title_text, target) in enumerate(definitions):
+            card = StatusCard(title_text, target)
+            card.clicked.connect(lambda value: self.navigate_requested.emit(value, ""))
+            self.metric_cards[key] = card
+            self.metric_grid.addWidget(card, index // 5, index % 5)
+        self.layout.addLayout(self.metric_grid)
 
-        layout.addStretch()
+        columns = QHBoxLayout()
+        self.favorite_box = self._section_box("お気に入り商品")
+        self.timeline_box = self._section_box("最近追加された情報")
+        self.monitoring_box = self._section_box("監視状況")
+        columns.addWidget(self.favorite_box[0], 1)
+        columns.addWidget(self.timeline_box[0], 1)
+        columns.addWidget(self.monitoring_box[0], 1)
+        self.layout.addLayout(columns)
+        self.layout.addStretch()
 
-        self.scheduler.status_changed.connect(
-            self._on_scheduler_status
-        )
-        self.scheduler.run_completed.connect(
-            self._on_run_completed
-        )
-
+        self.scheduler.status_changed.connect(self._on_scheduler_status)
+        self.scheduler.run_completed.connect(self._on_run_completed)
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setInterval(30_000)
-        self.refresh_timer.timeout.connect(
-            self.refresh_dashboard
-        )
+        self.refresh_timer.timeout.connect(self.refresh_dashboard)
         self.refresh_timer.start()
-
         self.refresh_dashboard()
 
+    @staticmethod
+    def _section_box(title: str):
+        frame = QFrame()
+        frame.setObjectName("SettingsCard")
+        layout = QVBoxLayout(frame)
+        heading = QLabel(title)
+        heading.setObjectName("SectionTitle")
+        body = QLabel("")
+        body.setWordWrap(True)
+        body.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(heading)
+        layout.addWidget(body)
+        layout.addStretch()
+        return frame, body
+
     def refresh_dashboard(self):
-        scheduler = self.scheduler_config.load()
-        external = self.external_config.load()
-        sources = self.source_manager.load_sources()
-        lotteries = self.lottery_manager.load_items()
-        notifications = self.notification_store.load()
-        unread = self.notification_store.unread_count()
+        data = self.service.build()
+        self._render_actions(data["actions"])
+        metrics = data["metrics"]
+        for key, card in self.metric_cards.items():
+            if key == "update":
+                card.set_status("確認", "クリックして更新画面へ")
+            elif key == "sources":
+                card.set_status(f'{metrics[key]}件', f'エラー {metrics["source_errors"]}件')
+            else:
+                card.set_status(f'{metrics.get(key, 0)}件', "クリックして詳細へ", "warning" if key in {"today_deadlines", "monitor_errors"} and metrics.get(key) else "normal")
 
-        enabled = bool(scheduler.get("enabled", False))
-        running = bool(getattr(self.scheduler, "running", False))
-
-        if running:
-            self.monitor_card.set_status(
-                "確認中",
-                "バックグラウンドで監視しています。",
-                "warning",
-            )
-        elif enabled:
-            self.monitor_card.set_status(
-                "動作中",
-                f'{scheduler.get("interval_minutes", 30)}分間隔',
-                "success",
-            )
-        else:
-            self.monitor_card.set_status(
-                "停止中",
-                "自動監視はOFFです。",
-                "muted",
-            )
-
-        changed_count = sum(
-            1 for item in sources
-            if item.get("changed", False)
-        )
-        self.sources_card.set_status(
-            f"{len(sources)}件",
-            f"変更候補：{changed_count}件",
-            "warning" if changed_count else "normal",
+        favorites = data["favorite_products"]
+        favorite_lines = [
+            f'★ {item.get("canonical_name", item.get("name", "商品"))}' for item in favorites
+        ] + [f'★ 店舗: {item.get("name", "店舗")}' for item in data.get("favorite_stores", [])]
+        self.favorite_box[1].setText("\n".join(favorite_lines) or "お気に入りはありません。")
+        self.timeline_box[1].setText("\n".join(
+            f'{str(item.get("occurred_at", ""))[:10].replace("-", "/")}　{item.get("title", "")}'
+            for item in data["timeline"][:20]
+        ) or "最近追加された情報はありません。")
+        monitoring = data["monitoring"]
+        last = self._relative_time(monitoring.get("last_updated", ""))
+        self.monitoring_box[1].setText(
+            f'監視中　{monitoring["stores"]}店舗\n予約　{monitoring["reservations"]}件\n'
+            f'抽選　{monitoring["lotteries"]}件\n取得失敗　{monitoring["errors"]}件\n最終更新　{last}'
         )
 
-        won_count = sum(
-            1 for item in lotteries
-            if item.get("status") == "当選候補"
-        )
-        self.lotteries_card.set_status(
-            f"{len(lotteries)}件",
-            f"当選候補：{won_count}件",
-            "success" if won_count else "normal",
-        )
+    def _render_actions(self, actions):
+        while self.action_container.count():
+            item = self.action_container.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        active = [item for item in actions if not item.get("completed")]
+        completed = [item for item in actions if item.get("completed")]
+        for action in active:
+            self.action_container.addWidget(self._action_button(action))
+        if not active:
+            empty = QLabel("今日対応が必要な項目はありません。")
+            empty.setObjectName("DashboardStatusBar")
+            self.action_container.addWidget(empty)
+        completed_toggle = QToolButton()
+        completed_toggle.setText(f"完了済み（{len(completed)}件）")
+        completed_toggle.setCheckable(True)
+        completed_toggle.setChecked(False)
+        completed_widget = QWidget()
+        completed_layout = QVBoxLayout(completed_widget)
+        completed_layout.setContentsMargins(18, 0, 0, 0)
+        for action in completed:
+            completed_layout.addWidget(self._action_button(action))
+        completed_widget.setVisible(False)
+        completed_toggle.toggled.connect(completed_widget.setVisible)
+        self.action_container.addWidget(completed_toggle)
+        self.action_container.addWidget(completed_widget)
 
-        self.notifications_card.set_status(
-            f"未読 {unread}件",
-            f"保存済み：{len(notifications)}件",
-            "warning" if unread else "normal",
-        )
+    def _action_button(self, action):
+        button = QPushButton(f'{action.get("lead", "")}\n{action.get("title", "") }')
+        button.setObjectName("DashboardStatusBar")
+        button.setMinimumHeight(48)
+        button.clicked.connect(lambda _=False, item=action: self._open_action(item))
+        return button
 
-        discord_enabled = bool(
-            external.get("discord_enabled", False)
-            and external.get("discord_webhook_url", "")
-        )
-        self.discord_card.set_status(
-            "有効" if discord_enabled else "無効",
-            "Webhook設定済み" if discord_enabled else "外部通知で設定できます。",
-            "success" if discord_enabled else "muted",
-        )
+    def _open_action(self, action):
+        target = "application" if action.get("product_id") else "site_master" if action.get("store_id") else "notifications"
+        self.navigate_requested.emit(target, str(action.get("product_id") or action.get("store_id") or ""))
 
-        email_enabled = bool(
-            external.get("email_enabled", False)
-            and external.get("smtp_host", "")
-            and external.get("email_to", "")
-        )
-        self.email_card.set_status(
-            "有効" if email_enabled else "無効",
-            "SMTP設定済み" if email_enabled else "外部通知で設定できます。",
-            "success" if email_enabled else "muted",
-        )
-
-        last_run_text = str(
-            scheduler.get("last_run", "")
-        ).strip()
-
-        if last_run_text:
-            try:
-                last_run = datetime.fromisoformat(last_run_text)
-                last_display = last_run.strftime("%Y/%m/%d %H:%M")
-            except ValueError:
-                last_run = None
-                last_display = last_run_text
-        else:
-            last_run = None
-            last_display = "未実行"
-
-        self.last_run_card.set_status(
-            last_display,
-            "最後に監視した時刻",
-            "normal",
-        )
-
-        if enabled and last_run is not None:
-            next_run = last_run + timedelta(
-                minutes=int(
-                    scheduler.get("interval_minutes", 30)
-                )
-            )
-            next_display = next_run.strftime("%Y/%m/%d %H:%M")
-        elif enabled:
-            next_display = "まもなく実行"
-        else:
-            next_display = "自動監視OFF"
-
-        self.next_run_card.set_status(
-            next_display,
-            "予定時刻",
-            "normal" if enabled else "muted",
-        )
-
-        tasks = self.daily_task_manager.build_tasks(
-            days_ahead=1
-        )
-        self.task_count.setText(
-            f"{len(tasks)}件"
-        )
-
-        if tasks:
-            task_lines = []
-            for task in tasks[:8]:
-                site = (
-                    f' / {task["site_name"]}'
-                    if task["site_name"]
-                    else ""
-                )
-                task_lines.append(
-                    f'・{task["due_date"]} '
-                    f'[{task["task_type"]}] '
-                    f'{task["product_name"]}{site}'
-                )
-
-            if len(tasks) > 8:
-                task_lines.append(
-                    f"・ほか{len(tasks) - 8}件"
-                )
-
-            self.task_list.setText(
-                "\n".join(task_lines)
-            )
-        else:
-            self.task_list.setText(
-                "今日・明日に必要な応募、結果確認、"
-                "購入、発売予定はありません。"
-            )
-
+    @staticmethod
+    def _relative_time(value):
+        try:
+            elapsed = datetime.now().astimezone() - datetime.fromisoformat(str(value)).astimezone()
+        except (ValueError, TypeError):
+            return "未実行"
+        minutes = max(0, int(elapsed.total_seconds() // 60))
+        return f"{minutes}分前" if minutes < 60 else f"{minutes // 60}時間前"
 
     def _on_scheduler_status(self, text: str):
         self.scheduler_status.setText(text)
         self.refresh_dashboard()
 
-
     def _on_run_completed(self, result: dict):
-        changes = len(
-            result.get(
-                "changed_sources",
-                [],
-            )
-        )
-        wins = len(
-            result.get(
-                "newly_won",
-                [],
-            )
-        )
-        searched = int(
-            result.get(
-                "candidate_search",
-                {},
-            ).get(
-                "searched_count",
-                0,
-            )
-        )
-
         self.scheduler_status.setText(
-            "監視完了："
-            f"変更候補{changes}件 / "
-            f"当選候補{wins}件 / "
-            f"販売情報検索{searched}件"
+            f'監視完了：変更候補{len(result.get("changed_sources", []))}件 / '
+            f'当選候補{len(result.get("newly_won", []))}件'
         )
         self.refresh_dashboard()

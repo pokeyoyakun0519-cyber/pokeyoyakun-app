@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
 )
 
 from core.log_manager import LogManager
+from core.favorites_manager import FavoritesManager
+from core.phase3_dashboard import is_new, product_priority
 from core.product_store import ProductStore
 from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import display_name
@@ -39,6 +41,7 @@ class ProductCard(QFrame):
         self.store = store
         self.detail_callback = detail_callback
         self.reload_callback = reload_callback
+        self.favorites = FavoritesManager(getattr(store, "root", None))
         self.setObjectName("ProductCard")
 
         layout = QVBoxLayout(self)
@@ -64,7 +67,20 @@ class ProductCard(QFrame):
         )
 
         top_row.addWidget(title, 1)
+        priority = product_priority(product)
+        priority_label = QLabel(f'{priority["stars"]} {priority["label"]}')
+        priority_label.setObjectName("MutedText")
+        top_row.addWidget(priority_label)
+        if is_new(product.get("created_at")):
+            new_label = QLabel("NEW")
+            new_label.setObjectName("StatusOpen")
+            top_row.addWidget(new_label)
         top_row.addWidget(status)
+        favorite_button = QPushButton("★ お気に入り" if self.favorites.is_favorite("product", product.get("product_id", product.get("id"))) else "☆ お気に入り")
+        favorite_button.setCheckable(True)
+        favorite_button.setChecked(self.favorites.is_favorite("product", product.get("product_id", product.get("id"))))
+        favorite_button.clicked.connect(lambda checked: self._toggle_favorite(checked))
+        top_row.addWidget(favorite_button)
         if product.get("auto_monitored"):
             remove_auto_button = QPushButton("自動監視を解除")
             remove_auto_button.setObjectName("DangerButton")
@@ -96,6 +112,12 @@ class ProductCard(QFrame):
     def _exclude_auto_monitor(self) -> None:
         if self.store.exclude_auto_monitored_product(str(self.product.get("id", ""))):
             self.reload_callback()
+
+    def _toggle_favorite(self, enabled: bool) -> None:
+        self.favorites.set_favorite(
+            "product", self.product.get("product_id", self.product.get("id", "")), enabled
+        )
+        self.reload_callback()
 
     def _make_site_row(self, site: dict) -> QFrame:
         frame = QFrame()
@@ -264,6 +286,7 @@ class ProductPage(QFrame):
         super().__init__()
         self.setObjectName("ContentPanel")
         self.store = ProductStore()
+        self.favorites = FavoritesManager(self.store.root)
         self.log_manager = LogManager()
 
         self.main_layout = QVBoxLayout(self)
@@ -315,6 +338,9 @@ class ProductPage(QFrame):
         self.category_tabs = TcgCategoryTabs()
         self.category_tabs.category_changed.connect(self._apply_category_filter)
         self.main_layout.addWidget(self.category_tabs)
+        self.favorite_only = QCheckBox("お気に入りだけ表示")
+        self.favorite_only.toggled.connect(lambda _checked: self._apply_category_filter(self.category_tabs.selected_key))
+        self.main_layout.addWidget(self.favorite_only)
         self._all_products: list[dict] = []
 
         self.result_label = QLabel("")
@@ -340,9 +366,12 @@ class ProductPage(QFrame):
         self._update_timestamp()
 
     def _apply_category_filter(self, category_key: str) -> None:
-        self._show_products(
-            list(filter_items_by_category(self._all_products, category_key))
-        )
+        products = list(filter_items_by_category(self._all_products, category_key))
+        if self.favorite_only.isChecked():
+            favorite_ids = set(self.favorites.load()["products"])
+            products = [item for item in products if str(item.get("product_id", item.get("id", ""))) in favorite_ids]
+        products.sort(key=lambda item: (-product_priority(item)["level"], str(item.get("release_date", "9999-99-99")), str(item.get("name", ""))))
+        self._show_products(products)
 
     def _show_products(
         self,

@@ -23,6 +23,7 @@ from core.version import APP_CHANNEL, APP_VERSION
 from ui.about_page import AboutPage
 from ui.application_dashboard_page import ApplicationDashboardPage
 from ui.backup_page import BackupPage
+from ui.calendar_page import CalendarPage
 from ui.candidates_page import CandidatesPage
 from ui.external_notification_page import ExternalNotificationPage
 from ui.feedback_page import FeedbackPage
@@ -46,6 +47,7 @@ from ui.self_test_page import SelfTestPage
 from ui.site_master_page import SiteMasterPage
 from ui.sources_page import SourcesPage
 from ui.storage_page import StoragePage
+from ui.statistics_page import StatisticsPage
 from ui.support_page import SupportPage
 from ui.update_page import UpdatePage
 
@@ -101,6 +103,8 @@ class MainWindow(QMainWindow):
             ("home_button", "ホーム"),
             ("product_button", "商品一覧"),
             ("application_dashboard_button", "応募ダッシュボード"),
+            ("calendar_button", "カレンダー"),
+            ("statistics_button", "応募統計"),
             ("candidates_button", "新弾候補"),
             ("lottery_button", "抽選結果確認"),
             ("email_accounts_button", "メールアカウント"),
@@ -192,6 +196,7 @@ class MainWindow(QMainWindow):
         self._add_menu_section(menu, "基本", [
             self.home_button, self.product_button,
             self.application_dashboard_button,
+            self.calendar_button, self.statistics_button,
             self.candidates_button, self.lottery_button,
             self.email_accounts_button,
         ])
@@ -250,6 +255,10 @@ class MainWindow(QMainWindow):
         self.home_page = HomePage(self.monitor_scheduler)
         self.product_page = ProductPage()
         self.application_dashboard_page = ApplicationDashboardPage()
+        self.calendar_page = CalendarPage()
+        self.statistics_page = StatisticsPage()
+        self.home_page.navigate_requested.connect(self._navigate_to)
+        self.calendar_page.navigate_requested.connect(self._navigate_to)
         self.application_dashboard_page.open_lottery_page.connect(
             self._show_lottery_page
         )
@@ -283,6 +292,8 @@ class MainWindow(QMainWindow):
             self.home_button: self.home_page,
             self.product_button: self.product_page,
             self.application_dashboard_button: self.application_dashboard_page,
+            self.calendar_button: self.calendar_page,
+            self.statistics_button: self.statistics_page,
             self.candidates_button: self.candidates_page,
             self.lottery_button: self.lottery_page,
             self.email_accounts_button: self.email_accounts_page,
@@ -336,6 +347,36 @@ class MainWindow(QMainWindow):
             )
         self.open_settings_button.clicked.connect(self.open_settings_app)
         self.exit_button.clicked.connect(self.close)
+
+    def _navigate_to(self, target: str, item_id: str = ""):
+        mapping = {
+            "home": self.home_button,
+            "product": self.product_button,
+            "application": self.application_dashboard_button,
+            "calendar": self.calendar_button,
+            "statistics": self.statistics_button,
+            "site_master": self.site_master_button,
+            "sources": self.sources_button,
+            "notifications": self.notification_center_button,
+            "log": self.log_viewer_button,
+            "update": self.update_button,
+        }
+        button = mapping.get(target)
+        if button is None:
+            return
+        page = self.page_map[button]
+        self.pages.setCurrentWidget(page)
+        button.setChecked(True)
+        if target == "product" and item_id:
+            self.product_page.reload_saved_products()
+            product = next(
+                (item for item in self.product_page._all_products if str(item.get("product_id", item.get("id", ""))) == item_id),
+                None,
+            )
+            if product:
+                self.product_page.open_product_detail(product)
+        elif target == "application":
+            self.application_dashboard_page.reload()
 
 
     def _show_lottery_page(self):

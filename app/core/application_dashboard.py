@@ -8,6 +8,7 @@ from core.application_status import evaluate_application_period
 from core.config_manager import ConfigManager
 from core.daily_task_manager import DailyTaskManager
 from core.product_store import ProductStore
+from core.phase3_dashboard import is_new
 from core.tcg_categories import categories, display_name, normalize_key
 
 
@@ -151,6 +152,13 @@ class ApplicationDashboard:
                     "result_checked_at": site.get("result_checked_at", ""),
                     "masked_reference": self._masked_reference(site),
                     "application_start_at": site.get("application_start_at", ""),
+                    "is_new": is_new(
+                        site.get("application_added_at")
+                        or site.get("created_at")
+                        or site.get("detected_at")
+                        or site.get("application_start_at"),
+                        now=now,
+                    ),
                     "application_end_at": site.get("application_end_at", ""),
                     "result_announcement_at": site.get("result_announcement_at", ""),
                     "application_method": site.get("application_method", ""),
