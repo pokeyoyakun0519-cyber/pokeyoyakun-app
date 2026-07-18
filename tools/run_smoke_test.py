@@ -43,6 +43,7 @@ def build_environment() -> dict[str, str]:
     env.setdefault("QT_QPA_PLATFORM", "offscreen")
     temp_root = Path(tempfile.mkdtemp(prefix="pokeyoya_smoke_"))
     env["LOCALAPPDATA"] = str(temp_root)
+    env["POKEYOYA_DATA_ROOT"] = str(temp_root / "PokeyoyaKun")
     return env
 
 

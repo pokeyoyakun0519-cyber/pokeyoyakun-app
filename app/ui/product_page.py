@@ -65,6 +65,11 @@ class ProductCard(QFrame):
 
         top_row.addWidget(title, 1)
         top_row.addWidget(status)
+        if product.get("auto_monitored"):
+            remove_auto_button = QPushButton("自動監視を解除")
+            remove_auto_button.setObjectName("DangerButton")
+            remove_auto_button.clicked.connect(self._exclude_auto_monitor)
+            top_row.addWidget(remove_auto_button)
         top_row.addWidget(detail_button)
 
         release_date = QLabel(
@@ -87,6 +92,10 @@ class ProductCard(QFrame):
             layout.addWidget(
                 self._make_site_row(site)
             )
+
+    def _exclude_auto_monitor(self) -> None:
+        if self.store.exclude_auto_monitored_product(str(self.product.get("id", ""))):
+            self.reload_callback()
 
     def _make_site_row(self, site: dict) -> QFrame:
         frame = QFrame()

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from core.application_period import ApplicationPeriodParser
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
 
@@ -12,8 +13,9 @@ from core.tcg_categories import display_name, normalize_key, normalize_record
 class CandidateManager:
     """公式発表、新弾候補、販売サイト検索状態を管理する。"""
 
-    def __init__(self):
-        root = app_root()
+    def __init__(self, root: Path | None = None):
+        root = root or app_root()
+        self.root = root
         self.candidates_path = root / "data" / "candidates.json"
         self.products_path = root / "data" / "products.json"
 
@@ -162,6 +164,17 @@ class CandidateManager:
             )
 
         self.save_candidates(candidates)
+        try:
+            from core.auto_monitor_manager import AutoMonitorManager
+            from core.config_manager import ConfigManager
+            from core.product_store import ProductStore
+
+            AutoMonitorManager(
+                ConfigManager(self.root), ProductStore(self.root)
+            ).add_due_candidates(candidates)
+        except (OSError, ValueError, TypeError):
+            # 公式候補の保存は成功扱いとし、自動追加だけ次回起動へ回す。
+            pass
         return candidates, added
 
     def build_candidates_from_sources(
@@ -385,6 +398,19 @@ class CandidateManager:
             hit.setdefault("application_period", "")
             hit.setdefault("result_date", "")
             hit.setdefault("order_period", "")
+            evidence_text = "\n".join(
+                str(hit.get(key, ""))
+                for key in (
+                    "application_period", "order_period", "result_date",
+                    "notice", "text", "description", "status",
+                )
+                if hit.get(key)
+            )
+            hit = ApplicationPeriodParser().enrich_site(
+                hit,
+                evidence_text,
+                release_date=str(candidate.get("release_date", "")),
+            )
             hits.append(hit)
         if not hits:
             return

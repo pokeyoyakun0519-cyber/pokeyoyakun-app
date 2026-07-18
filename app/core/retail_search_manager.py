@@ -6,6 +6,8 @@ from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
 from typing import Any
+
+from core.application_period import ApplicationPeriodParser
 from urllib.parse import urljoin, urlparse
 
 from core.retail_plugin_registry import enabled_plugins_for_tcg
@@ -599,7 +601,7 @@ class RetailSearchManager:
             f"照合信頼度: {confidence:.0%}"
         )
 
-        return {
+        hit = {
             "site_key": site_key,
             "name": site_name,
             "status": status,
@@ -614,6 +616,7 @@ class RetailSearchManager:
             ),
             "text": text,
         }
+        return ApplicationPeriodParser().enrich_site(hit, text)
 
     @staticmethod
     def _extract_seller(text: str, fallback: str) -> str:

@@ -1,6 +1,8 @@
 import json
 import re
+import shutil
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 from core.plugin_manager import PluginManager
@@ -12,10 +14,10 @@ from core.tcg_categories import display_name, normalize_key, normalize_record
 class ProductStore:
     """商品データ、プラグイン更新、予約状態を管理する。"""
 
-    def __init__(self):
-        root = app_root()
-        self.products_path = root / "data" / "products.json"
-        self.user_state_path = root / "config" / "user_state.json"
+    def __init__(self, root: Path | None = None):
+        self.root = Path(root) if root is not None else app_root()
+        self.products_path = self.root / "data" / "products.json"
+        self.user_state_path = self.root / "config" / "user_state.json"
         self.plugin_manager = PluginManager()
         self.last_excluded_retail_offers: list[dict[str, str]] = []
 
@@ -199,6 +201,26 @@ class ProductStore:
         state["reserved_product_ids"] = []
         self._save_user_state(state)
 
+    def exclude_auto_monitored_product(self, product_id: str) -> bool:
+        products = self._load_product_file()
+        target = next(
+            (item for item in products if str(item.get("id", "")) == product_id),
+            None,
+        )
+        if not target or not bool(target.get("auto_monitored")):
+            return False
+        from core.auto_monitor_manager import AutoMonitorManager
+
+        state = self._load_user_state()
+        excluded = set(state.get("auto_monitor_excluded_keys", []))
+        excluded.add(AutoMonitorManager.product_key(target))
+        state["auto_monitor_excluded_keys"] = sorted(excluded)
+        self._save_user_state(state)
+        self._save_product_file(
+            [item for item in products if str(item.get("id", "")) != product_id]
+        )
+        return True
+
     def _load_product_file(
         self,
     ) -> list[dict[str, Any]]:
@@ -226,7 +248,11 @@ class ProductStore:
             parents=True,
             exist_ok=True,
         )
-        with self.products_path.open(
+        backup = self.products_path.with_suffix(".json.bak")
+        if self.products_path.exists():
+            shutil.copy2(self.products_path, backup)
+        temporary = self.products_path.with_suffix(".json.tmp")
+        with temporary.open(
             "w",
             encoding="utf-8",
         ) as file:
@@ -236,6 +262,7 @@ class ProductStore:
                 ensure_ascii=False,
                 indent=2,
             )
+        temporary.replace(self.products_path)
 
     def _load_user_state(
         self,
@@ -244,6 +271,7 @@ class ProductStore:
             return {
                 "reserved_product_ids": [],
                 "site_applications": {},
+                "auto_monitor_excluded_keys": [],
             }
 
         try:
@@ -255,6 +283,7 @@ class ProductStore:
             return data if isinstance(data, dict) else {
                 "reserved_product_ids": [],
                 "site_applications": {},
+                "auto_monitor_excluded_keys": [],
             }
         except (
             json.JSONDecodeError,
@@ -263,6 +292,7 @@ class ProductStore:
             return {
                 "reserved_product_ids": [],
                 "site_applications": {},
+                "auto_monitor_excluded_keys": [],
             }
 
     def _save_user_state(
@@ -273,7 +303,11 @@ class ProductStore:
             parents=True,
             exist_ok=True,
         )
-        with self.user_state_path.open(
+        backup = self.user_state_path.with_suffix(".json.bak")
+        if self.user_state_path.exists():
+            shutil.copy2(self.user_state_path, backup)
+        temporary = self.user_state_path.with_suffix(".json.tmp")
+        with temporary.open(
             "w",
             encoding="utf-8",
         ) as file:
@@ -283,6 +317,7 @@ class ProductStore:
                 ensure_ascii=False,
                 indent=2,
             )
+        temporary.replace(self.user_state_path)
 
     def _apply_user_state_and_archive(
         self,
@@ -316,9 +351,9 @@ class ProductStore:
                     str(site.get("url", "")),
                 )
                 saved = dict(applications.get(key, {}))
-                applied = bool(saved.get("applied", False))
+                applied = bool(saved.get("applied", site.get("applied", False)))
                 result_status = str(
-                    saved.get("result_status", "未確認")
+                    saved.get("result_status", site.get("result_status", "未確認"))
                 )
                 site["applied"] = applied
                 site["result_status"] = result_status
@@ -330,9 +365,9 @@ class ProductStore:
                 )[0] if (saved.get("tcg_key") or saved.get("tcg")) else product_key
                 site["tcg_key"] = saved_key
                 site["tcg"] = display_name(saved_key)
-                site["applied_at"] = str(saved.get("applied_at", ""))
+                site["applied_at"] = str(saved.get("applied_at", site.get("applied_at", "")))
                 site["result_checked_at"] = str(
-                    saved.get("result_checked_at", "")
+                    saved.get("result_checked_at", site.get("result_checked_at", ""))
                 )
                 for reference_key in (
                     "receipt_number", "reception_number", "order_number"

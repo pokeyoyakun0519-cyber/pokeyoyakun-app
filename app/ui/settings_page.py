@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -19,6 +20,9 @@ from core.tcg_categories import categories
 from core.credential_store import CredentialStore
 from core.log_manager import LogManager
 from core.maintenance import MaintenanceManager, format_bytes
+from core.site_master_manager import SiteMasterManager
+from core.site_monitor_sync import SiteMonitorSync
+from core.tcg_categories import display_name
 
 
 class SettingsPage(QFrame):
@@ -30,6 +34,8 @@ class SettingsPage(QFrame):
         self.credential_store = CredentialStore()
         self.maintenance = MaintenanceManager()
         self.log_manager = LogManager()
+        self.site_manager = SiteMasterManager()
+        self.site_sync = SiteMonitorSync(self.config_manager, self.site_manager)
 
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(28, 26, 28, 26)
@@ -66,28 +72,52 @@ class SettingsPage(QFrame):
 
         # 監視するサイト
         sites_card = self._make_card("監視するサイト")
-        sites_grid = QGridLayout()
+        site_filter_row = QHBoxLayout()
+        self.site_tcg_filter = QComboBox()
+        self.site_tcg_filter.addItem("すべて", "all")
+        for category in categories(enabled_only=True):
+            self.site_tcg_filter.addItem(category.display_name, category.key)
+        self.site_search = QLineEdit()
+        self.site_search.setPlaceholderText("店舗名を検索")
+        enable_all = QPushButton("表示中をすべて有効")
+        disable_all = QPushButton("表示中をすべて無効")
+        enable_all.clicked.connect(lambda: self._set_visible_sites(True))
+        disable_all.clicked.connect(lambda: self._set_visible_sites(False))
+        self.site_tcg_filter.currentIndexChanged.connect(self._filter_sites)
+        self.site_search.textChanged.connect(self._filter_sites)
+        site_filter_row.addWidget(self.site_tcg_filter)
+        site_filter_row.addWidget(self.site_search, 1)
+        site_filter_row.addWidget(enable_all)
+        site_filter_row.addWidget(disable_all)
+        sites_card.layout().addLayout(site_filter_row)
 
-        self.site_pokemon_center = QCheckBox("ポケモンセンターオンライン")
-        self.site_amazon = QCheckBox("Amazon")
-        self.site_rakuten = QCheckBox("楽天")
-        self.site_yodobashi = QCheckBox("ヨドバシ")
-        self.site_biccamera = QCheckBox("ビックカメラ")
-        self.site_amiami = QCheckBox("あみあみ")
-
-        site_widgets = [
-            self.site_pokemon_center,
-            self.site_amazon,
-            self.site_rakuten,
-            self.site_yodobashi,
-            self.site_biccamera,
-            self.site_amiami,
-        ]
-
-        for index, widget in enumerate(site_widgets):
-            sites_grid.addWidget(widget, index // 2, index % 2)
-
-        sites_card.layout().addLayout(sites_grid)
+        self.site_checks = {}
+        self.site_rows = {}
+        sync_result = self.site_sync.sync(notify=False)
+        new_ids = set(sync_result.get("new_site_ids", []))
+        for site in sync_result.get("sites", []):
+            site_id = str(site.get("id", ""))
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            checkbox = QCheckBox(str(site.get("name", site_id)))
+            tcg_text = " / ".join(display_name(key) for key in site.get("tcg_keys", [])) or "TCG取扱未確認"
+            info = QLabel(
+                tcg_text
+                + f'　{site.get("application_method", "Web")}　{site.get("site_url", "")}'
+                + ("　新規" if site_id in new_ids else "")
+                + ("　利用停止" if not site.get("active", True) else "")
+            )
+            info.setObjectName("MutedText")
+            checkbox.setEnabled(
+                bool(site.get("active", True))
+                and bool(site.get("monitoring_supported", False))
+            )
+            row_layout.addWidget(checkbox)
+            row_layout.addWidget(info, 1)
+            sites_card.layout().addWidget(row)
+            self.site_checks[site_id] = checkbox
+            self.site_rows[site_id] = (row, site)
         layout.addWidget(sites_card)
 
         # 基本設定
@@ -98,11 +128,21 @@ class SettingsPage(QFrame):
         self.new_product_fetch = QCheckBox("起動時に新弾情報を確認する")
         self.sound_enabled = QCheckBox("通知音を鳴らす")
         self.popup_enabled = QCheckBox("ポップアップ通知を表示する")
+        self.auto_monitor_new_releases = QCheckBox("新弾を発売日前に自動で監視へ追加する")
+        self.auto_monitor_days = QComboBox()
+        for days in (7, 14, 30, 60):
+            self.auto_monitor_days.addItem(f"発売{days}日前", days)
+        self.show_ended_applications = QCheckBox("終了済み応募を通常表示へ含める")
+        self.notify_new_sites = QCheckBox("新規店舗が追加されたら通知する")
 
         general_layout.addWidget(self.auto_input)
         general_layout.addWidget(self.new_product_fetch)
         general_layout.addWidget(self.sound_enabled)
         general_layout.addWidget(self.popup_enabled)
+        general_layout.addWidget(self.auto_monitor_new_releases)
+        general_layout.addWidget(self.auto_monitor_days)
+        general_layout.addWidget(self.show_ended_applications)
+        general_layout.addWidget(self.notify_new_sites)
         layout.addWidget(general_card)
 
         # プロフィール
@@ -211,17 +251,18 @@ class SettingsPage(QFrame):
         for key, checkbox in self.game_checks.items():
             checkbox.setChecked(bool(games.get(key, True)))
 
-        self.site_pokemon_center.setChecked(sites["pokemon_center"])
-        self.site_amazon.setChecked(sites["amazon"])
-        self.site_rakuten.setChecked(sites["rakuten"])
-        self.site_yodobashi.setChecked(sites["yodobashi"])
-        self.site_biccamera.setChecked(sites["biccamera"])
-        self.site_amiami.setChecked(sites["amiami"])
+        for site_id, checkbox in self.site_checks.items():
+            checkbox.setChecked(bool(sites.get(site_id, False)))
 
         self.auto_input.setChecked(general["auto_input_enabled"])
         self.new_product_fetch.setChecked(general["new_product_auto_fetch"])
         self.sound_enabled.setChecked(general["play_notification_sound"])
         self.popup_enabled.setChecked(general["show_popup"])
+        self.auto_monitor_new_releases.setChecked(bool(general.get("auto_monitor_new_releases", True)))
+        days_index = self.auto_monitor_days.findData(int(general.get("auto_monitor_days_before", 30)))
+        self.auto_monitor_days.setCurrentIndex(max(0, days_index))
+        self.show_ended_applications.setChecked(bool(general.get("show_ended_applications", False)))
+        self.notify_new_sites.setChecked(bool(general.get("notify_new_monitoring_sites", True)))
 
         self.name_input.setText(profile["name"])
         self.furigana_input.setText(profile["furigana"])
@@ -233,12 +274,17 @@ class SettingsPage(QFrame):
         self.sound_path.setText(notification["sound_file"])
 
     def save_settings(self) -> None:
-        config = {
+        config = self.config_manager.load()
+        config.update({
             "general": {
                 "auto_input_enabled": self.auto_input.isChecked(),
                 "new_product_auto_fetch": self.new_product_fetch.isChecked(),
                 "play_notification_sound": self.sound_enabled.isChecked(),
                 "show_popup": self.popup_enabled.isChecked(),
+                "auto_monitor_new_releases": self.auto_monitor_new_releases.isChecked(),
+                "auto_monitor_days_before": int(self.auto_monitor_days.currentData()),
+                "show_ended_applications": self.show_ended_applications.isChecked(),
+                "notify_new_monitoring_sites": self.notify_new_sites.isChecked(),
             },
             "profile": {
                 "name": self.name_input.text().strip(),
@@ -255,15 +301,9 @@ class SettingsPage(QFrame):
                 key: checkbox.isChecked()
                 for key, checkbox in self.game_checks.items()
             },
-            "sites": {
-                "pokemon_center": self.site_pokemon_center.isChecked(),
-                "amazon": self.site_amazon.isChecked(),
-                "rakuten": self.site_rakuten.isChecked(),
-                "yodobashi": self.site_yodobashi.isChecked(),
-                "biccamera": self.site_biccamera.isChecked(),
-                "amiami": self.site_amiami.isChecked(),
-            },
-        }
+            "sites": {key: checkbox.isChecked() for key, checkbox in self.site_checks.items()},
+        })
+        config.setdefault("site_sync", {})["new_site_ids"] = []
 
         try:
             self.config_manager.save(config)
@@ -278,6 +318,24 @@ class SettingsPage(QFrame):
 
         self.log_manager.write("設定ソフトから設定を保存しました。")
         QMessageBox.information(self, "保存完了", "設定を保存しました。")
+
+    def _filter_sites(self, *_args) -> None:
+        tcg_key = str(self.site_tcg_filter.currentData() or "all")
+        keyword = self.site_search.text().strip().casefold()
+        for site_id, (row, site) in self.site_rows.items():
+            tcg_ok = tcg_key == "all" or tcg_key in site.get("tcg_keys", [])
+            text_ok = not keyword or keyword in str(site.get("name", site_id)).casefold()
+            row.setVisible(tcg_ok and text_ok)
+
+    def _set_visible_sites(self, enabled: bool) -> None:
+        for site_id, checkbox in self.site_checks.items():
+            row, site = self.site_rows[site_id]
+            if (
+                row.isVisible()
+                and bool(site.get("active", True))
+                and bool(site.get("monitoring_supported", False))
+            ):
+                checkbox.setChecked(enabled)
 
     def choose_sound_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from core.behavior_config import BehaviorConfig
 from core.monitor_scheduler import MonitorScheduler
+from core.p2_startup import P2StartupCoordinator
 from core.runtime_paths import is_frozen
 from core.version import APP_CHANNEL, APP_VERSION
 from ui.about_page import AboutPage
@@ -56,6 +57,7 @@ class MainWindow(QMainWindow):
         self.monitor_scheduler = MonitorScheduler(self)
         self.tray_controller = None
         self.allow_close = False
+        self.p2_startup_result = P2StartupCoordinator().run()
         self._build_ui()
 
     def _build_ui(self):

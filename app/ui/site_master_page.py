@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from core.log_manager import LogManager
 from core.site_master_manager import SiteMasterManager
+from core.site_monitor_sync import SiteMonitorSync
 
 
 SALES_TYPES = [
@@ -64,6 +65,9 @@ class SiteEditorCard(QFrame):
         form = QFormLayout()
 
         self.name_input = QLineEdit(site.get("name", ""))
+        self.url_input = QLineEdit(site.get("site_url", ""))
+        self.tcg_input = QLineEdit(",".join(site.get("tcg_keys", ["other"])))
+        self.method_input = QLineEdit(site.get("application_method", "Web"))
 
         self.sales_type = QComboBox()
         self.sales_type.addItems(SALES_TYPES)
@@ -86,6 +90,9 @@ class SiteEditorCard(QFrame):
         self.notes.setFixedHeight(80)
 
         form.addRow("サイト名", self.name_input)
+        form.addRow("店舗URL（HTTPS）", self.url_input)
+        form.addRow("対象TCGキー", self.tcg_input)
+        form.addRow("対応方式", self.method_input)
         form.addRow("販売方式", self.sales_type)
         form.addRow("", self.purchase_history_required)
         form.addRow("", self.membership_required)
@@ -98,6 +105,10 @@ class SiteEditorCard(QFrame):
                     "id": site.get("id", ""),
                     "name": self.name_input.text().strip() or "名称未設定",
                     "enabled": self.enabled.isChecked(),
+                    "active": bool(site.get("active", True)),
+                    "site_url": self.url_input.text().strip(),
+                    "tcg_keys": [value.strip() for value in self.tcg_input.text().split(",") if value.strip()],
+                    "application_method": self.method_input.text().strip() or "Web",
                     "sales_type": self.sales_type.currentText(),
                     "purchase_history_required": self.purchase_history_required.isChecked(),
                     "membership_required": self.membership_required.isChecked(),
@@ -120,6 +131,7 @@ class SiteMasterPage(QFrame):
         self.setObjectName("ContentPanel")
 
         self.manager = SiteMasterManager()
+        self.site_sync = SiteMonitorSync(site_manager=self.manager)
         self.log_manager = LogManager()
 
         layout = QVBoxLayout(self)
@@ -202,6 +214,10 @@ class SiteMasterPage(QFrame):
             "id": site_id,
             "name": name,
             "enabled": True,
+            "active": True,
+            "site_url": "",
+            "tcg_keys": ["other"],
+            "application_method": "Web",
             "sales_type": self.new_sales_type.currentText(),
             "purchase_history_required": False,
             "membership_required": False,
@@ -209,6 +225,7 @@ class SiteMasterPage(QFrame):
         }
 
         self.manager.add_site(site)
+        self.site_sync.sync()
         self.log_manager.write(f"サイトマスターへ追加しました: {name}")
 
         self.new_name.clear()
@@ -216,6 +233,7 @@ class SiteMasterPage(QFrame):
 
     def save_site(self, site_id: str, updated: dict) -> None:
         self.manager.update_site(site_id, updated)
+        self.site_sync.sync()
         self.log_manager.write(
             f"サイトマスターを更新しました: {updated.get('name')}"
         )
@@ -237,6 +255,7 @@ class SiteMasterPage(QFrame):
 
         if answer == QMessageBox.Yes:
             self.manager.delete_site(site_id)
+            self.site_sync.sync()
             self.log_manager.write(
                 f"サイトマスターから削除しました: {site_id}"
             )

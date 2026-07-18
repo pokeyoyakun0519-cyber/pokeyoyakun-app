@@ -1,14 +1,18 @@
 from collections import Counter
 from typing import Any
 
+from core.application_period import ApplicationPeriodParser
+from core.application_status import evaluate_application_period
+from core.config_manager import ConfigManager
 from core.daily_task_manager import DailyTaskManager
 from core.product_store import ProductStore
 from core.tcg_categories import categories, display_name, normalize_key
 
 
 class ApplicationDashboard:
-    def __init__(self):
-        self.store = ProductStore()
+    def __init__(self, store: ProductStore | None = None, config_manager: ConfigManager | None = None):
+        self.store = store or ProductStore()
+        self.config_manager = config_manager or ConfigManager()
         self.task_manager = DailyTaskManager()
         self.task_manager.store = self.store
 
@@ -16,10 +20,18 @@ class ApplicationDashboard:
         self,
         *,
         state_filter: str = "すべて",
-        sort_mode: str = "優先度順",
+        sort_mode: str = "応募締切順",
         keyword: str = "",
         tcg_filter: str = "all",
+        show_ended: bool | None = None,
+        now=None,
     ) -> dict[str, Any]:
+        if show_ended is None:
+            show_ended = bool(
+                self.config_manager.load().get("general", {}).get(
+                    "show_ended_applications", False
+                )
+            )
         products = self.store.load_products()
 
         rows = []
@@ -28,6 +40,16 @@ class ApplicationDashboard:
 
         for product in products:
             for site in product.get("sites", []):
+                site = ApplicationPeriodParser().enrich_site(
+                    dict(site),
+                    "\n".join(
+                        str(site.get(key, ""))
+                        for key in ("application_period", "order_period", "result_date")
+                        if site.get(key)
+                    ),
+                    release_date=str(product.get("release_date", "")),
+                )
+                period = evaluate_application_period(site, now=now)
                 state = self._display_state(str(
                     site.get(
                         "application_state",
@@ -40,7 +62,6 @@ class ApplicationDashboard:
                     site.get("tcg", product.get("tcg")),
                 )[0]
                 tcg_counts[tcg_key] += 1
-
                 row = {
                     "product_id": product.get("id", ""),
                     "product_name": product.get(
@@ -121,12 +142,28 @@ class ApplicationDashboard:
                     "application_datetime": site.get("applied_at", ""),
                     "result_checked_at": site.get("result_checked_at", ""),
                     "masked_reference": self._masked_reference(site),
+                    "application_start_at": site.get("application_start_at", ""),
+                    "application_end_at": site.get("application_end_at", ""),
+                    "result_announcement_at": site.get("result_announcement_at", ""),
+                    "application_method": site.get("application_method", ""),
+                    "application_conditions": site.get("application_conditions", ""),
+                    "target_store": site.get("target_store", site.get("name", "")),
+                    "period_evidence": site.get("period_evidence", ""),
+                    "period_status": period["period_status"],
+                    "period_ended": period["period_ended"],
+                    "remaining_text": period["remaining_text"],
+                    "end_reason": period["end_reason"],
                 }
                 rows.append(row)
 
+        eligible_rows = [
+            row for row in rows if show_ended or not row["period_ended"]
+        ]
+        counts = Counter(row["application_state"] for row in eligible_rows)
+        tcg_counts = Counter(row["tcg_key"] for row in eligible_rows)
         visible = [
             row
-            for row in rows
+            for row in eligible_rows
             if self._matches_filter(
                 row,
                 state_filter,
@@ -155,7 +192,9 @@ class ApplicationDashboard:
                 item.key: tcg_counts[item.key] for item in categories()
             },
             "rows": visible,
-            "total_rows": len(rows),
+            "total_rows": len(eligible_rows),
+            "history_total_rows": len(rows),
+            "ended_rows": sum(bool(row["period_ended"]) for row in rows),
         }
 
     @staticmethod
@@ -169,8 +208,8 @@ class ApplicationDashboard:
             return False
         if (
             state_filter != "すべて"
-            and row["application_state"]
-            != state_filter
+            and row["application_state"] != state_filter
+            and row.get("period_status") != state_filter
         ):
             return False
 
@@ -199,11 +238,15 @@ class ApplicationDashboard:
             "落選": 4,
             "キャンセル": 5,
             "その他": 6,
+            "受付前": 3,
+            "受付中": 2,
+            "本日締切": 0,
+            "終了済み": 7,
         }
 
         if sort_mode == "応募締切順":
             return lambda row: (
-                row["application_end"] or "9999-99-99",
+                row["application_end_at"] or row["application_end"] or "9999-99-99",
                 state_order.get(
                     row["application_state"],
                     9,
