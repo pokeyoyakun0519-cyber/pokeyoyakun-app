@@ -10,7 +10,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = PROJECT_ROOT / "app"
-DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc3"
+DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc4"
 
 
 def run_command(

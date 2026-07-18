@@ -192,7 +192,7 @@ class SecureHttpsTest(unittest.TestCase):
         license_client = OnlineLicenseClient()
         config = {
             "enabled": True,
-            "server_url": "https://pokeyoyakun.duckdns.org",
+            "server_url": "https://api.pokeyoyakun.com",
             "timeout_seconds": 5,
         }
         with (
