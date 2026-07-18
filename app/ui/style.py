@@ -146,6 +146,62 @@ QFrame#SettingsCard {
     border-radius: 12px;
 }
 
+QTabWidget#SettingsCategoryTabs::pane {
+    border: 1px solid #355269;
+    border-radius: 10px;
+    background-color: #192a3a;
+}
+
+QTabWidget#SettingsCategoryTabs QTabBar::tab {
+    background-color: #172536;
+    color: #9db1c1;
+    border: 1px solid #355269;
+    padding: 9px 12px;
+}
+
+QTabWidget#SettingsCategoryTabs QTabBar::tab:selected {
+    background-color: #2c5874;
+    color: #ffffff;
+}
+
+QLabel#SettingsSaveStatus {
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+QLabel#SettingsSaveStatus[state="clean"] {
+    color: #8fa9bb;
+    background-color: #172536;
+}
+
+QLabel#SettingsSaveStatus[state="dirty"] {
+    color: #ffd166;
+    background-color: #493d24;
+    border: 1px solid #806c35;
+    font-weight: 700;
+}
+
+QLabel#SettingsSaveStatus[state="success"] {
+    color: #8ee0a1;
+    background-color: #183d2a;
+    border: 1px solid #32734a;
+    font-weight: 700;
+}
+
+QLabel#SettingsSaveStatus[state="error"] {
+    color: #ff9a9a;
+    background-color: #4b252c;
+    border: 1px solid #8f3d49;
+    font-weight: 700;
+}
+
+QCheckBox[settingsChanged="true"],
+QLineEdit[settingsChanged="true"],
+QComboBox[settingsChanged="true"] {
+    color: #ffd166;
+    border: 1px solid #d3a93f;
+}
+
 QLabel#SectionTitle {
     font-size: 13pt;
     font-weight: 700;
