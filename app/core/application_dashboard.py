@@ -2,6 +2,8 @@ from collections import Counter
 from typing import Any
 
 from core.application_period import ApplicationPeriodParser
+from core.application_change_tracker import ApplicationChangeTracker
+from core.application_condition_detector import ApplicationConditionDetector
 from core.application_status import evaluate_application_period
 from core.config_manager import ConfigManager
 from core.daily_task_manager import DailyTaskManager
@@ -15,6 +17,7 @@ class ApplicationDashboard:
         self.config_manager = config_manager or ConfigManager()
         self.task_manager = DailyTaskManager()
         self.task_manager.store = self.store
+        self.change_tracker = ApplicationChangeTracker(getattr(self.store, "root", None))
 
     def build(
         self,
@@ -35,6 +38,7 @@ class ApplicationDashboard:
         products = self.store.load_products()
 
         rows = []
+        recent_changes = self.change_tracker.latest_by_key()
         counts = Counter()
         tcg_counts = Counter()
 
@@ -62,6 +66,9 @@ class ApplicationDashboard:
                     site.get("tcg", product.get("tcg")),
                 )[0]
                 tcg_counts[tcg_key] += 1
+                dashboard_state = self._dashboard_state(state, site, period)
+                item_key = ApplicationChangeTracker.item_key(product, site)
+
                 row = {
                     "product_id": product.get("id", ""),
                     "product_name": product.get(
@@ -87,6 +94,7 @@ class ApplicationDashboard:
                     "related_url": site.get("url", ""),
                     "status": site.get("status", ""),
                     "application_state": state,
+                    "dashboard_state": dashboard_state,
                     "application_period": site.get(
                         "application_period",
                         "",
@@ -153,6 +161,9 @@ class ApplicationDashboard:
                     "period_ended": period["period_ended"],
                     "remaining_text": period["remaining_text"],
                     "end_reason": period["end_reason"],
+                    "condition_warnings": ApplicationConditionDetector.detect(site),
+                    "changes": recent_changes.get(item_key, {}).get("changes", {}),
+                    "change_detected_at": recent_changes.get(item_key, {}).get("detected_at", ""),
                 }
                 rows.append(row)
 
@@ -160,6 +171,7 @@ class ApplicationDashboard:
             row for row in rows if show_ended or not row["period_ended"]
         ]
         counts = Counter(row["application_state"] for row in eligible_rows)
+        state_counts = Counter(row["dashboard_state"] for row in eligible_rows)
         tcg_counts = Counter(row["tcg_key"] for row in eligible_rows)
         visible = [
             row
@@ -188,10 +200,15 @@ class ApplicationDashboard:
                 "キャンセル": counts["キャンセル"],
                 "その他": counts["その他"],
             },
+            "state_counts": {
+                key: state_counts[key]
+                for key in ("未応募", "応募済み", "本日締切", "結果待ち", "当選", "落選", "終了済み")
+            },
             "tcg_counts": {
                 item.key: tcg_counts[item.key] for item in categories()
             },
             "rows": visible,
+            "groups": self._group_rows(visible),
             "total_rows": len(eligible_rows),
             "history_total_rows": len(rows),
             "ended_rows": sum(bool(row["period_ended"]) for row in rows),
@@ -210,6 +227,7 @@ class ApplicationDashboard:
             state_filter != "すべて"
             and row["application_state"] != state_filter
             and row.get("period_status") != state_filter
+            and row.get("dashboard_state") != state_filter
         ):
             return False
 
@@ -287,6 +305,43 @@ class ApplicationDashboard:
             row["product_name"],
             row["site_name"],
         )
+
+    @staticmethod
+    def _dashboard_state(
+        application_state: str,
+        site: dict[str, Any],
+        period: dict[str, Any],
+    ) -> str:
+        result = str(site.get("result_status", "未確認"))
+        if application_state == "当選" or result == "当選":
+            return "当選"
+        if application_state == "落選" or result == "落選":
+            return "落選"
+        if period.get("period_ended"):
+            return "終了済み"
+        if application_state == "未応募":
+            return "本日締切" if period.get("period_status") == "本日締切" else "未応募"
+        if application_state == "抽選結果待ち":
+            return "結果待ち"
+        return "応募済み"
+
+    @staticmethod
+    def _group_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        groups: dict[str, dict[str, Any]] = {}
+        order = []
+        for row in rows:
+            key = str(row.get("product_id") or row.get("product_name"))
+            if key not in groups:
+                groups[key] = {
+                    "product_id": row.get("product_id", ""),
+                    "product_name": row.get("product_name", "商品名未設定"),
+                    "tcg_key": row.get("tcg_key", "other"),
+                    "tcg": row.get("tcg", "その他"),
+                    "rows": [],
+                }
+                order.append(key)
+            groups[key]["rows"].append(row)
+        return [groups[key] for key in order]
 
     @staticmethod
     def _date_text(value) -> str:

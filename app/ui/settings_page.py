@@ -151,6 +151,25 @@ class SettingsPage(QFrame):
         general_layout.addWidget(self.notify_new_sites)
         layout.addWidget(general_card)
 
+        application_card = self._make_card("応募支援")
+        application_note = QLabel(
+            "未応募かつ受付中で、締切日時が確定している案件だけを通知します。"
+        )
+        application_note.setObjectName("MutedText")
+        application_note.setWordWrap(True)
+        self.deadline_24h = QCheckBox("締切24時間前に通知")
+        self.deadline_3h = QCheckBox("締切3時間前に通知")
+        self.deadline_30m = QCheckBox("締切30分前に通知")
+        self.group_applications_by_product = QCheckBox("応募先を商品ごとにまとめる")
+        self.notify_important_application_changes = QCheckBox("重要な変更だけ通知")
+        application_card.layout().addWidget(application_note)
+        application_card.layout().addWidget(self.deadline_24h)
+        application_card.layout().addWidget(self.deadline_3h)
+        application_card.layout().addWidget(self.deadline_30m)
+        application_card.layout().addWidget(self.group_applications_by_product)
+        application_card.layout().addWidget(self.notify_important_application_changes)
+        layout.addWidget(application_card)
+
         # プロフィール
         profile_card = self._make_card("入力補助プロフィール")
         profile_layout = QFormLayout()
@@ -253,6 +272,7 @@ class SettingsPage(QFrame):
         notification = config["notification"]
         games = config["games"]
         sites = config["sites"]
+        assistant = config.get("application_assistant", {})
 
         for key, checkbox in self.game_checks.items():
             checkbox.setChecked(bool(games.get(key, True)))
@@ -269,6 +289,17 @@ class SettingsPage(QFrame):
         self.auto_monitor_days.setCurrentIndex(max(0, days_index))
         self.show_ended_applications.setChecked(bool(general.get("show_ended_applications", False)))
         self.notify_new_sites.setChecked(bool(general.get("notify_new_monitoring_sites", True)))
+        reminder_enabled = {
+            int(item.get("minutes", 0)): bool(item.get("enabled", False))
+            for item in assistant.get("reminders", [])
+        }
+        self.deadline_24h.setChecked(reminder_enabled.get(1440, True))
+        self.deadline_3h.setChecked(reminder_enabled.get(180, True))
+        self.deadline_30m.setChecked(reminder_enabled.get(30, True))
+        self.group_applications_by_product.setChecked(bool(assistant.get("group_by_product", True)))
+        self.notify_important_application_changes.setChecked(
+            bool(assistant.get("important_changes_only", True))
+        )
 
         self.name_input.setText(profile["name"])
         self.furigana_input.setText(profile["furigana"])
@@ -308,6 +339,20 @@ class SettingsPage(QFrame):
                 for key, checkbox in self.game_checks.items()
             },
             "sites": {key: checkbox.isChecked() for key, checkbox in self.site_checks.items()},
+            "application_assistant": {
+                "deadline_reminders_enabled": any((
+                    self.deadline_24h.isChecked(),
+                    self.deadline_3h.isChecked(),
+                    self.deadline_30m.isChecked(),
+                )),
+                "reminders": [
+                    {"minutes": 1440, "enabled": self.deadline_24h.isChecked(), "label": "24時間前"},
+                    {"minutes": 180, "enabled": self.deadline_3h.isChecked(), "label": "3時間前"},
+                    {"minutes": 30, "enabled": self.deadline_30m.isChecked(), "label": "30分前"},
+                ],
+                "group_by_product": self.group_applications_by_product.isChecked(),
+                "important_changes_only": self.notify_important_application_changes.isChecked(),
+            },
         })
         config.setdefault("site_sync", {})["new_site_ids"] = []
 

@@ -48,6 +48,16 @@ DEFAULT_CONFIG = {
         "new_site_ids": [],
         "last_synced_at": "",
     },
+    "application_assistant": {
+        "deadline_reminders_enabled": True,
+        "reminders": [
+            {"minutes": 1440, "enabled": True, "label": "24時間前"},
+            {"minutes": 180, "enabled": True, "label": "3時間前"},
+            {"minutes": 30, "enabled": True, "label": "30分前"},
+        ],
+        "group_by_product": True,
+        "important_changes_only": True,
+    },
 }
 
 

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.notification_store import NotificationStore
+from core.safe_product_url import can_open_product_url, open_product_url
 
 
 class NotificationCenterPage(QFrame):
@@ -233,6 +234,16 @@ class NotificationCenterPage(QFrame):
                 card_layout.addWidget(title)
                 card_layout.addWidget(meta)
                 card_layout.addWidget(message)
+                action_url = str(item.get("action_url", ""))
+                if can_open_product_url(action_url):
+                    action_button = QPushButton(
+                        str(item.get("action_label") or "ページを開く")
+                    )
+                    action_button.setObjectName("SmallButton")
+                    action_button.clicked.connect(
+                        lambda _checked=False, url=action_url: open_product_url(url)
+                    )
+                    card_layout.addWidget(action_button)
                 list_layout.addWidget(card)
 
         list_layout.addStretch()

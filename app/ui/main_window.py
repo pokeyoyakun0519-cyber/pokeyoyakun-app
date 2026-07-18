@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow,
@@ -11,6 +11,11 @@ from PySide6.QtWidgets import (
 )
 
 from core.behavior_config import BehaviorConfig
+from core.application_change_tracker import ApplicationChangeTracker
+from core.application_reminder import ApplicationDeadlineReminder
+from core.config_manager import ConfigManager
+from core.notification_manager import NotificationManager
+from core.product_store import ProductStore
 from core.monitor_scheduler import MonitorScheduler
 from core.p2_startup import P2StartupCoordinator
 from core.runtime_paths import is_frozen
@@ -59,6 +64,7 @@ class MainWindow(QMainWindow):
         self.allow_close = False
         self.p2_startup_result = P2StartupCoordinator().run()
         self._build_ui()
+        self._setup_application_assistant()
 
     def _build_ui(self):
         central = QWidget()
@@ -368,6 +374,58 @@ class MainWindow(QMainWindow):
     def set_tray_controller(self, controller):
         self.tray_controller = controller
         self.resident_page.tray_controller = controller
+        QTimer.singleShot(0, self._check_application_assistant)
+
+    def _setup_application_assistant(self):
+        self.application_store = ProductStore()
+        self.application_config = ConfigManager()
+        self.application_reminder = ApplicationDeadlineReminder(
+            self.application_store, self.application_config
+        )
+        self.application_change_tracker = ApplicationChangeTracker(
+            self.application_store.root
+        )
+        self.application_notification_manager = NotificationManager(
+            self.application_config
+        )
+        self.application_assistant_timer = QTimer(self)
+        self.application_assistant_timer.setInterval(60_000)
+        self.application_assistant_timer.timeout.connect(
+            self._check_application_assistant
+        )
+        self.application_assistant_timer.start()
+
+    def _check_application_assistant(self):
+        try:
+            products = self.application_store.load_products()
+            self.application_change_tracker.compare_and_update(products)
+            assistant = self.application_config.load().get(
+                "application_assistant", {}
+            )
+            important_only = bool(
+                assistant.get("important_changes_only", True)
+            )
+            all_pending_changes = self.application_change_tracker.pending_notifications(
+                important_only=False
+            )
+            notified_change_ids = []
+            for event in all_pending_changes:
+                if important_only and not event.get("important"):
+                    notified_change_ids.append(str(event.get("id", "")))
+                    continue
+                self.application_notification_manager.notify_application_change(
+                    event, parent=self, tray_controller=self.tray_controller
+                )
+                notified_change_ids.append(str(event.get("id", "")))
+            self.application_change_tracker.mark_notified(notified_change_ids)
+            self.application_reminder.run(
+                lambda reminder: self.application_notification_manager.notify_application_deadline(
+                    reminder, parent=self, tray_controller=self.tray_controller
+                )
+            )
+        except (OSError, ValueError, TypeError):
+            # 応募支援の一時的な失敗でUser/Owner本体の起動・監視を止めない。
+            return
 
     def changeEvent(self, event):
         super().changeEvent(event)
