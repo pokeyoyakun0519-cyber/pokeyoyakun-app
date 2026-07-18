@@ -115,6 +115,8 @@ def build_target(target: dict[str, Path | str]) -> None:
         str(VERSION_FILE),
         "--add-data",
         f"{ASSETS_DIR};assets",
+        "--add-data",
+        f"{APP_DIR / 'resources'};resources",
         "--collect-all",
         "googleapiclient",
         "--collect-all",

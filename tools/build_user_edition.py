@@ -133,6 +133,8 @@ def build_target(
         "--add-data",
         f"{ASSETS_DIR};assets",
         "--add-data",
+        f"{APP_DIR / 'resources'};resources",
+        "--add-data",
         f"{APP_DIR / 'core' / 'online_license_endpoint.json'};core",
         "--collect-all",
         "googleapiclient",

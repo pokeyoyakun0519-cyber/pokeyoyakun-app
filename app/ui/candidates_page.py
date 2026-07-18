@@ -318,6 +318,12 @@ class CandidateCard(QFrame):
                 f'正規販売 {diagnostics.get("regular_retail_count", 0)} / '
                 f'除外 {diagnostics.get("excluded_count", 0)} / '
                 f'新規店舗候補 {diagnostics.get("new_store_candidate_count", 0)}\n'
+                f'店舗名検出 {diagnostics.get("discovered_store_name_count", 0)} / '
+                f'既存一致 {diagnostics.get("existing_store_match_count", 0)} / '
+                f'重複 {diagnostics.get("duplicate_excluded_count", 0)} / '
+                f'URL拒否 {diagnostics.get("url_safety_rejected_count", 0)} / '
+                f'根拠不足 {diagnostics.get("insufficient_evidence_count", 0)} / '
+                f'保存失敗 {diagnostics.get("save_failure_count", 0)}\n'
                 "最終確認：" + str(diagnostics.get("checked_at", "未実行"))
             )
             diagnostic_label.setObjectName("MutedText")

@@ -55,6 +55,12 @@ class RetailPricePolicy:
             }
             if not (amazon_seller and amazon_shipping):
                 return cls._rejected("Amazonマーケットプレイス第三者出品")
+        elif retailer_id in {"yahoo_shopping", "rakuten_marketplace", "dmm_marketplace"}:
+            if not (verified and bool(offer.get("official_store_verified", False))):
+                return cls._rejected("モール内の公式・正規販売店を確認できません")
+        elif retailer_id == "rakuten_books":
+            if seller and "楽天ブックス" not in seller:
+                return cls._rejected("楽天市場の第三者店舗")
         elif not verified:
             return cls._rejected("販売元を正規販売店として確認できません")
 

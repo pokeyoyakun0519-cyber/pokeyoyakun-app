@@ -102,9 +102,15 @@ class SettingsPage(QFrame):
             row_layout.setContentsMargins(0, 0, 0, 0)
             checkbox = QCheckBox(str(site.get("name", site_id)))
             tcg_text = " / ".join(display_name(key) for key in site.get("tcg_keys", [])) or "TCG取扱未確認"
+            support_note = ""
+            if site.get("chain_support") == "partial":
+                support_note = "　一部店舗のみ／取扱未確認"
+            if not site.get("monitoring_supported", False):
+                support_note += "　自動監視未対応（公式URLを手動確認）"
             info = QLabel(
                 tcg_text
                 + f'　{site.get("application_method", "Web")}　{site.get("site_url", "")}'
+                + support_note
                 + ("　新規" if site_id in new_ids else "")
                 + ("　利用停止" if not site.get("active", True) else "")
             )

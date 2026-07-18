@@ -4,6 +4,8 @@ import re
 import webbrowser
 from urllib.parse import parse_qsl, urlparse
 
+from core.builtin_store_catalog import load_builtin_store_catalog
+
 
 ALLOWED_PRODUCT_HOSTS = {
     "www.amazon.co.jp", "www.yodobashi.com", "limited.yodobashi.com",
@@ -15,6 +17,8 @@ ALLOWED_PRODUCT_HOSTS = {
     "www.onepiece-cardgame.com", "www.yugioh-card.com",
     "www.gundam-gcg.com", "www.kidsrepublic.jp", "www.aeon-kyushu.info",
 }
+for _store in load_builtin_store_catalog()["stores"]:
+    ALLOWED_PRODUCT_HOSTS.update(str(domain) for domain in _store.get("official_domains", []))
 SENSITIVE_QUERY_KEY = re.compile(
     r"^(?:license(?:_?key)?|token|receipt(?:_?number)?|reception(?:_?number)?|"
     r"order(?:_?number)?|email|auth|api_?key|secret_?key)$",
@@ -34,7 +38,7 @@ def validate_product_url(value: object) -> str:
     if parsed.username or parsed.password or (port not in (None, 443)):
         raise ValueError("許可されていないURLです。")
     host = (parsed.hostname or "").casefold()
-    if host not in ALLOWED_PRODUCT_HOSTS:
+    if not any(host == allowed or host.endswith("." + allowed) for allowed in ALLOWED_PRODUCT_HOSTS):
         raise ValueError("許可済みの公式・店舗ホストではありません。")
     if any(SENSITIVE_QUERY_KEY.search(key) for key, _ in parse_qsl(parsed.query)):
         raise ValueError("受付番号などを含むURLは開けません。")

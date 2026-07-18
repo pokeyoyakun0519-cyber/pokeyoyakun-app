@@ -585,8 +585,17 @@ class CandidateManager:
     def _build_search_diagnostics(
         hits: list[dict[str, Any]], messages: list[str]
     ) -> dict[str, Any]:
+        for message in reversed(messages):
+            if not message.startswith("店舗発見診断JSON:"):
+                continue
+            try:
+                parsed = json.loads(message.removeprefix("店舗発見診断JSON:"))
+            except json.JSONDecodeError:
+                break
+            if isinstance(parsed, dict):
+                return parsed
         excluded = [message.removeprefix("除外: ") for message in messages if message.startswith("除外: ")]
-        searched = [message for message in messages if not message.startswith(("除外:", "検索診断:"))]
+        searched = [message for message in messages if not message.startswith(("除外:", "検索診断:", "店舗発見診断JSON:"))]
         return {
             "searched_store_count": len(searched),
             "found_store_count": len({str(hit.get("site_key", "")) for hit in hits}) + len(excluded),

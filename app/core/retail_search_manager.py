@@ -1,3 +1,4 @@
+import json
 import re
 import urllib.error
 import urllib.parse
@@ -10,10 +11,12 @@ from typing import Any
 from core.application_period import ApplicationPeriodParser
 from urllib.parse import urljoin, urlparse
 
+from core.builtin_store_catalog import load_builtin_store_catalog, match_builtin_store
 from core.retail_plugin_registry import enabled_plugins_for_tcg
 from core.retail_price_policy import RetailPricePolicy
 from core.secure_https import build_https_opener
 from core.store_candidate_manager import StoreCandidateManager
+from core.store_discovery import StoreDiscovery
 
 
 POKEMON_CENTER_LOTTERY_INDEX = (
@@ -92,6 +95,7 @@ class RetailSearchManager:
     def __init__(self):
         self.price_policy = RetailPricePolicy()
         self.store_candidates = StoreCandidateManager()
+        self.store_discovery = StoreDiscovery(self.store_candidates)
         self.last_diagnostics: dict[str, Any] = {}
 
     def search_candidate(
@@ -103,6 +107,18 @@ class RetailSearchManager:
         searched_stores: set[str] = set()
         excluded: list[str] = []
         new_store_candidates = 0
+        self.store_discovery.candidates = self.store_candidates
+        self.store_discovery.reset()
+        discovery = {
+            "searched_source_count": 0,
+            "discovered_store_name_count": 0,
+            "existing_store_match_count": 0,
+            "duplicate_excluded_count": 0,
+            "url_safety_rejected_count": 0,
+            "insufficient_evidence_count": 0,
+            "save_failure_count": 0,
+            "failure_reasons": [],
+        }
 
         tcg_key = str(candidate.get("tcg_key", "other"))
         searchers = [self._search_yodobashi]
@@ -132,9 +148,31 @@ class RetailSearchManager:
                 )
                 if plugin.get("source") != "builtin":
                     for item in found:
+                        discovery["discovered_store_name_count"] += 1
                         item["host"] = urlparse(str(item.get("url", ""))).hostname or ""
+                        item.update({
+                            "source_url": str(plugin.get("index_url") or plugin.get("search_url") or ""),
+                            "product_name": str(candidate.get("name", "")),
+                            "tcg_key": tcg_key or "unknown",
+                            "discovery_type": "reservation_or_lottery",
+                            "evidence_text": str(item.get("text", item.get("name", ""))),
+                        })
                         if self.store_candidates.add_candidate(item):
                             new_store_candidates += 1
+                        else:
+                            result = getattr(self.store_candidates, "last_result", {})
+                            status = str(result.get("status", "")) if isinstance(result, dict) else ""
+                            reason = str(result.get("reason", "")) if isinstance(result, dict) else ""
+                            if status == "duplicate":
+                                discovery["duplicate_excluded_count"] += 1
+                            elif status == "insufficient_evidence":
+                                discovery["insufficient_evidence_count"] += 1
+                            elif "保存失敗" in reason or "更新失敗" in reason:
+                                discovery["save_failure_count"] += 1
+                            elif status:
+                                discovery["url_safety_rejected_count"] += 1
+                            if reason and reason not in discovery["failure_reasons"]:
+                                discovery["failure_reasons"].append(reason)
                     messages.append(
                         f"{plugin.get('name', '店舗')}: 新規店舗候補として管理者確認待ち"
                     )
@@ -168,12 +206,28 @@ class RetailSearchManager:
 
         found_stores = {str(hit.get("site_key", "")) for hit in hits}
         regular_stores = {str(hit.get("site_key", "")) for hit in accepted}
+        automatic = self.store_discovery.diagnostics
+        for key in (
+            "discovered_store_name_count", "existing_store_match_count",
+            "new_candidate_count", "duplicate_excluded_count",
+            "url_safety_rejected_count", "insufficient_evidence_count",
+            "save_failure_count",
+        ):
+            discovery[key] = int(discovery.get(key, 0)) + int(automatic.get(key, 0))
+        discovery["failure_reasons"] = list(dict.fromkeys([
+            *discovery["failure_reasons"], *automatic.get("failure_reasons", []),
+        ]))
+        discovery["searched_source_count"] = len(searched_stores)
+        new_store_candidates += int(automatic.get("new_candidate_count", 0))
+        discovery["new_candidate_count"] = new_store_candidates
         self.last_diagnostics = {
             "searched_store_count": len(searched_stores),
             "found_store_count": len(found_stores),
             "regular_retail_count": len(regular_stores),
             "excluded_count": len(excluded),
             "new_store_candidate_count": new_store_candidates,
+            "new_candidate_count": new_store_candidates,
+            **discovery,
             "excluded_reasons": excluded,
             "checked_at": datetime.now().isoformat(timespec="seconds"),
         }
@@ -183,6 +237,10 @@ class RetailSearchManager:
             f"検索店舗{len(searched_stores)} / 発見{len(found_stores)} / "
             f"正規販売{len(regular_stores)} / 除外{len(excluded)} / "
             f"新規店舗候補{new_store_candidates}"
+        )
+        messages.append(
+            "店舗発見診断JSON:"
+            + json.dumps(self.last_diagnostics, ensure_ascii=False, separators=(",", ":"))
         )
         return accepted, messages
 
@@ -417,9 +475,21 @@ class RetailSearchManager:
 
         page_text = self._html_to_text(page["html"])
         matches: list[tuple[str, str, float]] = []
+        parser = _LinkParser(url)
+        parser.feed(page["html"])
+        if plugin.get("source") == "builtin":
+            discovery_links = [
+                link for link in parser.links
+                if self._looks_like_store_name(str(link.get("text", "")))
+            ][:100]
+            self.store_discovery.inspect_links(
+                discovery_links,
+                source_url=url,
+                product_name=name,
+                tcg_key=str(candidate.get("tcg_key", "unknown")),
+                discovery_type="reservation_or_lottery",
+            )
         if mode == "search_page":
-            parser = _LinkParser(url)
-            parser.feed(page["html"])
             for link in parser.links:
                 link_text = str(link.get("text", ""))
                 if not self._is_safe_retail_link(url, str(link.get("url", ""))):
@@ -493,6 +563,8 @@ class RetailSearchManager:
                 final = urlparse(response.geturl())
                 if final.scheme != "https" or final.port not in (None, 443):
                     return {"ok": False, "html": "", "status": "安全でないリダイレクトを拒否"}
+                if not self._redirect_allowed(url, response.geturl()):
+                    return {"ok": False, "html": "", "status": "公式ドメイン外へのリダイレクトを拒否"}
                 raw = response.read(3_000_000)
                 charset = (
                     response.headers
@@ -647,6 +719,33 @@ class RetailSearchManager:
         return (search.hostname or "").removeprefix("www.").casefold() == (
             product.hostname or ""
         ).removeprefix("www.").casefold()
+
+    @staticmethod
+    def _looks_like_store_name(text: str) -> bool:
+        clean = re.sub(r"\s+", " ", text).strip()
+        if not 2 <= len(clean) <= 80:
+            return False
+        return bool(re.search(
+            r"店|ショップ|ストア|カード|トレカ|玩具|おもちゃ|電器|書店|"
+            r"BOOK|カメラ|Amazon|楽天|Yahoo|DMM",
+            clean,
+            re.IGNORECASE,
+        ))
+
+    @staticmethod
+    def _redirect_allowed(requested_url: str, final_url: str) -> bool:
+        requested_host = (urlparse(requested_url).hostname or "").casefold()
+        final_host = (urlparse(final_url).hostname or "").casefold()
+        if requested_host == final_host:
+            return True
+        catalog = load_builtin_store_catalog()["stores"]
+        requested_store = match_builtin_store(catalog, url=requested_url)
+        final_store = match_builtin_store(catalog, url=final_url)
+        return bool(
+            requested_store
+            and final_store
+            and requested_store["store_group_id"] == final_store["store_group_id"]
+        )
 
     @staticmethod
     def _extract_period(
