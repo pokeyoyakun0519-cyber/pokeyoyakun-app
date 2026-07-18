@@ -17,10 +17,10 @@ BUILD_OWNER_EDITION = False
 APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
-DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc3"
+DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc5"
 TEMP_BUILD_ROOT = (
     Path(tempfile.gettempdir())
-    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC3"
+    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC5"
 )
 BUILD_DIR = TEMP_BUILD_ROOT / "build"
 SPEC_DIR = TEMP_BUILD_ROOT / "spec"

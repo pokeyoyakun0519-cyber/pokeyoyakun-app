@@ -1,4 +1,4 @@
-ポケヨヤ君 Owner Edition Ver.1.25.0 RC3
+ポケヨヤ君 Owner Edition Ver.1.25.0 RC5
 ============================================================
 
 開発者専用・配布禁止
@@ -21,7 +21,7 @@ SSL検証を無効化して使用しないでください。
   Inno Setupで installer/PokeyoyaKun_Owner_Setup.iss をコンパイル
 
 出力先:
-  release/owner_dist_rc3/
-  release/owner_installer_rc3/
+  release/owner_dist_rc5/
+  release/owner_installer_rc5/
 
 release/github_assets/ へコピーしないでください。

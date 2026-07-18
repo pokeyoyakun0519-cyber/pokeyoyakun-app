@@ -8,7 +8,7 @@ python tools\build_user_edition_nuitka.py
 if errorlevel 1 goto :failed
 echo.
 echo Nuitka build: OK
-echo release\user_dist_nuitka
+echo release\user_dist_nuitka_rc5
 pause
 exit /b 0
 :failed

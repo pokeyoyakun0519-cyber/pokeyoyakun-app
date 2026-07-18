@@ -10,6 +10,10 @@ class HistoryPage(QFrame):
         title = QLabel("更新履歴")
         title.setObjectName("PageTitle")
         text = QLabel(
+            "Ver.1.25.0 RC5\n"
+            "・P3.0 UI/UXリニューアルを統合\n"
+            "・ホーム、設定、横断検索、初回セットアップを改善\n"
+            "・共通デザイン、操作状態、レスポンシブ表示を統一\n\n"
             "Ver.1.25.0 RC3\n"
             "・certifi CAを使う共通TLS検証へ統一\n"
             "・ライセンス、Feedback、Roadmapの証明書検証を修正\n"

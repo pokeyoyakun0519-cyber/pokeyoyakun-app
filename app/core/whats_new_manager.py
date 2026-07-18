@@ -1,7 +1,10 @@
 import json
 
 from core.runtime_paths import app_root
-from core.version import APP_VERSION
+from core.version import APP_CHANNEL, APP_VERSION
+
+
+CURRENT_RELEASE = f"{APP_VERSION}-{APP_CHANNEL.lower()}"
 
 
 class WhatsNewManager:
@@ -17,13 +20,13 @@ class WhatsNewManager:
         except (OSError, json.JSONDecodeError):
             return True
 
-        return str(data.get("last_seen_version", "")) != APP_VERSION
+        return str(data.get("last_seen_version", "")) != CURRENT_RELEASE
 
     def mark_seen(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(
             json.dumps(
-                {"last_seen_version": APP_VERSION},
+                {"last_seen_version": CURRENT_RELEASE},
                 ensure_ascii=False,
                 indent=2,
             ),
