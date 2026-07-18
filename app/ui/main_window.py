@@ -6,7 +6,7 @@ from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow,
-    QMessageBox, QPushButton, QScrollArea, QSizePolicy,
+    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QToolButton,
     QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -147,6 +147,12 @@ class MainWindow(QMainWindow):
     def _version_text(self):
         return f"Version {APP_VERSION} {APP_CHANNEL.upper()}"
 
+    def _developer_menu_expanded(self):
+        return False
+
+    def _developer_menu_title(self):
+        return "詳細・開発者向け"
+
     def _build_sidebar(self):
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
@@ -193,26 +199,83 @@ class MainWindow(QMainWindow):
             self.navigation_group.addButton(button)
         self.home_button.setChecked(True)
 
-        self._add_menu_section(menu, "基本", [
-            self.home_button, self.product_button,
-            self.application_dashboard_button,
-            self.calendar_button, self.statistics_button,
-            self.candidates_button, self.lottery_button,
-            self.email_accounts_button,
-        ])
-        self._add_menu_section(menu, "情報・サイト", [
-            self.sources_button, self.site_master_button, self.plugin_button,
-        ])
-        self._add_menu_section(menu, "監視・通知", [
-            self.scheduler_button, self.notification_center_button,
-            self.notification_button, self.external_notification_button,
-            self.log_viewer_button,
-        ])
-        self._add_menu_section(menu, "データ管理", [
-            self.storage_button, self.migration_button, self.backup_button,
-        ])
-        self._add_menu_section(
-            menu, "システム", self._system_navigation_buttons()
+        menu.addWidget(self.home_button)
+
+        self.menu_sections = {}
+        self.menu_sections["商品・応募"] = self._add_collapsible_section(
+            menu,
+            "商品・応募",
+            [
+                self.product_button,
+                self.application_dashboard_button,
+                self.calendar_button,
+                self.statistics_button,
+                self.candidates_button,
+                self.lottery_button,
+            ],
+            expanded=True,
+        )
+        self.menu_sections["監視"] = self._add_collapsible_section(
+            menu,
+            "監視",
+            [
+                self.scheduler_button,
+                self.sources_button,
+                self.site_master_button,
+            ],
+            expanded=True,
+        )
+        self.menu_sections["通知"] = self._add_collapsible_section(
+            menu,
+            "通知",
+            [
+                self.notification_center_button,
+                self.external_notification_button,
+            ],
+            expanded=True,
+        )
+        other_section = self._add_collapsible_section(
+            menu,
+            "その他",
+            [
+                self.support_button,
+                self.feedback_button,
+                self.public_roadmap_button,
+                self.history_button,
+                self.about_button,
+            ],
+            expanded=self._developer_menu_expanded(),
+        )
+        self.menu_sections["その他"] = other_section
+        self._add_developer_menu(
+            other_section[2],
+            [
+                self.email_accounts_button,
+                self.plugin_button,
+                self.plugin_distribution_button,
+                self.notification_button,
+                self.log_viewer_button,
+                self.storage_button,
+                self.migration_button,
+                self.backup_button,
+                self.self_test_button,
+                self.regression_button,
+                self.release_readiness_button,
+            ],
+        )
+
+        settings_buttons = [
+            self.open_settings_button,
+            self.resident_button,
+            self.update_button,
+        ]
+        if hasattr(self, "online_license_button"):
+            settings_buttons.append(self.online_license_button)
+        self.menu_sections["設定"] = self._add_collapsible_section(
+            menu,
+            "設定",
+            settings_buttons,
+            expanded=False,
         )
         menu.addStretch()
 
@@ -247,6 +310,63 @@ class MainWindow(QMainWindow):
         for button in buttons:
             layout.addWidget(button)
         layout.addSpacing(8)
+
+    def _add_collapsible_section(self, layout, title, buttons, *, expanded):
+        toggle = QToolButton()
+        toggle.setObjectName("MenuSectionButton")
+        toggle.setText(title)
+        toggle.setCheckable(True)
+        toggle.setChecked(expanded)
+        toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        toggle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        container = QWidget()
+        container.setObjectName("MenuSectionContainer")
+        section_layout = QVBoxLayout(container)
+        section_layout.setContentsMargins(10, 2, 0, 4)
+        section_layout.setSpacing(5)
+        for button in buttons:
+            section_layout.addWidget(button)
+        container.setVisible(expanded)
+
+        def set_expanded(checked):
+            container.setVisible(checked)
+            toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+
+        toggle.toggled.connect(set_expanded)
+        layout.addWidget(toggle)
+        layout.addWidget(container)
+        return toggle, container, section_layout
+
+    def _add_developer_menu(self, layout, buttons):
+        expanded = self._developer_menu_expanded()
+        toggle = QToolButton()
+        toggle.setObjectName("DeveloperMenuButton")
+        toggle.setText(self._developer_menu_title())
+        toggle.setCheckable(True)
+        toggle.setChecked(expanded)
+        toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+
+        container = QWidget()
+        container.setObjectName("DeveloperMenuContainer")
+        detail_layout = QVBoxLayout(container)
+        detail_layout.setContentsMargins(10, 2, 0, 0)
+        detail_layout.setSpacing(5)
+        for button in buttons:
+            detail_layout.addWidget(button)
+        container.setVisible(expanded)
+
+        def set_expanded(checked):
+            container.setVisible(checked)
+            toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+
+        toggle.toggled.connect(set_expanded)
+        layout.addWidget(toggle)
+        layout.addWidget(container)
+        self.developer_menu_button = toggle
+        self.developer_menu_container = container
 
     def _build_pages(self):
         pages = QStackedWidget()

@@ -58,6 +58,12 @@ class OwnerMainWindow(MainWindow):
             "開発者専用・配布禁止"
         )
 
+    def _developer_menu_expanded(self):
+        return True
+
+    def _developer_menu_title(self):
+        return "Owner開発者メニュー"
+
     def _add_license_page(self, page_map):
         # Owner用バイナリには認証画面・認証ページを生成しない。
         return None
