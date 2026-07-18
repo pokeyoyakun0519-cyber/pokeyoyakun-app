@@ -23,6 +23,12 @@ def main():
             raise SystemExit(1)
         raise SystemExit(0)
 
+    if "--license-api-self-test" in sys.argv:
+        from core.online_license_client import OnlineLicenseClient
+
+        ok, _message = OnlineLicenseClient().test_connection()
+        raise SystemExit(0 if ok else 1)
+
     diagnostics = StartupDiagnostics()
     diagnostics.write("監視ソフトの起動を開始")
 

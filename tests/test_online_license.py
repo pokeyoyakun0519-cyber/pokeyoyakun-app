@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
+import socket
+import ssl
 import sys
 import tempfile
 import unittest
@@ -19,6 +22,7 @@ from core.online_license_client import (
     OnlineLicenseClient,
 )
 from core.online_license_config import (
+    PRODUCTION_PUBLIC_URL,
     UNCONFIGURED_PUBLIC_URL,
     OnlineLicenseConfig,
     is_public_endpoint_configured,
@@ -28,7 +32,7 @@ from core.online_license_config import (
 from core.release_config import ReleaseConfig
 
 
-PRODUCTION_URL = "https://pokeyoyakun.duckdns.org"
+PRODUCTION_URL = "https://api.pokeyoyakun.com"
 
 
 class FakeResponse:
@@ -97,7 +101,7 @@ class OnlineLicenseConfigTest(unittest.TestCase):
             PRODUCTION_URL,
         )
         unsafe = (
-            "http" + "://pokeyoyakun.duckdns.org",
+            "http" + "://api.pokeyoyakun.com",
             "https://203.0.113.10",
             PRODUCTION_URL + ":" + str(8700 + 65),
             UNCONFIGURED_PUBLIC_URL,
@@ -171,11 +175,29 @@ class OnlineLicenseClientTest(unittest.TestCase):
         self.assertEqual(payload["license_key"], "PKY-TEST")
         self.assertEqual(payload["device_id"], "PC-1")
 
+    @patch("core.online_license_client.get_device_id", return_value="PC-1")
+    @patch("core.online_license_client.build_https_opener")
+    def test_verify_and_deactivate_use_fixed_api_paths(self, build_opener, _device_id):
+        opener = FakeOpener(FakeResponse({"ok": False, "message": "未登録"}))
+        build_opener.return_value = opener
+        with patch.object(self.client.config_manager, "load", return_value=self.config):
+            self.client.verify("PKY-TEST")
+        self.assertEqual(
+            opener.request.full_url,
+            PRODUCTION_URL + "/api/v1/licenses/verify",
+        )
+        with patch.object(self.client.config_manager, "load", return_value=self.config):
+            self.client.deactivate("PKY-TEST")
+        self.assertEqual(
+            opener.request.full_url,
+            PRODUCTION_URL + "/api/v1/licenses/deactivate",
+        )
+
     def test_redirect_handler_rejects_non_https_and_other_hosts(self):
         handler = HttpsOnlyRedirectHandler(PRODUCTION_URL)
         request = urllib.request.Request(PRODUCTION_URL + "/health")
         unsafe_targets = (
-            "http" + "://pokeyoyakun.duckdns.org/health",
+            "http" + "://api.pokeyoyakun.com/health",
             "https://other.duckdns.org/health",
             PRODUCTION_URL + ":" + str(8700 + 65) + "/health",
         )
@@ -210,6 +232,49 @@ class OnlineLicenseClientTest(unittest.TestCase):
             ok, message, _ = self.client.verify("PKY-TEST")
         self.assertFalse(ok)
         self.assertIn("タイムアウト", message)
+        self.assertIn(PRODUCTION_URL + "/api/v1/licenses/verify", message)
+
+    def test_connection_errors_distinguish_dns_tls_and_refusal(self):
+        url = PRODUCTION_URL + "/health"
+        dns = self.client._friendly_connection_error(
+            urllib.error.URLError(socket.gaierror(11001, "getaddrinfo failed")),
+            url,
+        )
+        tls = self.client._friendly_connection_error(
+            urllib.error.URLError(
+                ssl.SSLCertVerificationError("certificate verify failed")
+            ),
+            url,
+        )
+        refused = self.client._friendly_connection_error(
+            urllib.error.URLError("connection refused"),
+            url,
+        )
+        self.assertIn("DNS", dns)
+        self.assertIn("TLS証明書", tls)
+        self.assertIn("接続が拒否", refused)
+        self.assertTrue(all(url in message for message in (dns, tls, refused)))
+
+    def test_http_error_reports_status_endpoint_and_redacts_license_key(self):
+        url = PRODUCTION_URL + "/api/v1/licenses/activate"
+        key = "PKY-SENSITIVE-FULL-KEY"
+        error = urllib.error.HTTPError(
+            url,
+            503,
+            "Service Unavailable",
+            {},
+            io.BytesIO(json.dumps({"message": f"invalid {key}"}).encode("utf-8")),
+        )
+        message = self.client._http_error_message(error, url, secret=key)
+        error.close()
+        self.assertIn("HTTP 503", message)
+        self.assertIn(url, message)
+        self.assertIn("[ライセンスキー非表示]", message)
+        self.assertNotIn(key, message)
+
+    def test_production_constant_matches_bundled_endpoint(self):
+        self.assertEqual(PRODUCTION_PUBLIC_URL, PRODUCTION_URL)
+        self.assertEqual(load_bundled_public_url(), PRODUCTION_PUBLIC_URL)
 
 
 if __name__ == "__main__":
