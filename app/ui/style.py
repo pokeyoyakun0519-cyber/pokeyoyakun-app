@@ -53,6 +53,67 @@ QFrame#ContentPanel {
     border-radius: 14px;
 }
 
+QFrame#GlobalSearchBar {
+    background-color: #171f2b;
+    border-bottom: 1px solid #2a475e;
+}
+
+QLabel#GlobalSearchTitle {
+    color: #ffffff;
+    font-weight: 800;
+}
+
+QLabel#GlobalSearchStatus {
+    color: #8fa9bb;
+    min-width: 74px;
+}
+
+QLabel#GlobalSearchStatus[state="loading"] {
+    color: #ffd166;
+}
+
+QLabel#GlobalSearchStatus[state="success"] {
+    color: #75d58a;
+}
+
+QLabel#GlobalSearchStatus[state="error"] {
+    color: #ff7f7f;
+}
+
+QFrame#GlobalSearchResults {
+    background-color: #1e3042;
+    border: 1px solid #355269;
+    border-radius: 10px;
+}
+
+QLabel#GlobalSearchGroupTitle {
+    color: #66c0f4;
+    font-weight: 800;
+    padding-top: 4px;
+}
+
+QPushButton#GlobalSearchResultButton {
+    background-color: #172536;
+    border: 1px solid #2f4960;
+    border-radius: 7px;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+QPushButton#GlobalSearchResultButton:hover {
+    background-color: #2a475e;
+    border-color: #66c0f4;
+}
+
+QLabel#GlobalSearchEmpty, QLabel#GlobalSearchError {
+    color: #9db1c1;
+    padding: 14px;
+}
+
+QLabel#GlobalSearchError {
+    color: #ff8f8f;
+}
+
 QLabel#PageTitle {
     font-size: 22pt;
     font-weight: 700;

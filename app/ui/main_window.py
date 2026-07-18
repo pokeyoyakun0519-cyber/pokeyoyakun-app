@@ -30,6 +30,7 @@ from ui.feedback_page import FeedbackPage
 from ui.email_accounts_page import EmailAccountsPage
 from ui.history_page import HistoryPage
 from ui.home_page import HomePage
+from ui.global_search_widget import GlobalSearchWidget
 from ui.log_viewer_page import LogViewerPage
 from ui.lottery_page import LotteryPage
 from ui.migration_page import MigrationPage
@@ -94,8 +95,17 @@ class MainWindow(QMainWindow):
         self.pages = self._build_pages()
         self._connect_navigation()
 
+        main_area = QWidget()
+        main_layout = QVBoxLayout(main_area)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        self.global_search = GlobalSearchWidget(lambda: self.ui_mode)
+        self.global_search.result_activated.connect(self._navigate_to)
+        main_layout.addWidget(self.global_search)
+        main_layout.addWidget(self.pages, 1)
+
         content_layout.addWidget(sidebar)
-        content_layout.addWidget(self.pages, 1)
+        content_layout.addWidget(main_area, 1)
         root.addWidget(content, 1)
 
     def _window_title(self):
@@ -422,6 +432,8 @@ class MainWindow(QMainWindow):
         self.developer_menu_button.setVisible(detailed)
         self.developer_menu_button.setChecked(detailed)
         self.developer_menu_container.setVisible(detailed)
+        if hasattr(self, "global_search"):
+            self.global_search.refresh_for_mode_change()
 
         if not detailed and hasattr(self, "pages"):
             current_page = self.pages.currentWidget()
