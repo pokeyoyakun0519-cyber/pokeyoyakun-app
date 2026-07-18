@@ -19,12 +19,6 @@ class OwnerMainWindow(MainWindow):
     def _edition_banner(self):
         banner = QFrame()
         banner.setObjectName("OwnerEditionBanner")
-        banner.setStyleSheet(
-            "QFrame#OwnerEditionBanner {"
-            "background-color: #7f1d1d; border-bottom: 2px solid #f59e0b;"
-            "}"
-            "QLabel { color: white; font-weight: 700; }"
-        )
         layout = QHBoxLayout(banner)
         layout.setContentsMargins(20, 8, 20, 8)
         edition = QLabel("Owner Edition")

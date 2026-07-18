@@ -108,6 +108,7 @@ class HomePage(QFrame):
         self.setObjectName("ContentPanel")
         self.scheduler = scheduler
         self.service = HomeDashboardService()
+        self._last_dashboard_signature = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -244,6 +245,10 @@ class HomePage(QFrame):
             f"{now.year}年{now.month}月{now.day}日（{WEEKDAYS[now.weekday()]}）"
         )
         data = self.service.build(now=now)
+        signature = repr(data)
+        if signature == self._last_dashboard_signature:
+            return
+        self._last_dashboard_signature = signature
         actions = data["actions"]
         self.summary_values["deadlines"].setText(
             f'{sum(item.get("kind") in {"today_deadline", "within_24h"} and not item.get("completed") for item in actions)}件'

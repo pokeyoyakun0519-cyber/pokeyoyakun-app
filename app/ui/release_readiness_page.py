@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.release_readiness import ReleaseReadiness
+from ui.design_system import busy_button
 
 
 class ReleaseReadinessPage(QFrame):
@@ -31,10 +32,10 @@ class ReleaseReadinessPage(QFrame):
         description.setWordWrap(True)
         layout.addWidget(description)
 
-        run_button = QPushButton("準備状況を確認")
-        run_button.setObjectName("AccentButton")
-        run_button.clicked.connect(self.run_check)
-        layout.addWidget(run_button)
+        self.run_button = QPushButton("準備状況を確認")
+        self.run_button.setObjectName("AccentButton")
+        self.run_button.clicked.connect(self.run_check)
+        layout.addWidget(self.run_button)
 
         self.summary = QLabel("まだ確認していません。")
         self.summary.setObjectName("SectionTitle")
@@ -44,7 +45,8 @@ class ReleaseReadinessPage(QFrame):
         layout.addWidget(self.list_widget, 1)
 
     def run_check(self):
-        results = self.manager.run()
+        with busy_button(self.run_button, "確認中…"):
+            results = self.manager.run()
         self.list_widget.clear()
 
         required_success = 0
@@ -80,3 +82,6 @@ class ReleaseReadinessPage(QFrame):
             self.summary.setText(
                 f"必須項目：{required_success}/{required_total}件 OK"
             )
+        self.summary.setProperty(
+            "state", "success" if required_success == required_total else "error"
+        )

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.self_test_manager import SelfTestManager
+from ui.design_system import busy_button
 
 
 class SelfTestPage(QFrame):
@@ -41,14 +42,14 @@ class SelfTestPage(QFrame):
 
         buttons = QHBoxLayout()
 
-        run_button = QPushButton("テストを実行")
-        run_button.setObjectName("AccentButton")
-        run_button.clicked.connect(self.run_tests)
+        self.run_button = QPushButton("テストを実行")
+        self.run_button.setObjectName("AccentButton")
+        self.run_button.clicked.connect(self.run_tests)
 
         export_button = QPushButton("結果を書き出す")
         export_button.clicked.connect(self.export_results)
 
-        buttons.addWidget(run_button)
+        buttons.addWidget(self.run_button)
         buttons.addWidget(export_button)
         buttons.addStretch()
         layout.addLayout(buttons)
@@ -61,7 +62,8 @@ class SelfTestPage(QFrame):
         layout.addWidget(self.list_widget, 1)
 
     def run_tests(self):
-        self.results = self.manager.run_all()
+        with busy_button(self.run_button, "テスト実行中…"):
+            self.results = self.manager.run_all()
         self.list_widget.clear()
 
         success_count = 0
@@ -83,6 +85,9 @@ class SelfTestPage(QFrame):
         total = len(self.results)
         self.summary.setText(
             f"結果：{success_count}/{total}件 成功"
+        )
+        self.summary.setProperty(
+            "state", "success" if success_count == total else "error"
         )
 
         if success_count == total:

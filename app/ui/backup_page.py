@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from core.backup_manager import BackupManager
 from core.log_manager import LogManager
+from ui.design_system import busy_button
 
 
 class BackupPage(QFrame):
@@ -42,9 +43,9 @@ class BackupPage(QFrame):
 
         buttons = QHBoxLayout()
 
-        create_button = QPushButton("今すぐバックアップ")
-        create_button.setObjectName("AccentButton")
-        create_button.clicked.connect(self.create_backup)
+        self.create_button = QPushButton("今すぐバックアップ")
+        self.create_button.setObjectName("AccentButton")
+        self.create_button.clicked.connect(self.create_backup)
 
         refresh_button = QPushButton("一覧を更新")
         refresh_button.clicked.connect(self.reload_backups)
@@ -59,7 +60,7 @@ class BackupPage(QFrame):
         delete_button.setObjectName("DangerButton")
         delete_button.clicked.connect(self.delete_selected)
 
-        buttons.addWidget(create_button)
+        buttons.addWidget(self.create_button)
         buttons.addWidget(refresh_button)
         buttons.addWidget(restore_button)
         buttons.addWidget(export_button)
@@ -77,13 +78,15 @@ class BackupPage(QFrame):
         self.reload_backups()
 
     def create_backup(self):
-        path = self.manager.create_backup("manual")
+        with busy_button(self.create_button, "バックアップ中…"):
+            path = self.manager.create_backup("manual")
         self.log_manager.write(
             f"手動バックアップを作成しました: {path.name}"
         )
         self.status_label.setText(
             f"バックアップを作成しました: {path.name}"
         )
+        self.status_label.setProperty("state", "success")
         self.reload_backups()
 
     def reload_backups(self):

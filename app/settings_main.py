@@ -2,7 +2,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from core.app_setup import configure_application
+from core.app_setup import configure_application, configure_high_dpi
 from core.crash_handler import install_crash_handler
 from core.startup_check import StartupCheck
 from core.startup_diagnostics import StartupDiagnostics
@@ -10,6 +10,7 @@ from core.release_integrity import verify_runtime_integrity
 
 
 def main():
+    configure_high_dpi()
     diagnostics = StartupDiagnostics()
     diagnostics.write("設定ソフトの起動を開始")
 

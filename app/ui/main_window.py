@@ -59,7 +59,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(self._window_title())
         self.resize(1280, 780)
-        self.setMinimumSize(980, 620)
+        self.setMinimumSize(860, 560)
 
         self.behavior_config = BehaviorConfig()
         self.ui_config_manager = ConfigManager()
@@ -95,6 +95,7 @@ class MainWindow(QMainWindow):
         content_layout.setSpacing(0)
 
         sidebar = self._build_sidebar()
+        self.sidebar = sidebar
         self.pages = self._build_pages()
         self._connect_navigation()
 
@@ -448,6 +449,8 @@ class MainWindow(QMainWindow):
             self._apply_ui_mode(mode)
 
     def _apply_ui_mode(self, mode):
+        updates_enabled = self.updatesEnabled()
+        self.setUpdatesEnabled(False)
         self.ui_mode = "detailed" if mode == "detailed" else "simple"
         detailed = self.ui_mode == "detailed"
 
@@ -483,6 +486,15 @@ class MainWindow(QMainWindow):
             if hidden_current_page:
                 self.pages.setCurrentWidget(self.home_page)
                 self.home_button.setChecked(True)
+        self.setUpdatesEnabled(updates_enabled)
+        self.update()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "sidebar"):
+            target_width = 230 if event.size().width() < 1080 else 270
+            if self.sidebar.width() != target_width:
+                self.sidebar.setFixedWidth(target_width)
 
     def _build_pages(self):
         pages = QStackedWidget()

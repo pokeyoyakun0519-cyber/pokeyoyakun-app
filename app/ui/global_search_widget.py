@@ -118,12 +118,16 @@ class GlobalSearchWidget(QFrame):
     def _search_completed(self, request_id, results):
         if request_id != self.request_id:
             return
-        self.last_results = results
         count = sum(len(items) for items in results.values())
         if count == 0:
             self._render_message("一致する結果はありません。\n別のキーワードをお試しください。")
             self._set_status("0件", "empty")
+            self.last_results = results
             return
+        if results == self.last_results:
+            self._set_status(f"{count}件", "success")
+            return
+        self.last_results = results
         self._render_results(results)
         self._set_status(f"{count}件", "success")
 

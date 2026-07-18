@@ -3,7 +3,7 @@ import sys
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
-from core.app_setup import configure_application
+from core.app_setup import configure_application, configure_high_dpi
 from core.behavior_config import BehaviorConfig
 from core.crash_handler import install_crash_handler
 from core.release_config import ReleaseConfig
@@ -15,6 +15,7 @@ from core.whats_new_manager import WhatsNewManager
 
 
 def main():
+    configure_high_dpi()
     if "--tls-ca-self-test" in sys.argv:
         try:
             create_tls_context()
