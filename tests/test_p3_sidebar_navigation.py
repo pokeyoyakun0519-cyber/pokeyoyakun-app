@@ -45,11 +45,16 @@ class SidebarRenewalTest(unittest.TestCase):
             window.close()
 
     def test_owner_keeps_license_omitted_and_opens_developer_menu(self):
+        from core.config_manager import ConfigManager
         from ui.owner_main_window import OwnerMainWindow
 
         with tempfile.TemporaryDirectory() as directory, patch.dict(
             "os.environ", {"POKEYOYA_DATA_ROOT": directory}, clear=False
         ):
+            config_manager = ConfigManager(Path(directory))
+            config = config_manager.load()
+            config["general"]["ui_mode"] = "detailed"
+            config_manager.save(config)
             window = OwnerMainWindow()
             self.assertFalse(hasattr(window, "online_license_button"))
             self.assertEqual(window.developer_menu_button.text(), "Owner開発者メニュー")

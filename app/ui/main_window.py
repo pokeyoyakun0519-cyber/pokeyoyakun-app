@@ -61,12 +61,18 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(980, 620)
 
         self.behavior_config = BehaviorConfig()
+        self.ui_config_manager = ConfigManager()
+        self.ui_mode = self._configured_ui_mode()
         self.monitor_scheduler = MonitorScheduler(self)
         self.tray_controller = None
         self.allow_close = False
         self.p2_startup_result = P2StartupCoordinator().run()
         self._build_ui()
         self._setup_application_assistant()
+        self.ui_mode_timer = QTimer(self)
+        self.ui_mode_timer.setInterval(1500)
+        self.ui_mode_timer.timeout.connect(self._reload_ui_mode)
+        self.ui_mode_timer.start()
 
     def _build_ui(self):
         central = QWidget()
@@ -148,7 +154,7 @@ class MainWindow(QMainWindow):
         return f"Version {APP_VERSION} {APP_CHANNEL.upper()}"
 
     def _developer_menu_expanded(self):
-        return False
+        return self.ui_mode == "detailed"
 
     def _developer_menu_title(self):
         return "詳細・開発者向け"
@@ -277,6 +283,16 @@ class MainWindow(QMainWindow):
             settings_buttons,
             expanded=False,
         )
+        self.simple_mode_buttons = {
+            self.home_button,
+            self.product_button,
+            self.application_dashboard_button,
+            self.calendar_button,
+            self.notification_center_button,
+            self.scheduler_button,
+            self.open_settings_button,
+        }
+        self._apply_ui_mode(self.ui_mode)
         menu.addStretch()
 
         scroll.setWidget(container)
@@ -337,7 +353,7 @@ class MainWindow(QMainWindow):
         toggle.toggled.connect(set_expanded)
         layout.addWidget(toggle)
         layout.addWidget(container)
-        return toggle, container, section_layout
+        return toggle, container, section_layout, tuple(buttons)
 
     def _add_developer_menu(self, layout, buttons):
         expanded = self._developer_menu_expanded()
@@ -367,6 +383,55 @@ class MainWindow(QMainWindow):
         layout.addWidget(container)
         self.developer_menu_button = toggle
         self.developer_menu_container = container
+
+    def _configured_ui_mode(self):
+        try:
+            configured = self.ui_config_manager.load().get("general", {}).get(
+                "ui_mode", "simple"
+            )
+        except (OSError, ValueError, TypeError):
+            return "simple"
+        return "detailed" if configured == "detailed" else "simple"
+
+    def _reload_ui_mode(self):
+        mode = self._configured_ui_mode()
+        if mode != self.ui_mode:
+            self._apply_ui_mode(mode)
+
+    def _apply_ui_mode(self, mode):
+        self.ui_mode = "detailed" if mode == "detailed" else "simple"
+        detailed = self.ui_mode == "detailed"
+
+        for button in self.navigation_buttons:
+            button.setVisible(detailed or button in self.simple_mode_buttons)
+        self.open_settings_button.setVisible(True)
+
+        for title, section in self.menu_sections.items():
+            toggle, container, _, buttons = section
+            section_visible = detailed or any(
+                button in self.simple_mode_buttons for button in buttons
+            )
+            toggle.setVisible(section_visible)
+            if not section_visible:
+                container.setVisible(False)
+                continue
+            if detailed or title in {"商品・応募", "監視", "通知", "設定"}:
+                toggle.setChecked(True)
+            container.setVisible(toggle.isChecked())
+
+        self.developer_menu_button.setVisible(detailed)
+        self.developer_menu_button.setChecked(detailed)
+        self.developer_menu_container.setVisible(detailed)
+
+        if not detailed and hasattr(self, "pages"):
+            current_page = self.pages.currentWidget()
+            hidden_current_page = any(
+                page is current_page and button not in self.simple_mode_buttons
+                for button, page in self.page_map.items()
+            )
+            if hidden_current_page:
+                self.pages.setCurrentWidget(self.home_page)
+                self.home_button.setChecked(True)
 
     def _build_pages(self):
         pages = QStackedWidget()

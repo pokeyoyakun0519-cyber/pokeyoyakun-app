@@ -8,6 +8,7 @@ from core.runtime_paths import app_root
 
 DEFAULT_CONFIG = {
     "general": {
+        "ui_mode": "simple",
         "auto_input_enabled": False,
         "new_product_auto_fetch": True,
         "play_notification_sound": True,

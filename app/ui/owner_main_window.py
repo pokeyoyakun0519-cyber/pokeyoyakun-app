@@ -59,7 +59,7 @@ class OwnerMainWindow(MainWindow):
         )
 
     def _developer_menu_expanded(self):
-        return True
+        return self.ui_mode == "detailed"
 
     def _developer_menu_title(self):
         return "Owner開発者メニュー"

@@ -57,6 +57,20 @@ class SettingsPage(QFrame):
         layout.setContentsMargins(0, 0, 8, 0)
         layout.setSpacing(14)
 
+        display_card = self._make_card("表示モード")
+        display_note = QLabel(
+            "かんたんモードは日常的に使う機能だけを表示します。"
+            "詳細モードでは、開発者向け機能を含むすべてのメニューを表示します。"
+        )
+        display_note.setObjectName("MutedText")
+        display_note.setWordWrap(True)
+        self.ui_mode = QComboBox()
+        self.ui_mode.addItem("かんたんモード", "simple")
+        self.ui_mode.addItem("詳細モード", "detailed")
+        display_card.layout().addWidget(display_note)
+        display_card.layout().addWidget(self.ui_mode)
+        layout.addWidget(display_card)
+
         # 監視するTCG
         games_card = self._make_card("監視するTCG")
         games_grid = QGridLayout()
@@ -274,6 +288,9 @@ class SettingsPage(QFrame):
         sites = config["sites"]
         assistant = config.get("application_assistant", {})
 
+        mode_index = self.ui_mode.findData(general.get("ui_mode", "simple"))
+        self.ui_mode.setCurrentIndex(max(0, mode_index))
+
         for key, checkbox in self.game_checks.items():
             checkbox.setChecked(bool(games.get(key, True)))
 
@@ -314,6 +331,7 @@ class SettingsPage(QFrame):
         config = self.config_manager.load()
         config.update({
             "general": {
+                "ui_mode": str(self.ui_mode.currentData() or "simple"),
                 "auto_input_enabled": self.auto_input.isChecked(),
                 "new_product_auto_fetch": self.new_product_fetch.isChecked(),
                 "play_notification_sound": self.sound_enabled.isChecked(),
