@@ -74,6 +74,9 @@ class MainWindow(QMainWindow):
         self.ui_mode_timer.setInterval(1500)
         self.ui_mode_timer.timeout.connect(self._reload_ui_mode)
         self.ui_mode_timer.start()
+        self.setup_wizard = None
+        self.gmail_setup_dialog = None
+        QTimer.singleShot(0, self._show_initial_setup_if_needed)
 
     def _build_ui(self):
         central = QWidget()
@@ -113,6 +116,42 @@ class MainWindow(QMainWindow):
 
     def _edition_banner(self):
         return None
+
+    def _is_owner_edition(self):
+        return False
+
+    def _show_initial_setup_if_needed(self):
+        from core.setup_coordinator import SetupCoordinator
+
+        coordinator = SetupCoordinator()
+        if not coordinator.is_completed():
+            self.open_setup_wizard(coordinator=coordinator)
+
+    def open_setup_wizard(self, *, coordinator=None):
+        from ui.setup_wizard import SetupWizard
+
+        if self.setup_wizard is not None and self.setup_wizard.isVisible():
+            self.setup_wizard.raise_()
+            self.setup_wizard.activateWindow()
+            return self.setup_wizard
+        self.setup_wizard = SetupWizard(
+            coordinator=coordinator,
+            owner_edition=self._is_owner_edition(),
+            parent=self,
+        )
+        self.setup_wizard.completed.connect(self._setup_wizard_completed)
+        self.setup_wizard.show()
+        return self.setup_wizard
+
+    def _setup_wizard_completed(self, values):
+        self._apply_ui_mode(values.get("ui_mode", "simple"))
+        self.monitor_scheduler.reload_config()
+        self._navigate_to("home")
+        if values.get("gmail_setup_now"):
+            from ui.setup_wizard import GmailSetupDialog
+
+            self.gmail_setup_dialog = GmailSetupDialog(self)
+            self.gmail_setup_dialog.show()
 
     def _navigation_labels(self):
         return [

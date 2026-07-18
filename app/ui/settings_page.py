@@ -148,6 +148,9 @@ class SettingsPage(QFrame):
         self.new_product_fetch = QCheckBox("起動時に新弾情報を確認する")
         card.layout().addWidget(self.auto_input)
         card.layout().addWidget(self.new_product_fetch)
+        self.rerun_setup_button = QPushButton("初回セットアップを再実行")
+        self.rerun_setup_button.clicked.connect(self.open_setup_wizard)
+        card.layout().addWidget(self.rerun_setup_button)
         self._register_card("基本設定", "アプリの基本動作", card, "起動 新商品 入力補助")
 
     def _build_display_settings(self):
@@ -447,18 +450,20 @@ class SettingsPage(QFrame):
 
     def save_settings(self):
         config = self.config_manager.load()
+        general = dict(config.get("general", {}))
+        general.update({
+            "ui_mode": str(self.ui_mode.currentData() or "simple"),
+            "auto_input_enabled": self.auto_input.isChecked(),
+            "new_product_auto_fetch": self.new_product_fetch.isChecked(),
+            "play_notification_sound": self.sound_enabled.isChecked(),
+            "show_popup": self.popup_enabled.isChecked(),
+            "auto_monitor_new_releases": self.auto_monitor_new_releases.isChecked(),
+            "auto_monitor_days_before": int(self.auto_monitor_days.currentData()),
+            "show_ended_applications": self.show_ended_applications.isChecked(),
+            "notify_new_monitoring_sites": self.notify_new_sites.isChecked(),
+        })
         config.update({
-            "general": {
-                "ui_mode": str(self.ui_mode.currentData() or "simple"),
-                "auto_input_enabled": self.auto_input.isChecked(),
-                "new_product_auto_fetch": self.new_product_fetch.isChecked(),
-                "play_notification_sound": self.sound_enabled.isChecked(),
-                "show_popup": self.popup_enabled.isChecked(),
-                "auto_monitor_new_releases": self.auto_monitor_new_releases.isChecked(),
-                "auto_monitor_days_before": int(self.auto_monitor_days.currentData()),
-                "show_ended_applications": self.show_ended_applications.isChecked(),
-                "notify_new_monitoring_sites": self.notify_new_sites.isChecked(),
-            },
+            "general": general,
             "profile": {
                 "name": self.name_input.text().strip(), "furigana": self.furigana_input.text().strip(),
                 "email": self.email_input.text().strip(), "phone": self.phone_input.text().strip(),
@@ -493,6 +498,36 @@ class SettingsPage(QFrame):
         self._update_changed_state()
         self._set_save_status("✓ 設定を保存しました。", "success")
         QMessageBox.information(self, "保存完了", "設定を保存しました。")
+
+    def open_setup_wizard(self):
+        if self.has_unsaved_changes:
+            self._set_save_status(
+                "初回セットアップを開く前に、現在の変更を保存または元に戻してください。",
+                "dirty",
+            )
+            return None
+        from ui.setup_wizard import SetupWizard, owner_settings_runtime
+
+        self.setup_wizard = SetupWizard(
+            owner_edition=owner_settings_runtime(), parent=self.window()
+        )
+        self.setup_wizard.completed.connect(self._setup_wizard_completed)
+        self.setup_wizard.show()
+        return self.setup_wizard
+
+    def _setup_wizard_completed(self, values):
+        self.load_settings()
+        self._baseline_values = {
+            widget: self._widget_value(widget) for widget in self._tracked_widgets()
+        }
+        self._update_changed_state()
+        self._apply_settings_filter()
+        self._set_save_status("✓ 初回セットアップ設定を保存しました。", "success")
+        if values.get("gmail_setup_now"):
+            from ui.setup_wizard import GmailSetupDialog
+
+            self.gmail_setup_dialog = GmailSetupDialog(self.window())
+            self.gmail_setup_dialog.show()
 
     def _filter_sites(self, *_args):
         tcg_key = str(self.site_tcg_filter.currentData() or "all")

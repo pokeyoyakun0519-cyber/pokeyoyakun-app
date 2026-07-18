@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from core.runtime_paths import app_root
 
@@ -16,8 +17,9 @@ DEFAULT_CONFIG = {
 
 
 class SchedulerConfig:
-    def __init__(self):
-        self.path = app_root() / "config" / "scheduler_settings.json"
+    def __init__(self, root: Path | None = None):
+        self.root = Path(root) if root is not None else app_root()
+        self.path = self.root / "config" / "scheduler_settings.json"
 
     def load(self) -> dict:
         if not self.path.exists():

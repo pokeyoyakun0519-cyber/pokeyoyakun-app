@@ -124,6 +124,32 @@ QLabel#PageText {
     font-size: 12pt;
     color: #c7d5e0;
 }
+
+QLabel#SetupProgress {
+    color: #66c0f4;
+    font-size: 11pt;
+    font-weight: 800;
+    padding: 8px 10px;
+    background-color: #172536;
+    border-radius: 8px;
+}
+
+QLabel#SetupInfo, QLabel#SetupSummary {
+    color: #d8e3ec;
+    background-color: #172536;
+    border: 1px solid #355269;
+    border-radius: 9px;
+    padding: 14px;
+}
+
+QLabel#SetupError {
+    color: #ff9a9a;
+    background-color: #4b252c;
+    border: 1px solid #8f3d49;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-weight: 700;
+}
 """
 
 # 追加スタイルは下の STYLE 文字列へ結合する

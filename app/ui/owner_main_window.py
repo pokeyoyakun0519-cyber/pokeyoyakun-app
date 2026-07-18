@@ -35,6 +35,9 @@ class OwnerMainWindow(MainWindow):
         layout.addWidget(notice)
         return banner
 
+    def _is_owner_edition(self):
+        return True
+
     def _navigation_labels(self):
         return [
             item

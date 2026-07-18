@@ -8,6 +8,8 @@ from core.runtime_paths import app_root
 
 DEFAULT_CONFIG = {
     "general": {
+        "setup_completed": False,
+        "setup_version": 0,
         "ui_mode": "simple",
         "auto_input_enabled": False,
         "new_product_auto_fetch": True,
