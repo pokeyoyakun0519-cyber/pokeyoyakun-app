@@ -18,6 +18,7 @@ SENSITIVE_NAMES = {
     "google_client_secret.json",
     "service_account.json",
 }
+EXPECTED_PUBLIC_LICENSE_ENDPOINT = "https://api.pokeyoyakun.com"
 SECRET_PATTERNS = {
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "Stripe secret key": re.compile(r"\bsk_(?:live|test)_[A-Za-z0-9]{12,}\b"),
@@ -26,6 +27,22 @@ SECRET_PATTERNS = {
         r"(?i)\b(?:admin_token|api_secret|stripe_secret_key|db_password|private_key)\b\s*[:=]\s*[\"'][^\"']{8,}[\"']"
     ),
 }
+
+
+def verify_public_license_endpoint(root: Path) -> None:
+    endpoint_path = root / "app" / "core" / "online_license_endpoint.json"
+    try:
+        payload = json.loads(endpoint_path.read_text(encoding="utf-8"))
+        endpoint = str(payload.get("public_url", "")).strip().rstrip("/")
+    except (OSError, AttributeError, json.JSONDecodeError) as error:
+        raise SystemExit(
+            f"ライセンス接続先設定を読み込めません: {endpoint_path}"
+        ) from error
+    if endpoint != EXPECTED_PUBLIC_LICENSE_ENDPOINT:
+        raise SystemExit(
+            "User Editionのライセンス接続先が本番APIではありません: "
+            + endpoint
+        )
 
 
 def scan_repository(root: Path) -> list[str]:
