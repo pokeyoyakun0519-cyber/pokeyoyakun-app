@@ -334,4 +334,51 @@ QLabel#DashboardStatusBar {
     padding: 11px 14px;
     font-weight: 700;
 }
+
+QFrame#HomeSectionCard, QFrame#HomeSummaryCard {
+    background-color: #1e3042;
+    border: 1px solid #355269;
+    border-radius: 12px;
+}
+
+QFrame#HomeSummaryItem {
+    background-color: #172536;
+    border: 1px solid #2f4960;
+    border-radius: 9px;
+}
+
+QLabel#HomeGreeting {
+    color: #ffffff;
+    font-size: 22pt;
+    font-weight: 800;
+}
+
+QLabel#HomePlaceholder {
+    color: #8fa9bb;
+    background-color: #172536;
+    border: 1px dashed #355269;
+    border-radius: 9px;
+    padding: 14px;
+}
+
+QLabel#HomeListText {
+    color: #d8e3ec;
+    background-color: #172536;
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+QPushButton#HomeListButton {
+    background-color: #172536;
+    border: 1px solid #2f4960;
+    border-radius: 8px;
+    color: #edf4f8;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+QPushButton#HomeListButton:hover {
+    background-color: #263f55;
+    border-color: #4e83a7;
+}
 """

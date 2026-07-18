@@ -162,6 +162,11 @@ class HomeDashboardService:
         favorites = self.favorites.load()
         favorite_products = [product for product in products if str(product.get("product_id", product.get("id", ""))) in favorites["products"]]
         favorite_stores = [site for site in sites if str(site.get("id", "")) in favorites["stores"]]
+        new_products = sorted(
+            (product for product in products if is_new(product.get("created_at"), now=current)),
+            key=lambda product: str(product.get("created_at", "")),
+            reverse=True,
+        )
         enabled_sites = [site for site in sites if site.get("enabled") and site.get("active", True)]
         return {
             "actions": actions, "events": events,
@@ -181,6 +186,7 @@ class HomeDashboardService:
                 "errors": monitor_errors, "last_updated": str(scheduler.get("last_run", "")),
             },
             "favorite_products": favorite_products[:6], "favorite_stores": favorite_stores[:6],
+            "notifications": notifications[:5], "new_products": new_products[:6],
             "timeline": self.timeline.load(),
         }
 
