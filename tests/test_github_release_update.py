@@ -215,6 +215,12 @@ class PackagingAndGmailTest(unittest.TestCase):
         ):
             self.assertIn(module, user)
             self.assertIn(module, owner)
+        for module in (
+            "googleapiclient.errors", "googleapiclient.http",
+            "google_auth_httplib2", "urllib3.util.ssl_",
+        ):
+            self.assertIn(module, user)
+        self.assertIn("gmail_requests_compat.py", user)
         self.assertNotIn("FULL_RELEASE_TEST", (APP_DIR / "core" / "gmail_result_service.py").read_text(encoding="utf-8"))
 
     def test_installers_preserve_data_and_are_edition_specific(self):
