@@ -118,6 +118,8 @@ def build_target(target: dict) -> None:
         f"{ASSETS_DIR};assets",
         "--add-data",
         f"{APP_DIR / 'core' / 'online_license_endpoint.json'};core",
+        "--add-data",
+        f"{APP_DIR / 'core' / 'online_license_public_keys.json'};core",
         "--collect-all",
         "googleapiclient",
         "--collect-all",

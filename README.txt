@@ -1,7 +1,10 @@
-PokeyoyaKun User Edition Ver.1.25.0 RC3
+PokeyoyaKun User Edition Ver.1.25.0 RC4
 テスター向け評価版（正式版ではありません）
 
-【Ver.1.25.0 RC3 主な追加内容】
+【Ver.1.25.0 RC4 主な追加内容】
+・オンラインライセンス接続先をhttps://api.pokeyoyakun.comへ移行
+・旧DuckDNS設定が残っていても配布版では本番APIを優先
+・DNS、TLS、HTTPステータス、接続先を区別する通信エラー表示
 ・ライセンス、Feedback、Roadmap通信でcertifi CAを明示使用
 ・CA欠損時はHTTPS通信を拒否するフェイルクローズへ統一
 ・PyInstaller／Nuitkaでcertifi CAデータの同梱を明示
@@ -13,7 +16,7 @@ PokeyoyaKun User Edition Ver.1.25.0 RC3
 ・ポケモンカードへの誤分類とポケモンセンターへの誤送信を防止
 ・RC1のライセンス、Feedback、Roadmap、配布セキュリティ機能を継続
 
-本RC3は正式版ではありません。利用には管理者が発行するライセンスコードが
+本RC4は正式版ではありません。利用には管理者が発行するライセンスコードが
 必要です。テスター向け3か月無料ライセンスは管理者が手動で発行します。
 
 【修正内容】
@@ -187,20 +190,20 @@ BAT編集は不要で、パスワード設定・秘密鍵生成・ブラウザ�
 正式版1.0前のまとめ確認用RCです。RUN_RC_ACCEPTANCE_TEST.batで主要基盤を一括検査できます。
 
 
-【Ver.1.25.0 RC3 User Edition ノートPCテスト手順】
+【Ver.1.25.0 RC4 User Edition ノートPCテスト手順】
 
 事前準備（管理PC）:
 1. ライセンスサーバーとHTTPSリバースプロキシを起動し、公開先が443番で応答することを確認します。
 2. 管理画面または管理CLIで、テスト用オンラインライセンスキーを1件発行します。
 3. 公開URLの /health を外部回線から開き、ok が true になることを確認します。
    例: https://設定した固定ドメイン/health
-4. release\user_installer_rc3\PokeyoyaKun_User_Setup_Ver1.25.0_RC3.exeをノートPCへコピーします。
+4. release\user_installer_rc4\PokeyoyaKun_User_Setup_Ver1.25.0_RC4.exeをノートPCへコピーします。
 
 インストールとオンライン認証（ノートPC）:
 1. 管理PCと同じLANは使わず、スマートフォンのテザリングなど別の回線へ接続します。
    同一LANから公開IPへ接続すると、ルーターのNATループバック非対応により
    タイムアウトする場合があります。
-2. PokeyoyaKun_User_Setup_Ver1.25.0_RC3.exeを実行し、インストールします。
+2. PokeyoyaKun_User_Setup_Ver1.25.0_RC4.exeを実行し、インストールします。
 3. ポケヨヤ君を起動します。配布版では認証サーバーURLは画面へ表示されません。
 4. 「接続テスト」を押し、「ライセンスサーバーへ接続できました。」と
    表示されることを確認します。
@@ -224,7 +227,7 @@ BAT編集は不要で、パスワード設定・秘密鍵生成・ブラウザ�
 ・User Editionは固定ホスト名のHTTPS（443）だけを使用します。
 
 
-【Ver.1.25.0 RC3 User Edition 配布セキュリティ】
+【Ver.1.25.0 RC4 User Edition 配布セキュリティ】
 ・固定Administrator認証と従来のローカルライセンス判定をUser Editionから削除しました。
 ・ライセンス発行、停止、期限、端末数の最終判定はサーバー側だけで行います。
 ・配布版のサーバーURLは画面へ表示せず、devチャネルだけで変更できます。
@@ -237,7 +240,7 @@ BAT編集は不要で、パスワード設定・秘密鍵生成・ブラウザ�
 完全には防げません。SHA-256マニフェストもEXEと同時に書き換えられる攻撃には
 耐えないため、正式配布ではWindows Authenticode署名と署名済み更新を併用してください。
 公開ライセンスURLはapp/core/online_license_endpoint.jsonから読み込み、
-https://pokeyoyakun.duckdns.org のHTTPS標準ポート443へ固定しています。
+https://api.pokeyoyakun.com のHTTPS標準ポート443へ固定しています。
 平文HTTP、IPアドレス、443以外のポート、別ホストへのリダイレクトは拒否します。
 サーバーURL自体はバイナリや通信先から判別可能であり、画面で非表示にすることは
 URLの秘密化を意味しません。

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from release_security import (
     scan_repository,
+    verify_public_license_endpoint,
     verify_distribution,
     write_integrity_manifest,
 )
@@ -17,10 +18,10 @@ BUILD_OWNER_EDITION = False
 APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
-DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc3"
+DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc4"
 TEMP_BUILD_ROOT = (
     Path(tempfile.gettempdir())
-    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC3"
+    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC4"
 )
 BUILD_DIR = TEMP_BUILD_ROOT / "build"
 SPEC_DIR = TEMP_BUILD_ROOT / "spec"
@@ -134,6 +135,8 @@ def build_target(
         f"{ASSETS_DIR};assets",
         "--add-data",
         f"{APP_DIR / 'core' / 'online_license_endpoint.json'};core",
+        "--add-data",
+        f"{APP_DIR / 'core' / 'online_license_public_keys.json'};core",
         "--collect-all",
         "googleapiclient",
         "--collect-all",
@@ -218,6 +221,7 @@ def verify_user_edition() -> None:
 def main() -> None:
     print("ポケヨヤ君 User Editionをビルドします。")
     print("管理サーバー・管理CLI・開発ツールは含めません。")
+    verify_public_license_endpoint(PROJECT_ROOT)
     findings = scan_repository(PROJECT_ROOT)
     if findings:
         raise SystemExit(
