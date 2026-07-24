@@ -60,6 +60,7 @@ def ensure_dependencies() -> None:
         "PySide6",
         "certifi",
         "google-api-python-client",
+        "google-auth",
         "google-auth-oauthlib",
         "google-auth-httplib2",
     )
@@ -140,9 +141,15 @@ def build_target(
         "--add-data",
         f"{APP_DIR / 'core' / 'online_license_public_keys.json'};core",
         "--collect-all",
+        "google.auth",
+        "--collect-all",
         "googleapiclient",
         "--collect-all",
         "google_auth_oauthlib",
+        "--collect-all",
+        "httplib2",
+        "--collect-submodules",
+        "requests",
         "--collect-all",
         "google.oauth2",
         "--hidden-import",
@@ -153,6 +160,21 @@ def build_target(
         "google_auth_oauthlib.flow",
         "--hidden-import",
         "googleapiclient.discovery",
+        "--hidden-import",
+        "googleapiclient.errors",
+        "--hidden-import",
+        "googleapiclient.http",
+        "--hidden-import",
+        "google_auth_httplib2",
+        "--hidden-import",
+        "urllib3.util.ssl_",
+        "--runtime-hook",
+        str(
+            PROJECT_ROOT
+            / "tools"
+            / "pyinstaller_runtime_hooks"
+            / "gmail_requests_compat.py"
+        ),
         "--collect-data",
         "certifi",
         "--exclude-module",
