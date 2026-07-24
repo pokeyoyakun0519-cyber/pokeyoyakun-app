@@ -20,7 +20,8 @@ from core.whats_new_manager import CURRENT_RELEASE
 from release_security import verify_distribution
 
 
-PRODUCTION_ORIGIN = "https://pokeyoyakun.duckdns.org"
+LICENSE_API_ORIGIN = "https://api.pokeyoyakun.com"
+PUBLIC_CONTENT_API_ORIGIN = "https://pokeyoyakun.duckdns.org"
 
 
 class Release125Rc5Test(unittest.TestCase):
@@ -29,13 +30,13 @@ class Release125Rc5Test(unittest.TestCase):
         self.assertEqual(APP_CHANNEL, "rc5")
         self.assertEqual(CURRENT_RELEASE, "1.25.0-rc5")
 
-    def test_all_public_apis_use_fixed_production_https_origin(self):
+    def test_public_apis_use_their_fixed_production_https_origins(self):
         endpoint = (
             APP_DIR / "core" / "online_license_endpoint.json"
         ).read_text(encoding="utf-8")
-        self.assertIn(PRODUCTION_ORIGIN, endpoint)
-        self.assertEqual(FEEDBACK_API_ORIGIN, PRODUCTION_ORIGIN)
-        self.assertEqual(PUBLIC_ROADMAP_ORIGIN, PRODUCTION_ORIGIN)
+        self.assertIn(LICENSE_API_ORIGIN, endpoint)
+        self.assertEqual(FEEDBACK_API_ORIGIN, PUBLIC_CONTENT_API_ORIGIN)
+        self.assertEqual(PUBLIC_ROADMAP_ORIGIN, PUBLIC_CONTENT_API_ORIGIN)
 
     def test_executable_installer_and_build_versions_are_rc5(self):
         version_info = (

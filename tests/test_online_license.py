@@ -28,7 +28,7 @@ from core.online_license_config import (
 from core.release_config import ReleaseConfig
 
 
-PRODUCTION_URL = "https://pokeyoyakun.duckdns.org"
+PRODUCTION_URL = "https://api.pokeyoyakun.com"
 
 
 class FakeResponse:
