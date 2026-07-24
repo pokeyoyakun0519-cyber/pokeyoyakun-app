@@ -137,6 +137,8 @@ def build_target(
         f"{APP_DIR / 'resources'};resources",
         "--add-data",
         f"{APP_DIR / 'core' / 'online_license_endpoint.json'};core",
+        "--add-data",
+        f"{APP_DIR / 'core' / 'online_license_public_keys.json'};core",
         "--collect-all",
         "google.auth",
         "--collect-all",
