@@ -12,6 +12,8 @@ SCRIPT = (
     / "installer"
     / "PokeyoyaKun_User_Setup.iss"
 )
+OUTPUT_DIR = PROJECT_ROOT / "release" / "user_installer_rc4_vps_key"
+OUTPUT_BASENAME = "PokeyoyaKun_User_Setup_Ver1.25.0_RC4_VPSKey"
 
 
 def find_iscc() -> Path | None:
@@ -53,6 +55,8 @@ def main() -> None:
 
     completed = subprocess.run([
         str(iscc),
+        f"/DBuildOutputDir={OUTPUT_DIR}",
+        f"/DBuildOutputBaseFilename={OUTPUT_BASENAME}",
         str(SCRIPT),
     ])
     if completed.returncode != 0:
@@ -64,10 +68,7 @@ def main() -> None:
         "User Editionインストーラーを作成しました。"
     )
     print(
-        PROJECT_ROOT
-        / "release"
-        / "user_installer_rc4"
-        / "PokeyoyaKun_User_Setup_Ver1.25.0_RC4.exe"
+        OUTPUT_DIR / f"{OUTPUT_BASENAME}.exe"
     )
 
 

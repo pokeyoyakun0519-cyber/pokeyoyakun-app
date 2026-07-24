@@ -73,6 +73,11 @@ def build_target(name: str, script: Path) -> None:
             f"{APP_DIR / 'core' / 'online_license_endpoint.json'}="
             "core/online_license_endpoint.json"
         ),
+        (
+            "--include-data-files="
+            f"{APP_DIR / 'core' / 'online_license_public_keys.json'}="
+            "core/online_license_public_keys.json"
+        ),
         "--include-package=googleapiclient",
         "--include-package=google_auth_oauthlib",
         "--include-package=google.oauth2",
