@@ -160,7 +160,13 @@ class OnlineLicenseClientTest(unittest.TestCase):
             FakeResponse({"ok": True, "message": "認証成功"})
         )
         build_opener.return_value = opener
-        with patch.object(self.client.config_manager, "load", return_value=self.config):
+        with (
+            patch.object(self.client.config_manager, "load", return_value=self.config),
+            patch(
+                "core.online_license_client.verify_online_token",
+                return_value=(True, "署名OK", {}),
+            ),
+        ):
             ok, message, _ = self.client.activate(" pky-test ")
         self.assertTrue(ok, message)
         self.assertEqual(
@@ -222,6 +228,60 @@ class OnlineLicenseClientTest(unittest.TestCase):
             ok, message, _ = self.client.verify("PKY-TEST")
         self.assertFalse(ok)
         self.assertIn("停止", message)
+        self.assertEqual(self.client.last_response_diagnostic["http_status"], 200)
+        self.assertEqual(
+            self.client.last_response_diagnostic["category"],
+            "api_rejected",
+        )
+        self.assertFalse(self.client.last_response_diagnostic["token_present"])
+        self.assertEqual(
+            self.client.last_response_diagnostic["response_json"]["message"],
+            "このライセンスは停止されています。",
+        )
+
+    @patch("core.online_license_client.build_https_opener")
+    def test_success_response_without_trusted_token_is_rejected(self, build_opener):
+        build_opener.return_value = FakeOpener(
+            FakeResponse({"ok": True, "message": "認証成功"})
+        )
+        with patch.object(self.client.config_manager, "load", return_value=self.config):
+            ok, message, data = self.client.activate("PKY-TEST")
+        self.assertFalse(ok)
+        self.assertEqual(data, {})
+        self.assertIn("署名", message)
+        self.assertEqual(
+            self.client.last_response_diagnostic["category"],
+            "signature_error",
+        )
+        self.assertFalse(self.client.last_response_diagnostic["token_present"])
+
+    @patch("core.online_license_client.build_https_opener")
+    def test_diagnostic_redacts_response_secrets(self, build_opener):
+        key = "PKY-SENSITIVE-FULL-KEY"
+        response = {
+            "ok": False,
+            "message": "invalid " + key,
+            "license_key": key,
+            "device_id": "DEVICE-SECRET",
+            "license_token": {
+                "claims": {"device_id": "DEVICE-SECRET"},
+                "signature": {
+                    "key_id": "online-2026-07-vps",
+                    "value": "SIGNATURE-SECRET",
+                },
+            },
+        }
+        build_opener.return_value = FakeOpener(FakeResponse(response))
+        with patch.object(self.client.config_manager, "load", return_value=self.config):
+            self.client.activate(key)
+        diagnostic_text = json.dumps(
+            self.client.last_response_diagnostic,
+            ensure_ascii=False,
+        )
+        self.assertNotIn(key, diagnostic_text)
+        self.assertNotIn("DEVICE-SECRET", diagnostic_text)
+        self.assertNotIn("SIGNATURE-SECRET", diagnostic_text)
+        self.assertIn("online-2026-07-vps", diagnostic_text)
 
     @patch("core.online_license_client.build_https_opener")
     def test_network_failure_never_grants_access(self, build_opener):

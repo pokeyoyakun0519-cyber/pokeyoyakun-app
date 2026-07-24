@@ -1,4 +1,8 @@
+import json
+import os
 import sys
+import uuid
+from pathlib import Path
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
@@ -28,6 +32,84 @@ def main():
 
         ok, _message = OnlineLicenseClient().test_connection()
         raise SystemExit(0 if ok else 1)
+
+    if "--license-api-lifecycle-self-test" in sys.argv:
+        from core.online_license_client import OnlineLicenseClient
+
+        license_key = os.environ.pop("POKEYOYA_TEST_LICENSE_KEY", "").strip()
+        result_path_value = os.environ.pop("POKEYOYA_TEST_RESULT_PATH", "")
+        result_path = Path(result_path_value) if result_path_value else None
+        result = {
+            "activate": False,
+            "verify": False,
+            "deactivate": False,
+            "key_id": "",
+            "message": "",
+            "failed_stage": "input",
+            "exception_type": "",
+            "diagnostics": {},
+        }
+        exit_code = 2
+        if license_key and result_path is not None:
+            device_id = "RC4-FROZEN-" + uuid.uuid4().hex.upper()
+            client = OnlineLicenseClient(
+                device_id_provider=lambda: device_id,
+            )
+            activated = False
+            try:
+                ok, message, data = client.activate(license_key)
+                result["activate"] = ok
+                result["message"] = message
+                result["diagnostics"]["activate"] = dict(
+                    client.last_response_diagnostic
+                )
+                token = data.get("license_token", {})
+                signature = token.get("signature", {}) if isinstance(token, dict) else {}
+                result["key_id"] = str(signature.get("key_id", ""))
+                activated = ok
+                if ok:
+                    result["failed_stage"] = "verify"
+                    ok, message, _data = client.verify(license_key)
+                    result["verify"] = ok
+                    result["message"] = message
+                    result["diagnostics"]["verify"] = dict(
+                        client.last_response_diagnostic
+                    )
+                    exit_code = 0 if ok else 4
+                else:
+                    result["failed_stage"] = "activate"
+                    exit_code = 3
+            except Exception as error:
+                result["message"] = str(error)[:500]
+                result["exception_type"] = type(error).__name__
+                exit_code = 7
+            finally:
+                if activated:
+                    try:
+                        ok, message, _data = client.deactivate(license_key)
+                        result["deactivate"] = ok
+                        result["diagnostics"]["deactivate"] = dict(
+                            client.last_response_diagnostic
+                        )
+                        if not ok:
+                            result["failed_stage"] = "deactivate"
+                            result["message"] = message
+                            exit_code = 5
+                    except Exception as error:
+                        result["failed_stage"] = "deactivate"
+                        result["message"] = str(error)[:500]
+                        result["exception_type"] = type(error).__name__
+                        exit_code = 8
+                if result["activate"] and result["verify"] and result["deactivate"]:
+                    result["failed_stage"] = ""
+            try:
+                result_path.write_text(
+                    json.dumps(result, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except OSError:
+                exit_code = 6
+        raise SystemExit(exit_code)
 
     diagnostics = StartupDiagnostics()
     diagnostics.write("監視ソフトの起動を開始")

@@ -55,6 +55,7 @@ class Release125Rc4Test(unittest.TestCase):
         ).read_text(encoding="utf-8")
         for source in (pyinstaller, nuitka):
             self.assertIn("online_license_endpoint.json", source)
+            self.assertIn("online_license_public_keys.json", source)
             self.assertIn("verify_public_license_endpoint", source)
         monitor_main = (APP_DIR / "monitor_main.py").read_text(encoding="utf-8")
         frozen_check = (
@@ -62,6 +63,8 @@ class Release125Rc4Test(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("--license-api-self-test", monitor_main)
         self.assertIn("--license-api-self-test", frozen_check)
+        self.assertIn("--license-api-lifecycle-self-test", monitor_main)
+        self.assertIn("--lifecycle", frozen_check)
         self.assertIn(LICENSE_ORIGIN, frozen_check)
         verify_public_license_endpoint(PROJECT_ROOT)
 
@@ -85,6 +88,8 @@ class Release125Rc4Test(unittest.TestCase):
             self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC4", source)
         self.assertIn("user_dist_rc4", installer)
         self.assertIn("user_installer_rc4", installer)
+        self.assertIn("user_installer_rc4_vps_key", build_installer)
+        self.assertIn("RC4_VPSKey", build_installer)
 
     def test_tester_documents_mark_rc4_as_non_final(self):
         for name in (
