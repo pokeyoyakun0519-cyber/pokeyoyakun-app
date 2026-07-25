@@ -48,10 +48,13 @@ class YugiohClientCoreTest(unittest.TestCase):
     def setUp(self):
         self.extractor = YugiohOfficialExtractor()
 
-    def test_categories_include_yugioh_without_changing_existing_keys(self):
+    def test_categories_include_supported_tcg_keys(self):
         self.assertEqual(
             [item.key for item in categories()],
-            ["pokemon", "onepiece", "yugioh", "gundam", "other"],
+            [
+                "pokemon", "onepiece", "yugioh", "gundam",
+                "duelmasters", "weiss", "mtg", "other",
+            ],
         )
         self.assertEqual(display_name("yugioh"), "遊戯王OCG")
         self.assertEqual(normalize_key("", "遊戯王")[0], "yugioh")

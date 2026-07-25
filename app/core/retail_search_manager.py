@@ -53,7 +53,11 @@ class _LinkParser(HTMLParser):
                 self.base_url,
                 str(attrs_dict.get("href", "")).strip(),
             )
-            self.parts = []
+            self.parts = [
+                str(attrs_dict.get(key, "")).strip()
+                for key in ("title", "aria-label")
+                if str(attrs_dict.get(key, "")).strip()
+            ]
 
         if tag.lower() == "img" and self.href:
             alt = str(attrs_dict.get("alt", "")).strip()
@@ -482,6 +486,7 @@ class RetailSearchManager:
         matches: list[tuple[str, str, float]] = []
         parser = _LinkParser(url)
         parser.feed(page["html"])
+        parser.links.extend(self._json_ld_product_links(page["html"], url))
         if plugin.get("source") == "builtin":
             discovery_links = [
                 link for link in parser.links
@@ -851,6 +856,14 @@ class RetailSearchManager:
 
         for removable in (
             "ポケモンカードゲーム",
+            "ワンピースカードゲーム",
+            "ガンダムカードゲーム",
+            "遊戯王ocg",
+            "デュエルマスターズtcg",
+            "デュエルマスターズ",
+            "ヴァイスシュヴァルツ",
+            "マジックザギャザリング",
+            "magicthegathering",
             "mega",
             "強化拡張パック",
             "拡張パック",
@@ -871,6 +884,43 @@ class RetailSearchManager:
             )
 
         return [normalized] if normalized else []
+
+    @classmethod
+    def _json_ld_product_links(
+        cls,
+        html: str,
+        base_url: str,
+    ) -> list[dict[str, str]]:
+        output: list[dict[str, str]] = []
+
+        def collect(value: Any) -> None:
+            if isinstance(value, list):
+                for item in value:
+                    collect(item)
+                return
+            if not isinstance(value, dict):
+                return
+            value_type = value.get("@type", "")
+            types = value_type if isinstance(value_type, list) else [value_type]
+            if "Product" in types:
+                name = str(value.get("name", "")).strip()
+                url = urljoin(base_url, str(value.get("url", "")).strip())
+                if name and cls._is_safe_retail_link(base_url, url):
+                    output.append({"url": url, "text": name})
+            for child in value.values():
+                if isinstance(child, (dict, list)):
+                    collect(child)
+
+        for match in re.finditer(
+            r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+            html,
+            flags=re.IGNORECASE | re.DOTALL,
+        ):
+            try:
+                collect(json.loads(unescape(match.group(1)).strip()))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return output
 
     @staticmethod
     def _normalize(text: str) -> str:

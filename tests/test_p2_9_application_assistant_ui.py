@@ -208,7 +208,13 @@ class CommonEditionAndUiTest(unittest.TestCase):
                 [tab.tabData(i) for i in range(tab.count())]
                 for tab in tabs
             ]
-            self.assertIn(["all", "pokemon", "onepiece", "yugioh", "gundam", "other"], tab_sets)
+            self.assertIn(
+                [
+                    "all", "pokemon", "onepiece", "yugioh", "gundam",
+                    "duelmasters", "weiss", "mtg", "other",
+                ],
+                tab_sets,
+            )
             self.assertIn(["未応募", "応募済み", "本日締切", "結果待ち", "当選", "落選", "終了済み"], tab_sets)
             self.assertTrue(page.group_by_product.isChecked())
             self.assertEqual(page.sort_mode.currentText(), "応募締切順")

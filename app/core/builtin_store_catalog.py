@@ -14,7 +14,10 @@ from core.runtime_paths import bundled_root, is_frozen
 SCHEMA_VERSION = 1
 CHANNELS = {"physical", "online", "chain", "manufacturer"}
 CHAIN_SUPPORT_VALUES = {"full", "partial", "unknown"}
-TCG_KEYS = ("pokemon", "onepiece", "yugioh", "gundam", "other")
+TCG_KEYS = (
+    "pokemon", "onepiece", "yugioh", "gundam",
+    "duelmasters", "weiss", "mtg", "other",
+)
 TCG_SUPPORT_VALUES = {"supported", "partial", "unsupported", "unknown"}
 DISCOVERY_METHODS = {
     "product_search", "category", "reservation", "lottery", "official_news",
