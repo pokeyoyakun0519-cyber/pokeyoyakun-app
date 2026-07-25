@@ -223,12 +223,24 @@ class ApplicationDashboardP24UiTest(unittest.TestCase):
     def test_dashboard_has_all_tcg_tabs_with_counts(self):
         with patch.object(ApplicationDashboard, "build", return_value={
             "counts": {key: 0 for key in ("未応募", "応募済み", "抽選結果待ち", "当選", "落選", "予約完了", "注文受付", "キャンセル", "その他")},
-            "tcg_counts": {key: 0 for key in ("pokemon", "onepiece", "yugioh", "gundam", "other")},
+            "tcg_counts": {
+                key: 0
+                for key in (
+                    "pokemon", "onepiece", "yugioh", "gundam",
+                    "duelmasters", "weiss", "mtg", "other",
+                )
+            },
             "rows": [], "total_rows": 0,
         }):
             page = ApplicationDashboardPage()
         tabs = page.findChild(QTabBar)
-        self.assertEqual([tabs.tabData(i) for i in range(tabs.count())], ["all", "pokemon", "onepiece", "yugioh", "gundam", "other"])
+        self.assertEqual(
+            [tabs.tabData(i) for i in range(tabs.count())],
+            [
+                "all", "pokemon", "onepiece", "yugioh", "gundam",
+                "duelmasters", "weiss", "mtg", "other",
+            ],
+        )
 
 
 if __name__ == "__main__":

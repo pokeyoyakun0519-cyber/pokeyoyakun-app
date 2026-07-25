@@ -479,7 +479,7 @@ class ApplicationDashboardPage(QFrame):
         self.tcg_tabs.setTabText(0, f'すべて {data["total_rows"]}')
         for index, item in enumerate(categories(), start=1):
             self.tcg_tabs.setTabText(
-                index, f'{item.short_name} {tcg_counts[item.key]}'
+                index, f'{item.short_name} {tcg_counts.get(item.key, 0)}'
             )
         self.tcg_tabs.blockSignals(False)
 

@@ -20,6 +20,9 @@ _CATEGORIES = (
     TcgCategory("onepiece", "ワンピースカード", "ワンピース", 20),
     TcgCategory("yugioh", "遊戯王OCG", "遊戯王", 30),
     TcgCategory("gundam", "ガンダムカード", "ガンダム", 40),
+    TcgCategory("duelmasters", "デュエル・マスターズ", "デュエマ", 50),
+    TcgCategory("weiss", "ヴァイスシュヴァルツ", "ヴァイス", 60),
+    TcgCategory("mtg", "マジック：ザ・ギャザリング", "MTG", 70),
     TcgCategory("other", "その他", "その他", 90),
 )
 CATEGORY_REGISTRY = {item.key: item for item in _CATEGORIES}
@@ -47,6 +50,23 @@ _LABEL_ALIASES = {
     "gundam": "gundam",
     "gundam card game": "gundam",
     "gundam gcg": "gundam",
+    "デュエル・マスターズ": "duelmasters",
+    "デュエルマスターズ": "duelmasters",
+    "デュエマ": "duelmasters",
+    "duel masters": "duelmasters",
+    "duelmasters": "duelmasters",
+    "dm": "duelmasters",
+    "ヴァイスシュヴァルツ": "weiss",
+    "ヴァイス": "weiss",
+    "weiss schwarz": "weiss",
+    "weissschwarz": "weiss",
+    "ws": "weiss",
+    "マジック：ザ・ギャザリング": "mtg",
+    "マジック:ザ・ギャザリング": "mtg",
+    "マジック・ザ・ギャザリング": "mtg",
+    "magic: the gathering": "mtg",
+    "magic the gathering": "mtg",
+    "mtg": "mtg",
 }
 for _item in _CATEGORIES:
     _LABEL_ALIASES[_item.display_name.lower()] = _item.key
