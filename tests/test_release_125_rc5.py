@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -17,7 +18,11 @@ from core.public_roadmap import PUBLIC_ROADMAP_ORIGIN
 from core.tcg_categories import display_name
 from core.version import APP_CHANNEL, APP_VERSION
 from core.whats_new_manager import CURRENT_RELEASE
-from release_security import verify_distribution
+from release_security import (
+    EXPECTED_PUBLIC_LICENSE_ENDPOINT,
+    verify_distribution,
+    verify_public_license_endpoint,
+)
 
 
 LICENSE_API_ORIGIN = "https://api.pokeyoyakun.com"
@@ -31,12 +36,48 @@ class Release125Rc5Test(unittest.TestCase):
         self.assertEqual(CURRENT_RELEASE, "1.25.0-rc5")
 
     def test_public_apis_use_their_fixed_production_https_origins(self):
-        endpoint = (
+        endpoint = json.loads((
             APP_DIR / "core" / "online_license_endpoint.json"
-        ).read_text(encoding="utf-8")
-        self.assertIn(LICENSE_API_ORIGIN, endpoint)
+        ).read_text(encoding="utf-8"))
+        self.assertEqual(endpoint["public_url"], LICENSE_API_ORIGIN)
+        self.assertEqual(EXPECTED_PUBLIC_LICENSE_ENDPOINT, LICENSE_API_ORIGIN)
         self.assertEqual(FEEDBACK_API_ORIGIN, PUBLIC_CONTENT_API_ORIGIN)
         self.assertEqual(PUBLIC_ROADMAP_ORIGIN, PUBLIC_CONTENT_API_ORIGIN)
+
+    def test_user_builds_include_and_validate_license_material(self):
+        pyinstaller = (
+            PROJECT_ROOT / "tools" / "build_user_edition.py"
+        ).read_text(encoding="utf-8")
+        nuitka = (
+            PROJECT_ROOT / "tools" / "build_user_edition_nuitka.py"
+        ).read_text(encoding="utf-8")
+        for source in (pyinstaller, nuitka):
+            self.assertIn("online_license_endpoint.json", source)
+            self.assertIn("online_license_public_keys.json", source)
+            self.assertIn("verify_public_license_endpoint", source)
+        self.assertIn(
+            "--license-api-lifecycle-self-test",
+            (APP_DIR / "monitor_main.py").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "online-2026-07-vps",
+            (
+                PROJECT_ROOT / "tools" / "verify_frozen_license.py"
+            ).read_text(encoding="utf-8"),
+        )
+        verify_public_license_endpoint(PROJECT_ROOT)
+
+    def test_endpoint_preflight_rejects_stale_build_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            endpoint = root / "app" / "core" / "online_license_endpoint.json"
+            endpoint.parent.mkdir(parents=True)
+            endpoint.write_text(
+                json.dumps({"public_url": PUBLIC_CONTENT_API_ORIGIN}),
+                encoding="utf-8",
+            )
+            with self.assertRaises(SystemExit):
+                verify_public_license_endpoint(root)
 
     def test_executable_installer_and_build_versions_are_rc5(self):
         version_info = (
