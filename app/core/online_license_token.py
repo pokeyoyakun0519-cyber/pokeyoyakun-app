@@ -4,7 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +16,7 @@ PUBLIC_KEYRING_PATH = (
 ALGORITHM = "rsa-pkcs1v15-sha256"
 TOKEN_VERSION = 1
 ACTIVE_STATUS = "active"
+MAX_ISSUED_AT_FUTURE_SKEW = timedelta(minutes=5)
 _SHA256_DIGEST_INFO_PREFIX = bytes.fromhex(
     "3031300d060960864801650304020105000420"
 )
@@ -121,7 +122,10 @@ def verify_online_token(
         expires_at = _parse_utc(claims["expires_at"])
     except (KeyError, TypeError, ValueError):
         return False, "認証トークンの日時または版が不正です。", {}
-    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    current_value = now if now is not None else datetime.now(timezone.utc)
+    if current_value.tzinfo is None:
+        return False, "認証トークンの検証時刻にタイムゾーンがありません。", {}
+    current = current_value.astimezone(timezone.utc)
     expected_hash = hashlib.sha256(
         license_key.strip().upper().encode("utf-8")
     ).hexdigest()
@@ -133,7 +137,7 @@ def verify_online_token(
         return False, "別のPC用の認証トークンです。", {}
     if str(claims.get("license_key_hash", "")) != expected_hash:
         return False, "別のライセンス用の認証トークンです。", {}
-    if issued_at > current:
+    if issued_at - current > MAX_ISSUED_AT_FUTURE_SKEW:
         return False, "PC時計が認証時刻より前に戻されています。", {}
     if expires_at <= current:
         return False, "ライセンスの有効期限が切れています。", {}
