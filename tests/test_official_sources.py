@@ -31,18 +31,21 @@ class OfficialSourceManagerTest(unittest.TestCase):
         with patch("core.source_manager.app_root", return_value=Path(directory)):
             return SourceManager()
 
-    def test_fresh_install_seeds_four_official_sources(self):
+    def test_fresh_install_seeds_all_supported_official_sources(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = self._manager(directory)
             sources = manager.load_sources()
-            self.assertEqual(len(sources), 4)
+            self.assertEqual(len(sources), 7)
             self.assertEqual(
                 [item["url"] for item in sources],
                 [item["url"] for item in SourceManager.DEFAULT_SOURCES],
             )
             self.assertEqual(
                 {item["tcg_key"] for item in sources},
-                {"pokemon", "onepiece", "yugioh", "gundam"},
+                {
+                    "pokemon", "onepiece", "yugioh", "gundam",
+                    "duelmasters", "weiss", "mtg",
+                },
             )
             self.assertTrue(all(item["check_state"] == "unchecked" for item in sources))
             self.assertTrue(manager.sources_path.is_file())
@@ -73,7 +76,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
                 json.dumps(existing, ensure_ascii=False), encoding="utf-8"
             )
             sources = manager.load_sources()
-            self.assertEqual(len(sources), 5)
+            self.assertEqual(len(sources), 8)
             custom = next(item for item in sources if item["id"] == "custom")
             pokemon = next(item for item in sources if item["id"] == "pokemon-existing")
             self.assertFalse(custom["enabled"])
@@ -92,7 +95,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
             self.assertEqual(manager.load_sources(), [])
             self.assertEqual(manager.sources_path.read_text(encoding="utf-8"), "{broken")
 
-    def test_individual_check_succeeds_for_all_four_tcg_sources(self):
+    def test_individual_check_succeeds_for_all_supported_tcg_sources(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = self._manager(directory)
             sources = manager.load_sources()
@@ -118,6 +121,16 @@ class OfficialSourceManagerTest(unittest.TestCase):
                     manager,
                     "_extract_gundam_official_products",
                     return_value=([_product("ガンダム商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_catalog_official_products",
+                    return_value=([_product("追加公式商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_mtg_official_products",
+                    return_value=([_product("MTG商品")], 1, 0),
                 ),
                 patch.object(
                     manager.extractor,
@@ -172,6 +185,16 @@ class OfficialSourceManagerTest(unittest.TestCase):
                     manager,
                     "_extract_gundam_official_products",
                     return_value=([_product("ガンダム商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_catalog_official_products",
+                    return_value=([_product("追加公式商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_mtg_official_products",
+                    return_value=([_product("MTG商品")], 1, 0),
                 ),
                 patch.object(manager.extractor, "extract", side_effect=generic_extract),
                 patch.object(manager.diff_tracker, "compare_and_update", return_value=[]),
@@ -268,8 +291,8 @@ class OfficialSourceUiTest(unittest.TestCase):
             if not page._checking:
                 break
         self.assertFalse(page._checking)
-        self.assertEqual(checked_order, ["0", "1", "2", "3"])
-        self.assertIn("4件の確認が完了", page.result_label.text())
+        self.assertEqual(checked_order, ["0", "1", "2", "3", "4", "5", "6"])
+        self.assertIn("7件の確認が完了", page.result_label.text())
         self.assertTrue(page.check_all_button.isEnabled())
 
 
