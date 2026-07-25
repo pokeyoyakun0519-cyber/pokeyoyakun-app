@@ -6,7 +6,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from release_security import scan_repository, verify_distribution, write_integrity_manifest
+from release_security import (
+    scan_repository,
+    verify_distribution,
+    verify_public_license_endpoint,
+    write_integrity_manifest,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -107,6 +112,7 @@ def copy_public_files() -> None:
 
 def main() -> None:
     print("NuitkaによるUser Editionネイティブビルドを開始します。")
+    verify_public_license_endpoint(PROJECT_ROOT)
     findings = scan_repository(PROJECT_ROOT)
     if findings:
         raise SystemExit("秘密情報の可能性があります:\n- " + "\n- ".join(findings))

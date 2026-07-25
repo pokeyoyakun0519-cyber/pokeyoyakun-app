@@ -8,6 +8,7 @@ from pathlib import Path
 
 from release_security import (
     scan_repository,
+    verify_public_license_endpoint,
     verify_distribution,
     write_integrity_manifest,
 )
@@ -222,6 +223,7 @@ def verify_user_edition() -> None:
 def main() -> None:
     print("ポケヨヤ君 User Editionをビルドします。")
     print("管理サーバー・管理CLI・開発ツールは含めません。")
+    verify_public_license_endpoint(PROJECT_ROOT)
     findings = scan_repository(PROJECT_ROOT)
     if findings:
         raise SystemExit(
