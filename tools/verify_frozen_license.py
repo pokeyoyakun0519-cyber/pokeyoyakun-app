@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-EXE_PATH = PROJECT_ROOT / "release" / "user_dist_rc4" / "ポケヨヤ君.exe"
+EXE_PATH = PROJECT_ROOT / "release" / "user_dist_rc5" / "ポケヨヤ君.exe"
 EXPECTED_ENDPOINT = "https://api.pokeyoyakun.com"
 ARCHIVE_ENDPOINT = "core/online_license_endpoint.json"
 ARCHIVE_KEYRING = "core/online_license_public_keys.json"
@@ -182,7 +182,7 @@ def run_frozen_lifecycle_test(exe_path: Path) -> None:
 
 def main() -> None:
     if not EXE_PATH.is_file():
-        raise SystemExit(f"RC4 EXEが見つかりません: {EXE_PATH}")
+        raise SystemExit(f"RC5 EXEが見つかりません: {EXE_PATH}")
     endpoint = bundled_endpoint(EXE_PATH)
     if endpoint != EXPECTED_ENDPOINT:
         raise SystemExit(f"frozen EXEの接続先が不正です: {endpoint}")

@@ -51,7 +51,7 @@ def main():
         }
         exit_code = 2
         if license_key and result_path is not None:
-            device_id = "RC4-FROZEN-" + uuid.uuid4().hex.upper()
+            device_id = "RC5-FROZEN-" + uuid.uuid4().hex.upper()
             client = OnlineLicenseClient(
                 device_id_provider=lambda: device_id,
             )

@@ -65,6 +65,11 @@ class Release125Rc5Test(unittest.TestCase):
                 PROJECT_ROOT / "tools" / "verify_frozen_license.py"
             ).read_text(encoding="utf-8"),
         )
+        frozen_verifier = (
+            PROJECT_ROOT / "tools" / "verify_frozen_license.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("user_dist_rc5", frozen_verifier)
+        self.assertNotIn("user_dist_rc4", frozen_verifier)
         verify_public_license_endpoint(PROJECT_ROOT)
 
     def test_endpoint_preflight_rejects_stale_build_configuration(self):
