@@ -10,6 +10,7 @@ from typing import Any
 
 from core.application_period import ApplicationPeriodParser
 from core.application_site import normalize_application_site
+from core.bushiroad_store_parser import BushiroadStoreParser
 from urllib.parse import urljoin, urlparse
 
 from core.builtin_store_catalog import load_builtin_store_catalog, match_builtin_store
@@ -100,6 +101,7 @@ class RetailSearchManager:
 
     def __init__(self):
         self.price_policy = RetailPricePolicy()
+        self.bushiroad_store = BushiroadStoreParser()
         self.store_candidates = StoreCandidateManager()
         self.store_discovery = StoreDiscovery(self.store_candidates)
         self.last_diagnostics: dict[str, Any] = {}
@@ -151,10 +153,13 @@ class RetailSearchManager:
             searched_stores.add(str(plugin.get("id", plugin.get("name", ""))))
 
             try:
-                found, message = self._search_generic_plugin(
-                    candidate,
-                    plugin,
-                )
+                if str(plugin.get("id", "")) == "bushiroad_store":
+                    found, message = self.bushiroad_store.search_candidate(candidate)
+                else:
+                    found, message = self._search_generic_plugin(
+                        candidate,
+                        plugin,
+                    )
                 if plugin.get("source") != "builtin":
                     for item in found:
                         discovery["discovered_store_name_count"] += 1
