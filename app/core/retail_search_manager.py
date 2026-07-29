@@ -11,6 +11,7 @@ from typing import Any
 from core.application_period import ApplicationPeriodParser
 from core.application_site import normalize_application_site
 from core.bushiroad_store_parser import BushiroadStoreParser
+from core.hobby_station_parser import HobbyStationParser
 from core.konami_style_parser import KonamiStyleParser
 from urllib.parse import urljoin, urlparse
 
@@ -103,6 +104,7 @@ class RetailSearchManager:
     def __init__(self):
         self.price_policy = RetailPricePolicy()
         self.bushiroad_store = BushiroadStoreParser()
+        self.hobby_station = HobbyStationParser()
         self.konami_style = KonamiStyleParser()
         self.store_candidates = StoreCandidateManager()
         self.store_discovery = StoreDiscovery(self.store_candidates)
@@ -151,13 +153,18 @@ class RetailSearchManager:
 
         for plugin in enabled_plugins_for_tcg(tcg_key):
             plugin_id = str(plugin.get("id", ""))
-            if plugin.get("mode") == "dedicated" and plugin_id != "konami_style":
+            if (
+                plugin.get("mode") == "dedicated"
+                and plugin_id not in {"hobby_station", "konami_style"}
+            ):
                 continue
             searched_stores.add(str(plugin.get("id", plugin.get("name", ""))))
 
             try:
                 if plugin_id == "bushiroad_store":
                     found, message = self.bushiroad_store.search_candidate(candidate)
+                elif plugin_id == "hobby_station":
+                    found, message = self.hobby_station.search_candidate(candidate)
                 elif plugin_id == "konami_style":
                     found, message = self.konami_style.search_candidate(candidate)
                 else:
