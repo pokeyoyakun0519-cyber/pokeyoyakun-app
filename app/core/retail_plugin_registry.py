@@ -220,7 +220,9 @@ BUILTIN_RETAIL_PLUGINS: list[dict[str, Any]] = [
         "tcg": ["duelmasters"],
         "application_method": "Web",
         "result_mode": "account_page",
-        "enabled": True,
+        "enabled": False,
+        "security_disabled": True,
+        "disabled_reason": "自動取得の許可または公式API・フィードを確認できるまで停止",
     },
     {
         "id": "bushiroad_store",
