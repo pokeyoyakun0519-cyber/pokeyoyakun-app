@@ -233,6 +233,20 @@ BUILTIN_RETAIL_PLUGINS: list[dict[str, Any]] = [
         "result_mode": "account_page",
         "enabled": True,
     },
+    {
+        "id": "konami_style",
+        "name": "KONAMI STYLE",
+        "mode": "dedicated",
+        "search_url": (
+            "https://www.konamistyle.jp/products/list.php"
+            "?mode=search&name={query}"
+        ),
+        "regions": ["全国"],
+        "tcg": ["yugioh"],
+        "application_method": "Web",
+        "result_mode": "account_page",
+        "enabled": True,
+    },
 ]
 
 def load_all_retail_plugins(
