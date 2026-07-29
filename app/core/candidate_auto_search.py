@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from core.candidate_manager import CandidateManager
 from core.retail_search_manager import RetailSearchManager
@@ -13,12 +13,19 @@ class CandidateAutoSearch:
     def run_due(
         self,
         interval_minutes: int = 30,
+        candidate_ids: set[str] | None = None,
+        progress_callback: Callable[[dict[str, Any], int], None] | None = None,
     ) -> dict[str, Any]:
         items = self.candidates.load_candidates()
         searched = 0
         new_hit_candidates = []
 
         for candidate in items:
+            if (
+                candidate_ids is not None
+                and str(candidate.get("id", "")) not in candidate_ids
+            ):
+                continue
             if not self._is_due(
                 str(candidate.get("last_searched", "")),
                 interval_minutes,
@@ -43,6 +50,8 @@ class CandidateAutoSearch:
                 messages=messages,
             )
             searched += 1
+            if progress_callback is not None:
+                progress_callback(candidate, searched)
 
             new_hits = [
                 hit

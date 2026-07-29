@@ -43,9 +43,21 @@ class ApplicationDashboard:
         recent_changes = self.change_tracker.latest_by_key()
         counts = Counter()
         tcg_counts = Counter()
+        diagnostics = Counter()
+        diagnostics_by_tcg: dict[str, Counter] = {}
+        diagnostics["loaded_products"] = len(products)
 
         for product in products:
+            product_tcg_key = normalize_key(
+                product.get("tcg_key"), product.get("tcg")
+            )[0]
+            product_diagnostics = diagnostics_by_tcg.setdefault(
+                product_tcg_key, Counter()
+            )
+            product_diagnostics["loaded_products"] += 1
             for site in product.get("sites", []):
+                diagnostics["loaded_sites"] += 1
+                product_diagnostics["loaded_sites"] += 1
                 site = ApplicationPeriodParser().enrich_site(
                     dict(site),
                     "\n".join(
@@ -57,7 +69,10 @@ class ApplicationDashboard:
                 )
                 site = normalize_application_site(site, product=product)
                 if not has_application_evidence(site):
+                    diagnostics["excluded_no_application_evidence"] += 1
+                    product_diagnostics["excluded_no_application_evidence"] += 1
                     continue
+                diagnostics["application_evidence"] += 1
                 period = evaluate_application_period(site, now=now)
                 state = self._display_state(str(
                     site.get(
@@ -70,6 +85,10 @@ class ApplicationDashboard:
                     site.get("tcg_key", product.get("tcg_key")),
                     site.get("tcg", product.get("tcg")),
                 )[0]
+                row_diagnostics = diagnostics_by_tcg.setdefault(
+                    tcg_key, Counter()
+                )
+                row_diagnostics["application_evidence"] += 1
                 tcg_counts[tcg_key] += 1
                 dashboard_state = self._dashboard_state(state, site, period)
                 item_key = ApplicationChangeTracker.item_key(product, site)
@@ -179,22 +198,47 @@ class ApplicationDashboard:
                 }
                 rows.append(row)
 
-        eligible_rows = [
-            row for row in rows if show_ended or not row["period_ended"]
-        ]
+        eligible_rows = []
+        for row in rows:
+            if not show_ended and row["period_ended"]:
+                diagnostics["excluded_ended"] += 1
+                diagnostics_by_tcg.setdefault(
+                    row["tcg_key"], Counter()
+                )["excluded_ended"] += 1
+                continue
+            eligible_rows.append(row)
+            diagnostics_by_tcg.setdefault(
+                row["tcg_key"], Counter()
+            )["eligible_rows"] += 1
         counts = Counter(row["application_state"] for row in eligible_rows)
         state_counts = Counter(row["dashboard_state"] for row in eligible_rows)
         tcg_counts = Counter(row["tcg_key"] for row in eligible_rows)
-        visible = [
-            row
-            for row in eligible_rows
-            if self._matches_filter(
-                row,
-                state_filter,
-                keyword,
-                tcg_filter,
-            )
-        ]
+        visible = []
+        for row in eligible_rows:
+            if tcg_filter != "all" and row["tcg_key"] != tcg_filter:
+                diagnostics["excluded_tcg_filter"] += 1
+                diagnostics_by_tcg.setdefault(
+                    row["tcg_key"], Counter()
+                )["excluded_tcg_filter"] += 1
+                continue
+            if not self._matches_state(row, state_filter):
+                diagnostics["excluded_state_filter"] += 1
+                diagnostics_by_tcg.setdefault(
+                    row["tcg_key"], Counter()
+                )["excluded_state_filter"] += 1
+                continue
+            if not self._matches_keyword(row, keyword):
+                diagnostics["excluded_keyword"] += 1
+                diagnostics_by_tcg.setdefault(
+                    row["tcg_key"], Counter()
+                )["excluded_keyword"] += 1
+                continue
+            visible.append(row)
+            diagnostics_by_tcg.setdefault(
+                row["tcg_key"], Counter()
+            )["displayed_rows"] += 1
+        diagnostics["eligible_rows"] = len(eligible_rows)
+        diagnostics["displayed_rows"] = len(visible)
 
         visible.sort(
             key=self._sort_key(sort_mode)
@@ -224,6 +268,11 @@ class ApplicationDashboard:
             "total_rows": len(eligible_rows),
             "history_total_rows": len(rows),
             "ended_rows": sum(bool(row["period_ended"]) for row in rows),
+            "diagnostics": dict(diagnostics),
+            "diagnostics_by_tcg": {
+                item.key: dict(diagnostics_by_tcg.get(item.key, Counter()))
+                for item in categories()
+            },
         }
 
     @staticmethod
@@ -233,16 +282,23 @@ class ApplicationDashboard:
         keyword: str,
         tcg_filter: str,
     ) -> bool:
-        if tcg_filter != "all" and row["tcg_key"] != tcg_filter:
-            return False
-        if (
+        return (
+            (tcg_filter == "all" or row["tcg_key"] == tcg_filter)
+            and ApplicationDashboard._matches_state(row, state_filter)
+            and ApplicationDashboard._matches_keyword(row, keyword)
+        )
+
+    @staticmethod
+    def _matches_state(row: dict[str, Any], state_filter: str) -> bool:
+        return not (
             state_filter != "すべて"
             and row["application_state"] != state_filter
             and row.get("period_status") != state_filter
             and row.get("dashboard_state") != state_filter
-        ):
-            return False
+        )
 
+    @staticmethod
+    def _matches_keyword(row: dict[str, Any], keyword: str) -> bool:
         normalized_keyword = keyword.strip().lower()
         if not normalized_keyword:
             return True

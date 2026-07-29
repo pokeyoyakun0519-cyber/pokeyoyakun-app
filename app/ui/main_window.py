@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow,
@@ -14,11 +14,14 @@ from core.behavior_config import BehaviorConfig
 from core.application_change_tracker import ApplicationChangeTracker
 from core.application_reminder import ApplicationDeadlineReminder
 from core.config_manager import ConfigManager
+from core.initial_data_bootstrap import InitialDataBootstrap
 from core.notification_manager import NotificationManager
 from core.product_store import ProductStore
 from core.monitor_scheduler import MonitorScheduler
 from core.p2_startup import P2StartupCoordinator
 from core.runtime_paths import is_frozen
+from core.startup_diagnostics import StartupDiagnostics
+from core.tcg_categories import categories
 from core.version import APP_CHANNEL, APP_VERSION
 from ui.about_page import AboutPage
 from ui.application_dashboard_page import ApplicationDashboardPage
@@ -52,6 +55,24 @@ from ui.statistics_page import StatisticsPage
 from ui.support_page import SupportPage
 from ui.update_page import UpdatePage
 
+
+class InitialDataBootstrapWorker(QObject):
+    official_loaded = Signal(dict)
+    retail_progress = Signal(dict)
+    completed = Signal(dict)
+    failed = Signal(str)
+
+    @Slot()
+    def run(self):
+        try:
+            self.completed.emit(InitialDataBootstrap().run(
+                on_official_loaded=self.official_loaded.emit,
+                on_retail_progress=self.retail_progress.emit,
+            ))
+        except Exception as error:
+            self.failed.emit(str(error))
+
+
 class MainWindow(QMainWindow):
     SETTINGS_EXECUTABLE = "ポケヨヤ君_設定.exe"
 
@@ -69,6 +90,9 @@ class MainWindow(QMainWindow):
         self.allow_close = False
         self.p2_startup_result = P2StartupCoordinator().run()
         self._build_ui()
+        self.monitor_scheduler.run_completed.connect(
+            self._refresh_data_pages_after_monitor
+        )
         self._setup_application_assistant()
         self.ui_mode_timer = QTimer(self)
         self.ui_mode_timer.setInterval(1500)
@@ -76,6 +100,8 @@ class MainWindow(QMainWindow):
         self.ui_mode_timer.start()
         self.setup_wizard = None
         self.gmail_setup_dialog = None
+        self.initial_data_thread = None
+        self.initial_data_worker = None
         QTimer.singleShot(0, self._show_initial_setup_if_needed)
 
     def _build_ui(self):
@@ -153,6 +179,136 @@ class MainWindow(QMainWindow):
 
             self.gmail_setup_dialog = GmailSetupDialog(self)
             self.gmail_setup_dialog.show()
+        QTimer.singleShot(0, self._start_initial_data_bootstrap)
+
+    def _start_initial_data_bootstrap(self):
+        if "--smoke-test" in sys.argv or self.initial_data_thread is not None:
+            return
+        bootstrap = InitialDataBootstrap()
+        if not bootstrap.should_run():
+            return
+
+        self.monitor_scheduler.suspend()
+        StartupDiagnostics().write(
+            "Initial data bootstrap: empty products/candidates detected; "
+            "starting official source retrieval"
+        )
+        if hasattr(self, "product_page"):
+            self.product_page.result_label.setText(
+                "初回の商品情報をバックグラウンドで取得しています。"
+            )
+
+        self.initial_data_thread = QThread(self)
+        self.initial_data_worker = InitialDataBootstrapWorker()
+        self.initial_data_worker.moveToThread(self.initial_data_thread)
+        self.initial_data_thread.started.connect(self.initial_data_worker.run)
+        self.initial_data_worker.completed.connect(
+            self._initial_data_bootstrap_completed
+        )
+        self.initial_data_worker.official_loaded.connect(
+            self._initial_data_bootstrap_official_loaded
+        )
+        self.initial_data_worker.retail_progress.connect(
+            self._initial_data_bootstrap_retail_progress
+        )
+        self.initial_data_worker.failed.connect(
+            self._initial_data_bootstrap_failed
+        )
+        self.initial_data_worker.completed.connect(self.initial_data_thread.quit)
+        self.initial_data_worker.failed.connect(self.initial_data_thread.quit)
+        self.initial_data_thread.finished.connect(
+            self._initial_data_bootstrap_finished
+        )
+        self.initial_data_thread.finished.connect(
+            self.initial_data_worker.deleteLater
+        )
+        self.initial_data_thread.finished.connect(
+            self.initial_data_thread.deleteLater
+        )
+        self.initial_data_thread.start()
+
+    @Slot(dict)
+    def _initial_data_bootstrap_official_loaded(self, result):
+        if not result.get("started"):
+            return
+        per_tcg = result.get("per_tcg", {})
+        StartupDiagnostics().write(
+            "Initial data bootstrap official phase: "
+            f'sources={result.get("source_count", 0)} '
+            f'changed={result.get("changed_source_count", 0)} '
+            f'candidates={result.get("candidate_count", 0)} '
+            f'products={result.get("product_count", 0)} '
+            f'retail_targets={result.get("retail_candidate_count", 0)} '
+            + " ".join(
+                f"{item.key}={per_tcg.get(item.key, 0)}"
+                for item in categories()
+            )
+        )
+        self.product_page.reload_saved_products()
+        self.candidates_page.reload_candidates()
+        self.sources_page.reload_sources()
+        if result.get("retail_candidate_count", 0):
+            self.product_page.result_label.setText(
+                "公式商品を読み込みました。応募・予約情報を"
+                "バックグラウンドで確認しています。"
+            )
+
+    @Slot(dict)
+    def _initial_data_bootstrap_retail_progress(self, progress):
+        searched = int(progress.get("searched", 0))
+        total = int(progress.get("total", 0))
+        name = str(progress.get("candidate_name", ""))
+        StartupDiagnostics().write(
+            "Initial application search progress: "
+            f"{searched}/{total} candidate={name}"
+        )
+        self.product_page.reload_saved_products()
+        self.application_dashboard_page.reload()
+        self.candidates_page.reload_candidates()
+        self.product_page.result_label.setText(
+            f"応募・予約情報を確認中です（{searched}/{total}件）。"
+        )
+
+    @Slot(dict)
+    def _initial_data_bootstrap_completed(self, result):
+        if not result.get("started"):
+            return
+        StartupDiagnostics().write(
+            "Initial data bootstrap completed: "
+            f'products={result.get("product_count", 0)} '
+            f'retail_targets={result.get("retail_candidate_count", 0)} '
+            f'retail_searched={result.get("retail_searched_count", 0)}'
+        )
+        self.product_page.reload_saved_products()
+        self.application_dashboard_page.reload()
+        self.candidates_page.reload_candidates()
+        self.product_page.result_label.setText(
+            "初回の商品・応募情報の確認が完了しました。"
+        )
+
+    @Slot(str)
+    def _initial_data_bootstrap_failed(self, message):
+        StartupDiagnostics().write(
+            f"Initial data bootstrap failed: {message}"
+        )
+        if hasattr(self, "product_page"):
+            self.product_page.result_label.setText(
+                "初回の商品情報取得に失敗しました。"
+                "公式情報ソース画面から再確認できます。"
+            )
+
+    @Slot()
+    def _initial_data_bootstrap_finished(self):
+        self.initial_data_worker = None
+        self.initial_data_thread = None
+        self.monitor_scheduler.resume()
+
+    @Slot(dict)
+    def _refresh_data_pages_after_monitor(self, _result):
+        self.product_page.reload_saved_products()
+        self.application_dashboard_page.reload()
+        self.candidates_page.reload_candidates()
+        self.sources_page.reload_sources()
 
     def _navigation_labels(self):
         return [
@@ -286,6 +442,7 @@ class MainWindow(QMainWindow):
             "通知",
             [
                 self.notification_center_button,
+                self.email_accounts_button,
                 self.external_notification_button,
             ],
             expanded=True,
@@ -306,7 +463,6 @@ class MainWindow(QMainWindow):
         self._add_developer_menu(
             other_section[2],
             [
-                self.email_accounts_button,
                 self.plugin_button,
                 self.plugin_distribution_button,
                 self.notification_button,
@@ -339,6 +495,7 @@ class MainWindow(QMainWindow):
             self.application_dashboard_button,
             self.calendar_button,
             self.notification_center_button,
+            self.email_accounts_button,
             self.scheduler_button,
             self.open_settings_button,
         }
@@ -664,6 +821,7 @@ class MainWindow(QMainWindow):
         self.tray_controller = controller
         self.resident_page.tray_controller = controller
         QTimer.singleShot(0, self._check_application_assistant)
+        QTimer.singleShot(0, self._start_initial_data_bootstrap)
 
     def _setup_application_assistant(self):
         self.application_store = ProductStore()

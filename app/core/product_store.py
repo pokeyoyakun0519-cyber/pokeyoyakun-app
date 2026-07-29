@@ -1,6 +1,7 @@
 import json
 import re
 import shutil
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -21,9 +22,12 @@ class ProductStore:
         self.user_state_path = self.root / "config" / "user_state.json"
         self.plugin_manager = PluginManager()
         self.last_excluded_retail_offers: list[dict[str, str]] = []
+        self.last_excluded_products: list[dict[str, str]] = []
+        self.last_load_diagnostics: dict[str, Any] = {}
 
     def load_products(self) -> list[dict[str, Any]]:
-        products = [normalize_record(item)[0] for item in self._load_product_file()]
+        raw_products = self._load_product_file()
+        products = [normalize_record(item)[0] for item in raw_products]
         from core.activity_timeline import ActivityTimeline
         from core.product_master import ProductMasterManager
 
@@ -60,7 +64,22 @@ class ProductStore:
                 for product in products
             }
         )
-        return self._apply_user_state_and_archive(products)
+        visible = self._apply_user_state_and_archive(products)
+        per_tcg = Counter(
+            normalize_key(item.get("tcg_key"), item.get("tcg"))[0]
+            for item in visible
+        )
+        self.last_load_diagnostics = {
+            "storage_type": "json",
+            "storage_path": str(self.products_path),
+            "raw_count": len(raw_products),
+            "normalized_count": len(products),
+            "visible_count": len(visible),
+            "per_tcg": dict(per_tcg),
+            "excluded_products": list(self.last_excluded_products),
+            "excluded_retail_offers": list(self.last_excluded_retail_offers),
+        }
+        return visible
 
     def update_from_plugins(
         self,
@@ -349,6 +368,8 @@ class ProductStore:
         self,
         products: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        self.last_excluded_products = []
+        self.last_excluded_retail_offers = []
         state = self._load_user_state()
         reserved_ids = set(
             state.get("reserved_product_ids", [])
@@ -365,6 +386,10 @@ class ProductStore:
             if product.get("source_type") == "retail_search":
                 product["sites"] = self._filter_retail_sites(product)
                 if not product["sites"]:
+                    self.last_excluded_products.append({
+                        "product": str(product.get("name", "")),
+                        "reason": "retail_offer_rejected",
+                    })
                     continue
             product["reserved"] = (
                 product.get("id") in reserved_ids
@@ -419,6 +444,10 @@ class ProductStore:
                 ).date()
 
                 if (today - release_date).days > 183:
+                    self.last_excluded_products.append({
+                        "product": str(product.get("name", "")),
+                        "reason": "released_more_than_183_days_ago",
+                    })
                     continue
 
             except (

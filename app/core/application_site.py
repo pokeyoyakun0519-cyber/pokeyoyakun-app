@@ -7,8 +7,8 @@ from core.tcg_categories import display_name, normalize_key
 
 
 _APPLICATION_STATUS = re.compile(
-    r"(?:応募|申込|申し込み|抽選)(?:受付|実施|販売|開始|中|あり)|"
-    r"予約(?:受付|開始|中|可能|あり)|受付中"
+    r"(?:応募|申込|申し込み|抽選)(?:情報)?(?:受付|実施|販売|開始|中|あり)|"
+    r"予約(?:情報)?(?:受付|開始|中|可能|あり)|受付中"
 )
 _NON_SPECIFIC_STATUS = {"販売・抽選情報あり", "販売情報あり", "商品掲載あり", "販売予定"}
 

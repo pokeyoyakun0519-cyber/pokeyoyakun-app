@@ -54,6 +54,7 @@ class UiModeTest(unittest.TestCase):
                 window.application_dashboard_button,
                 window.calendar_button,
                 window.notification_center_button,
+                window.email_accounts_button,
                 window.scheduler_button,
             }
             for button in window.navigation_buttons:

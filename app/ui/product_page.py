@@ -15,11 +15,13 @@ from PySide6.QtWidgets import (
 )
 
 from core.log_manager import LogManager
+from core.startup_diagnostics import StartupDiagnostics
+from core.data_pipeline_diagnostics import DataPipelineDiagnostics
 from core.favorites_manager import FavoritesManager
 from core.phase3_dashboard import is_new, product_priority
 from core.product_store import ProductStore
 from core.safe_product_url import can_open_product_url, open_product_url
-from core.tcg_categories import display_name
+from core.tcg_categories import categories, display_name
 from ui.product_detail_dialog import ProductDetailDialog
 from ui.tcg_category_tabs import (
     TcgCategoryTabs,
@@ -288,6 +290,8 @@ class ProductPage(QFrame):
         self.store = ProductStore()
         self.favorites = FavoritesManager(self.store.root)
         self.log_manager = LogManager()
+        self.startup_diagnostics = StartupDiagnostics()
+        self._last_diagnostic_signature = None
 
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(
@@ -358,6 +362,57 @@ class ProductPage(QFrame):
     def reload_saved_products(self) -> None:
         products = self.store.load_products()
         self._all_products = products
+        details = self.store.last_load_diagnostics
+        pipeline = DataPipelineDiagnostics(self.store.root).build(
+            visible_products=products
+        )
+        pipeline_signature = tuple(
+            (
+                item.key,
+                tuple(sorted(
+                    (
+                        key,
+                        tuple(sorted(value.items()))
+                        if isinstance(value, dict)
+                        else value,
+                    )
+                    for key, value in pipeline["by_tcg"][item.key].items()
+                )),
+            )
+            for item in categories()
+        )
+        signature = (
+            details.get("raw_count", 0),
+            details.get("visible_count", 0),
+            tuple(sorted(details.get("per_tcg", {}).items())),
+            pipeline_signature,
+        )
+        if signature != self._last_diagnostic_signature:
+            self._last_diagnostic_signature = signature
+            self.startup_diagnostics.write(
+                "Loaded products: "
+                f'raw={details.get("raw_count", 0)} '
+                f'normalized={details.get("normalized_count", 0)} '
+                f'available={details.get("visible_count", 0)} '
+                f'path={details.get("storage_path", self.store.products_path)}'
+            )
+            tcg_counts = details.get("per_tcg", {})
+            self.startup_diagnostics.write(
+                "Loaded products by TCG: "
+                + " ".join(
+                    f"{item.key}={tcg_counts.get(item.key, 0)}"
+                    for item in categories()
+                )
+            )
+            self.startup_diagnostics.write(
+                "Product UI input: "
+                f'{len(products)} excluded_products='
+                f'{len(details.get("excluded_products", []))} '
+                "excluded_retail_offers="
+                f'{len(details.get("excluded_retail_offers", []))}'
+            )
+            for line in DataPipelineDiagnostics.format_lines(pipeline):
+                self.startup_diagnostics.write(line)
         self.category_tabs.set_counts(category_counts(products))
         self.result_label.setText(
             "保存済みの商品・販売情報を読み込みました。"
@@ -366,17 +421,26 @@ class ProductPage(QFrame):
         self._update_timestamp()
 
     def _apply_category_filter(self, category_key: str) -> None:
+        before_filters = len(self._all_products)
         products = list(filter_items_by_category(self._all_products, category_key))
         if self.favorite_only.isChecked():
             favorite_ids = set(self.favorites.load()["products"])
             products = [item for item in products if str(item.get("product_id", item.get("id", ""))) in favorite_ids]
         products.sort(key=lambda item: (-product_priority(item)["level"], str(item.get("release_date", "9999-99-99")), str(item.get("name", ""))))
+        self.startup_diagnostics.write(
+            "Product UI display: "
+            f"category={category_key} before={before_filters} "
+            f"after_filters={len(products)}"
+        )
         self._show_products(products)
 
     def _show_products(
         self,
         products: list[dict],
     ) -> None:
+        self.startup_diagnostics.write(
+            f"Product UI render: count={len(products)}"
+        )
         container = QWidget()
         list_layout = QVBoxLayout(container)
         list_layout.setContentsMargins(0, 0, 0, 0)

@@ -103,6 +103,7 @@ class MonitorScheduler(QObject):
         self.thread = None
         self.worker = None
         self.running = False
+        self.suspended = False
 
         self.timer.start()
         QTimer.singleShot(1500, self._check_due)
@@ -110,10 +111,22 @@ class MonitorScheduler(QObject):
     def reload_config(self):
         self._check_due()
 
+    def suspend(self):
+        self.suspended = True
+        self.timer.stop()
+
+    def resume(self):
+        self.suspended = False
+        self.timer.start()
+        self._check_due()
+
     def run_now(self):
         self._start_run(self.config_manager.load())
 
     def _check_due(self):
+        if self.suspended:
+            self.status_changed.emit("自動監視：初回商品取得待ち")
+            return
         config = self.config_manager.load()
 
         if not config.get("enabled", False):

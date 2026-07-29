@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ class CandidateManager:
         self.root = root
         self.candidates_path = root / "data" / "candidates.json"
         self.products_path = root / "data" / "products.json"
+        self.last_merge_diagnostics: dict[str, Any] = {}
 
     def load_candidates(self) -> list[dict[str, Any]]:
         return [normalize_record(item)[0] for item in self._load_list(self.candidates_path)]
@@ -58,9 +60,12 @@ class CandidateManager:
         }
 
         added = 0
+        diagnostic_reasons = Counter()
+        detected_by_tcg = Counter()
 
         for product in discovered:
             tcg_key = normalize_key(product.get("tcg_key"), product.get("tcg"))[0]
+            detected_by_tcg[tcg_key] += 1
             name = str(product.get("name", "")).strip()
             release_date = str(
                 product.get("release_date", "")
@@ -79,10 +84,13 @@ class CandidateManager:
             )
 
             if not name:
+                diagnostic_reasons["missing_name"] += 1
                 continue
             if confidence < 0.72:
+                diagnostic_reasons["low_confidence"] += 1
                 continue
             if not self._is_new_release_candidate(product, tcg_key):
+                diagnostic_reasons["not_new_release_product"] += 1
                 continue
 
             official_url = str(product.get("official_url", "")) or source_url
@@ -98,8 +106,10 @@ class CandidateManager:
                 release_date,
             )
             if key in product_keys:
+                diagnostic_reasons["already_product"] += 1
                 continue
             if key in existing_keys:
+                diagnostic_reasons["already_candidate"] += 1
                 self._refresh_existing_candidate(
                     candidates,
                     key,
@@ -150,6 +160,7 @@ class CandidateManager:
             )
             existing_keys.add(key)
             added += 1
+            diagnostic_reasons["added"] += 1
 
         if added:
             candidates.sort(
@@ -165,14 +176,25 @@ class CandidateManager:
             )
 
         self.save_candidates(candidates)
+        self.last_merge_diagnostics = {
+            "detected": len(discovered),
+            "added": added,
+            "detected_by_tcg": dict(detected_by_tcg),
+            "reasons": dict(diagnostic_reasons),
+        }
         try:
             from core.auto_monitor_manager import AutoMonitorManager
             from core.config_manager import ConfigManager
             from core.product_store import ProductStore
 
-            AutoMonitorManager(
+            promotion = AutoMonitorManager(
                 ConfigManager(self.root), ProductStore(self.root)
             ).add_due_candidates(candidates)
+            self.last_merge_diagnostics["promotion"] = {
+                key: value
+                for key, value in promotion.items()
+                if key != "products"
+            }
         except (OSError, ValueError, TypeError):
             # 公式候補の保存は成功扱いとし、自動追加だけ次回起動へ回す。
             pass

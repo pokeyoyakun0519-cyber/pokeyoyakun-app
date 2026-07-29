@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from core.application_dashboard import ApplicationDashboard
 from core.config_manager import ConfigManager
+from core.startup_diagnostics import StartupDiagnostics
 from core.lottery_manager import LotteryManager
 from core.product_store import ProductStore
 from core.safe_product_url import can_open_product_url, open_product_url
@@ -287,6 +288,8 @@ class ApplicationDashboardPage(QFrame):
         self.setObjectName("ContentPanel")
 
         self.dashboard = ApplicationDashboard()
+        self.startup_diagnostics = StartupDiagnostics()
+        self._last_diagnostic_signature = None
         self.store = ProductStore()
         self.config_manager = ConfigManager()
         self.lottery_manager = LotteryManager()
@@ -340,7 +343,10 @@ class ApplicationDashboardPage(QFrame):
 
         self.state_tabs = QTabBar()
         self.state_tabs.setExpanding(False)
-        for state in ("未応募", "応募済み", "本日締切", "結果待ち", "当選", "落選", "終了済み"):
+        for state in (
+            "すべて", "未応募", "応募済み", "本日締切",
+            "結果待ち", "当選", "落選", "終了済み",
+        ):
             index = self.state_tabs.addTab(f"{state} 0")
             self.state_tabs.setTabData(index, state)
         self.state_tabs.currentChanged.connect(self.reload)
@@ -465,13 +471,67 @@ class ApplicationDashboardPage(QFrame):
             ),
             show_ended=self.show_ended.isChecked() or selected_state == "終了済み",
         )
+        diagnostics = data.get("diagnostics", {})
+        diagnostics_by_tcg = data.get("diagnostics_by_tcg", {})
+        signature = (
+            tuple(sorted(diagnostics.items())),
+            tuple(
+                (
+                    item.key,
+                    tuple(sorted(diagnostics_by_tcg.get(item.key, {}).items())),
+                )
+                for item in categories()
+            ),
+            selected_state,
+            str(self.tcg_tabs.tabData(self.tcg_tabs.currentIndex()) or "all"),
+            self.keyword.text(),
+            self.show_ended.isChecked(),
+        )
+        if signature != self._last_diagnostic_signature:
+            self._last_diagnostic_signature = signature
+            exclusion_keys = (
+                "excluded_no_application_evidence",
+                "excluded_ended",
+                "excluded_tcg_filter",
+                "excluded_state_filter",
+                "excluded_keyword",
+            )
+            exclusion_text = " ".join(
+                f"{key}={diagnostics.get(key, 0)}"
+                for key in exclusion_keys
+            )
+            self.startup_diagnostics.write(
+                "Application dashboard: "
+                f'products={diagnostics.get("loaded_products", 0)} '
+                f'sites={diagnostics.get("loaded_sites", 0)} '
+                f'evidence={diagnostics.get("application_evidence", 0)} '
+                f'eligible={diagnostics.get("eligible_rows", 0)} '
+                f'displayed={diagnostics.get("displayed_rows", 0)} '
+                + exclusion_text
+            )
+            for item in categories():
+                values = diagnostics_by_tcg.get(item.key, {})
+                self.startup_diagnostics.write(
+                    f"Application dashboard {item.key}: "
+                    f'products={values.get("loaded_products", 0)} '
+                    f'sites={values.get("loaded_sites", 0)} '
+                    f'evidence={values.get("application_evidence", 0)} '
+                    f'eligible={values.get("eligible_rows", 0)} '
+                    f'displayed={values.get("displayed_rows", 0)} '
+                    f'no_evidence={values.get("excluded_no_application_evidence", 0)} '
+                    f'ended={values.get("excluded_ended", 0)} '
+                    f'tcg_filter={values.get("excluded_tcg_filter", 0)} '
+                    f'state_filter={values.get("excluded_state_filter", 0)} '
+                    f'keyword={values.get("excluded_keyword", 0)}'
+                )
         counts = data["counts"]
         state_counts = data.get("state_counts", {})
 
         self.state_tabs.blockSignals(True)
         for index in range(self.state_tabs.count()):
             state = str(self.state_tabs.tabData(index))
-            self.state_tabs.setTabText(index, f'{state} {state_counts.get(state, 0)}')
+            count = data["total_rows"] if state == "すべて" else state_counts.get(state, 0)
+            self.state_tabs.setTabText(index, f"{state} {count}")
         self.state_tabs.blockSignals(False)
 
         tcg_counts = data["tcg_counts"]

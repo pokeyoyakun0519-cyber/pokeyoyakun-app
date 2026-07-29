@@ -312,6 +312,7 @@ class SourceManager:
         source["last_error_reason"] = ""
         source["detected_products"] = []
         source["official_changes"] = []
+        source["last_candidate_diagnostics"] = {}
 
         try:
             checked = self._fetch_page(source.get("url", ""))
@@ -409,6 +410,9 @@ class SourceManager:
                 source_id=str(source.get("id", "")),
                 source_name=source_name,
                 source_url=source_url,
+            )
+            source["last_candidate_diagnostics"] = dict(
+                self.candidate_manager.last_merge_diagnostics
             )
             source["last_detected_count"] = len(discovered)
             source["last_added_count"] = added_count
