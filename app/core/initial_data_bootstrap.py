@@ -44,11 +44,19 @@ class InitialDataBootstrap:
         self,
         on_official_loaded: Callable[[dict[str, Any]], None] | None = None,
         on_retail_progress: Callable[[dict[str, Any]], None] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         if not self.should_run():
             return {"started": False, "reason": "not_empty_or_disabled"}
+        if cancel_requested is not None and cancel_requested():
+            return {"started": True, "cancelled": True, "phase": "cancelled"}
 
-        sources, changed = self.source_manager.check_all()
+        if cancel_requested is None:
+            sources, changed = self.source_manager.check_all()
+        else:
+            sources, changed = self.source_manager.check_all(
+                cancel_requested=cancel_requested
+            )
         candidates = self.candidate_manager.load_candidates()
         monitored_keys = {
             AutoMonitorManager.product_key(item)
@@ -70,8 +78,14 @@ class InitialDataBootstrap:
             retail_searched_count=0,
         )
         official_result["phase"] = "official"
-        if on_official_loaded is not None:
+        official_result["cancelled"] = bool(
+            cancel_requested is not None and cancel_requested()
+        )
+        if on_official_loaded is not None and not official_result["cancelled"]:
             on_official_loaded(dict(official_result))
+        if official_result["cancelled"]:
+            official_result["phase"] = "cancelled"
+            return official_result
 
         retail_result = (
             self.candidate_auto_search.run_due(
@@ -86,6 +100,7 @@ class InitialDataBootstrap:
                     if on_retail_progress is not None
                     else None
                 ),
+                cancel_requested=cancel_requested,
             )
             if candidate_ids
             else {"searched_count": 0, "new_hit_candidates": []}
@@ -99,7 +114,11 @@ class InitialDataBootstrap:
             candidate_ids=candidate_ids,
             retail_searched_count=int(retail_result.get("searched_count", 0)),
         )
-        result["phase"] = "completed"
+        result["cancelled"] = bool(
+            retail_result.get("cancelled")
+            or (cancel_requested is not None and cancel_requested())
+        )
+        result["phase"] = "cancelled" if result["cancelled"] else "completed"
         return result
 
     @staticmethod

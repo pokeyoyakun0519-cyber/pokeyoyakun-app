@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timedelta
 from email.header import decode_header
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from core.email_account_manager import EmailAccountManager
 from core.gmail_result_history import GmailResultHistory
@@ -357,10 +357,13 @@ class GmailResultService:
 
     def scan_all_enabled(
         self,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> list[dict[str, Any]]:
         all_results: list[dict[str, Any]] = []
 
         for account in self.account_manager.load_accounts():
+            if cancel_requested is not None and cancel_requested():
+                break
             if not account.get("enabled", True):
                 continue
             if account.get("connection_status") != "連携済み":
@@ -385,6 +388,8 @@ class GmailResultService:
                         ),
                     }
                 )
+            if cancel_requested is not None and cancel_requested():
+                break
 
         return self._deduplicate(all_results)
 

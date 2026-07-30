@@ -1,11 +1,13 @@
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
-    QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow,
+    QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow,
     QMessageBox, QPushButton, QScrollArea, QSizePolicy, QToolButton,
     QStackedWidget, QVBoxLayout, QWidget,
 )
@@ -62,12 +64,26 @@ class InitialDataBootstrapWorker(QObject):
     completed = Signal(dict)
     failed = Signal(str)
 
+    def __init__(self):
+        super().__init__()
+        self._cancel_requested = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel_requested.set()
+
+    def is_cancel_requested(self) -> bool:
+        return (
+            self._cancel_requested.is_set()
+            or QThread.currentThread().isInterruptionRequested()
+        )
+
     @Slot()
     def run(self):
         try:
             self.completed.emit(InitialDataBootstrap().run(
                 on_official_loaded=self.official_loaded.emit,
                 on_retail_progress=self.retail_progress.emit,
+                cancel_requested=self.is_cancel_requested,
             ))
         except Exception as error:
             self.failed.emit(str(error))
@@ -75,6 +91,7 @@ class InitialDataBootstrapWorker(QObject):
 
 class MainWindow(QMainWindow):
     SETTINGS_EXECUTABLE = "ポケヨヤ君_設定.exe"
+    SHUTDOWN_WAIT_MS = 5000
 
     def __init__(self):
         super().__init__()
@@ -86,12 +103,20 @@ class MainWindow(QMainWindow):
         self.ui_config_manager = ConfigManager()
         self.ui_mode = self._configured_ui_mode()
         self.monitor_scheduler = MonitorScheduler(self)
+        self.monitor_scheduler.suspend("起動調整中")
         self.tray_controller = None
         self.allow_close = False
+        self._startup_coordination_complete = False
+        self._shutdown_started = False
+        self._shutdown_complete = False
+        self._deferred_quit_requested = False
         self.p2_startup_result = P2StartupCoordinator().run()
         self._build_ui()
         self.monitor_scheduler.run_completed.connect(
             self._refresh_data_pages_after_monitor
+        )
+        self.monitor_scheduler.worker_finished.connect(
+            self._continue_startup_after_monitor
         )
         self._setup_application_assistant()
         self.ui_mode_timer = QTimer(self)
@@ -102,6 +127,16 @@ class MainWindow(QMainWindow):
         self.gmail_setup_dialog = None
         self.initial_data_thread = None
         self.initial_data_worker = None
+        self.shutdown_poll_timer = QTimer(self)
+        self.shutdown_poll_timer.setInterval(100)
+        self.shutdown_poll_timer.timeout.connect(
+            self._complete_deferred_quit_if_ready
+        )
+        application = QApplication.instance()
+        if application is not None:
+            application.aboutToQuit.connect(
+                self.shutdown_background_work
+            )
         QTimer.singleShot(0, self._show_initial_setup_if_needed)
 
     def _build_ui(self):
@@ -148,6 +183,8 @@ class MainWindow(QMainWindow):
         return False
 
     def _show_initial_setup_if_needed(self):
+        if self._shutdown_started:
+            return
         from core.setup_coordinator import SetupCoordinator
 
         coordinator = SetupCoordinator()
@@ -171,8 +208,10 @@ class MainWindow(QMainWindow):
         return self.setup_wizard
 
     def _setup_wizard_completed(self, values):
+        if self._shutdown_started:
+            return
         self._apply_ui_mode(values.get("ui_mode", "simple"))
-        self.monitor_scheduler.reload_config()
+        self.monitor_scheduler.suspend("初回商品取得の確認中")
         self._navigate_to("home")
         if values.get("gmail_setup_now"):
             from ui.setup_wizard import GmailSetupDialog
@@ -182,13 +221,35 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self._start_initial_data_bootstrap)
 
     def _start_initial_data_bootstrap(self):
-        if "--smoke-test" in sys.argv or self.initial_data_thread is not None:
-            return
+        if self._shutdown_started or self._startup_coordination_complete:
+            return False
+        if "--smoke-test" in sys.argv:
+            self._complete_startup_coordination()
+            return False
+        if self.initial_data_thread is not None:
+            StartupDiagnostics().write(
+                "Initial data bootstrap duplicate start was suppressed"
+            )
+            return False
+        if self.monitor_scheduler.running:
+            StartupDiagnostics().write(
+                "Initial data bootstrap was deferred because "
+                "a monitor worker is already running"
+            )
+            return False
+        if not bool(
+            self.ui_config_manager.load().get(
+                "general", {}
+            ).get("setup_completed", False)
+        ):
+            return False
+
+        self.monitor_scheduler.suspend("初回商品取得中")
         bootstrap = InitialDataBootstrap()
         if not bootstrap.should_run():
-            return
+            self._complete_startup_coordination()
+            return False
 
-        self.monitor_scheduler.suspend()
         StartupDiagnostics().write(
             "Initial data bootstrap: empty products/candidates detected; "
             "starting official source retrieval"
@@ -216,20 +277,24 @@ class MainWindow(QMainWindow):
         )
         self.initial_data_worker.completed.connect(self.initial_data_thread.quit)
         self.initial_data_worker.failed.connect(self.initial_data_thread.quit)
-        self.initial_data_thread.finished.connect(
-            self._initial_data_bootstrap_finished
+        self.initial_data_worker.completed.connect(
+            self.initial_data_worker.deleteLater
+        )
+        self.initial_data_worker.failed.connect(
+            self.initial_data_worker.deleteLater
         )
         self.initial_data_thread.finished.connect(
-            self.initial_data_worker.deleteLater
+            self._initial_data_bootstrap_finished
         )
         self.initial_data_thread.finished.connect(
             self.initial_data_thread.deleteLater
         )
         self.initial_data_thread.start()
+        return True
 
     @Slot(dict)
     def _initial_data_bootstrap_official_loaded(self, result):
-        if not result.get("started"):
+        if self._shutdown_started or not result.get("started"):
             return
         per_tcg = result.get("per_tcg", {})
         StartupDiagnostics().write(
@@ -255,6 +320,8 @@ class MainWindow(QMainWindow):
 
     @Slot(dict)
     def _initial_data_bootstrap_retail_progress(self, progress):
+        if self._shutdown_started:
+            return
         searched = int(progress.get("searched", 0))
         total = int(progress.get("total", 0))
         name = str(progress.get("candidate_name", ""))
@@ -271,7 +338,12 @@ class MainWindow(QMainWindow):
 
     @Slot(dict)
     def _initial_data_bootstrap_completed(self, result):
-        if not result.get("started"):
+        if self._shutdown_started or not result.get("started"):
+            return
+        if result.get("cancelled"):
+            StartupDiagnostics().write(
+                "Initial data bootstrap was cancelled at a safe boundary"
+            )
             return
         StartupDiagnostics().write(
             "Initial data bootstrap completed: "
@@ -291,7 +363,7 @@ class MainWindow(QMainWindow):
         StartupDiagnostics().write(
             f"Initial data bootstrap failed: {message}"
         )
-        if hasattr(self, "product_page"):
+        if not self._shutdown_started and hasattr(self, "product_page"):
             self.product_page.result_label.setText(
                 "初回の商品情報取得に失敗しました。"
                 "公式情報ソース画面から再確認できます。"
@@ -301,10 +373,31 @@ class MainWindow(QMainWindow):
     def _initial_data_bootstrap_finished(self):
         self.initial_data_worker = None
         self.initial_data_thread = None
+        if self._shutdown_started:
+            self._complete_deferred_quit_if_ready()
+            return
+        self._complete_startup_coordination()
+
+    def _complete_startup_coordination(self):
+        if self._startup_coordination_complete or self._shutdown_started:
+            return
+        self._startup_coordination_complete = True
         self.monitor_scheduler.resume()
+
+    @Slot()
+    def _continue_startup_after_monitor(self):
+        if (
+            self._shutdown_started
+            or self._startup_coordination_complete
+            or self.initial_data_thread is not None
+        ):
+            return
+        QTimer.singleShot(0, self._start_initial_data_bootstrap)
 
     @Slot(dict)
     def _refresh_data_pages_after_monitor(self, _result):
+        if self._shutdown_started:
+            return
         self.product_page.reload_saved_products()
         self.application_dashboard_page.reload()
         self.candidates_page.reload_candidates()
@@ -684,6 +777,9 @@ class MainWindow(QMainWindow):
         self.backup_page = BackupPage()
         self.resident_page = ResidentPage()
         self.update_page = self._create_update_page()
+        self.update_page.set_quit_callback(
+            self.request_application_quit
+        )
         self.history_page = HistoryPage()
         self.self_test_page = SelfTestPage()
         self.regression_page = RegressionPage()
@@ -843,6 +939,8 @@ class MainWindow(QMainWindow):
         self.application_assistant_timer.start()
 
     def _check_application_assistant(self):
+        if self._shutdown_started:
+            return
         try:
             products = self.application_store.load_products()
             self.application_change_tracker.compare_and_update(products)
@@ -893,4 +991,118 @@ class MainWindow(QMainWindow):
             event.ignore()
             self.tray_controller.hide_window()
             return
-        event.accept()
+        event.ignore()
+        self.request_application_quit()
+
+    def request_application_quit(self):
+        if self._shutdown_complete:
+            application = QApplication.instance()
+            if application is not None:
+                application.quit()
+            return
+        self.allow_close = True
+        if self.tray_controller is not None:
+            self.tray_controller.tray.hide()
+        stopped = self.shutdown_background_work()
+        if stopped:
+            self._shutdown_complete = True
+            application = QApplication.instance()
+            if application is not None:
+                application.quit()
+            return
+        self._deferred_quit_requested = True
+        self.hide()
+        if not self.shutdown_poll_timer.isActive():
+            self.shutdown_poll_timer.start()
+
+    @Slot()
+    def shutdown_background_work(self) -> bool:
+        if self._shutdown_complete:
+            return True
+        self._shutdown_started = True
+        self.ui_mode_timer.stop()
+        self.application_assistant_timer.stop()
+        self.monitor_scheduler.request_shutdown()
+        self.candidates_page.request_shutdown()
+        self.update_page.request_shutdown()
+
+        if self.initial_data_worker is not None:
+            self.initial_data_worker.cancel()
+        if (
+            self.initial_data_thread is not None
+            and self.initial_data_thread.isRunning()
+        ):
+            self.initial_data_thread.requestInterruption()
+            self.initial_data_thread.quit()
+
+        deadline = time.monotonic() + (self.SHUTDOWN_WAIT_MS / 1000)
+        initial_stopped = self._wait_for_initial_data_thread(
+            self._remaining_wait_ms(deadline)
+        )
+        monitor_stopped = self.monitor_scheduler.wait_for_shutdown(
+            self._remaining_wait_ms(deadline)
+        )
+        candidate_search_stopped = self.candidates_page.wait_for_shutdown(
+            self._remaining_wait_ms(deadline)
+        )
+        update_stopped = self.update_page.wait_for_shutdown(
+            self._remaining_wait_ms(deadline)
+        )
+        stopped = (
+            initial_stopped
+            and monitor_stopped
+            and candidate_search_stopped
+            and update_stopped
+        )
+        if not stopped:
+            StartupDiagnostics().write(
+                "Background shutdown exceeded the bounded wait. "
+                "The app will remain alive without starting new work "
+                "until workers reach a safe boundary."
+            )
+        return stopped
+
+    def _wait_for_initial_data_thread(self, timeout_ms: int) -> bool:
+        thread = self.initial_data_thread
+        if thread is None or not thread.isRunning():
+            return True
+        stopped = thread.wait(max(0, min(int(timeout_ms), self.SHUTDOWN_WAIT_MS)))
+        if not stopped:
+            StartupDiagnostics().write(
+                "Initial data bootstrap exceeded the shutdown wait limit; "
+                "forced termination was not used"
+            )
+        return bool(stopped)
+
+    @staticmethod
+    def _remaining_wait_ms(deadline: float) -> int:
+        return max(0, int((deadline - time.monotonic()) * 1000))
+
+    def _background_threads_stopped(self) -> bool:
+        initial_stopped = (
+            self.initial_data_thread is None
+            or not self.initial_data_thread.isRunning()
+        )
+        monitor_thread = self.monitor_scheduler.thread
+        monitor_stopped = (
+            monitor_thread is None or not monitor_thread.isRunning()
+        )
+        return (
+            initial_stopped
+            and monitor_stopped
+            and self.candidates_page.is_shutdown_complete()
+            and self.update_page.is_shutdown_complete()
+        )
+
+    @Slot()
+    def _complete_deferred_quit_if_ready(self):
+        if (
+            not self._deferred_quit_requested
+            or not self._background_threads_stopped()
+        ):
+            return
+        self.shutdown_poll_timer.stop()
+        self._shutdown_complete = True
+        application = QApplication.instance()
+        if application is not None:
+            application.quit()

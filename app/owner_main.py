@@ -69,7 +69,7 @@ def main():
             window.show()
             app.processEvents()
             diagnostics.write("Owner Editionスモークテスト: メイン画面生成成功")
-            QTimer.singleShot(1200, app.quit)
+            QTimer.singleShot(1200, window.request_application_quit)
         elif start_minimized:
             window.hide()
         else:

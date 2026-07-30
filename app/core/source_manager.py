@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from html import unescape
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 from core.official_diff_tracker import OfficialDiffTracker
@@ -257,11 +257,14 @@ class SourceManager:
 
     def check_all(
         self,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         sources = self.load_sources()
         changed_sources = []
 
         for source in sources:
+            if cancel_requested is not None and cancel_requested():
+                break
             if not source.get("enabled", True):
                 source["last_status"] = "無効"
                 source["check_state"] = "unchecked"
@@ -269,6 +272,8 @@ class SourceManager:
                 continue
             if self._check_source_record(source):
                 changed_sources.append(source.copy())
+            if cancel_requested is not None and cancel_requested():
+                break
 
         self.save_sources(sources)
         return sources, changed_sources

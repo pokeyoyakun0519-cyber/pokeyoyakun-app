@@ -181,7 +181,7 @@ def main():
             )
             QTimer.singleShot(
                 1200,
-                app.quit,
+                window.request_application_quit,
             )
         elif start_minimized:
             window.hide()

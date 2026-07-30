@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject
 from PySide6.QtGui import QAction, QIcon
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 from core.behavior_config import BehaviorConfig
 from core.runtime_paths import bundled_root
 from core.safe_product_url import can_open_product_url, open_product_url
@@ -59,7 +59,7 @@ class TrayController(QObject):
     def quit_application(self):
         self.window.allow_close = True
         self.tray.hide()
-        QApplication.quit()
+        self.window.request_application_quit()
 
     def _activated(self, reason):
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):

@@ -15,12 +15,17 @@ class CandidateAutoSearch:
         interval_minutes: int = 30,
         candidate_ids: set[str] | None = None,
         progress_callback: Callable[[dict[str, Any], int], None] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         items = self.candidates.load_candidates()
         searched = 0
         new_hit_candidates = []
 
+        cancelled = False
         for candidate in items:
+            if cancel_requested is not None and cancel_requested():
+                cancelled = True
+                break
             if (
                 candidate_ids is not None
                 and str(candidate.get("id", "")) not in candidate_ids
@@ -52,6 +57,9 @@ class CandidateAutoSearch:
             searched += 1
             if progress_callback is not None:
                 progress_callback(candidate, searched)
+            if cancel_requested is not None and cancel_requested():
+                cancelled = True
+                break
 
             new_hits = [
                 hit
@@ -73,6 +81,7 @@ class CandidateAutoSearch:
         return {
             "searched_count": searched,
             "new_hit_candidates": new_hit_candidates,
+            "cancelled": cancelled,
         }
 
     @staticmethod
