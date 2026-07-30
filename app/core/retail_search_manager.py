@@ -11,6 +11,7 @@ from typing import Any
 from core.application_period import ApplicationPeriodParser
 from core.application_site import normalize_application_site
 from core.bushiroad_store_parser import BushiroadStoreParser
+from core.card_labo_parser import CardLaboParser
 from core.hobby_station_parser import HobbyStationParser
 from core.konami_style_parser import KonamiStyleParser
 from urllib.parse import urljoin, urlparse
@@ -104,6 +105,7 @@ class RetailSearchManager:
     def __init__(self):
         self.price_policy = RetailPricePolicy()
         self.bushiroad_store = BushiroadStoreParser()
+        self.card_labo = CardLaboParser()
         self.hobby_station = HobbyStationParser()
         self.konami_style = KonamiStyleParser()
         self.store_candidates = StoreCandidateManager()
@@ -155,7 +157,11 @@ class RetailSearchManager:
             plugin_id = str(plugin.get("id", ""))
             if (
                 plugin.get("mode") == "dedicated"
-                and plugin_id not in {"hobby_station", "konami_style"}
+                and plugin_id not in {
+                    "card_labo",
+                    "hobby_station",
+                    "konami_style",
+                }
             ):
                 continue
             searched_stores.add(str(plugin.get("id", plugin.get("name", ""))))
@@ -163,6 +169,8 @@ class RetailSearchManager:
             try:
                 if plugin_id == "bushiroad_store":
                     found, message = self.bushiroad_store.search_candidate(candidate)
+                elif plugin_id == "card_labo":
+                    found, message = self.card_labo.search_candidate(candidate)
                 elif plugin_id == "hobby_station":
                     found, message = self.hobby_station.search_candidate(candidate)
                 elif plugin_id == "konami_style":
