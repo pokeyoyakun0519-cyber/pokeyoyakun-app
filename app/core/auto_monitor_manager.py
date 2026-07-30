@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from core.config_manager import ConfigManager
+from core.product_master import ProductMasterManager
 from core.product_store import ProductStore
 from core.tcg_categories import display_name, normalize_key
 
@@ -42,9 +43,11 @@ class AutoMonitorManager:
         products = self.store._load_product_file()
         state = self.store._load_user_state()
         excluded = set(state.get("auto_monitor_excluded_keys", []))
-        existing = {self.product_key(item) for item in products}
         added_items: list[dict[str, Any]] = []
+        updated_items: list[dict[str, Any]] = []
         reasons_by_tcg: dict[str, Counter] = {}
+        master = ProductMasterManager(self.store.root)
+        master.last_conflicts = []
 
         for candidate in candidates:
             tcg = normalize_key(candidate.get("tcg_key"), candidate.get("tcg"))[0]
@@ -53,36 +56,73 @@ class AutoMonitorManager:
             if not item:
                 reasons[reason] += 1
                 continue
-            key = self.product_key(item)
-            if key in existing:
-                reasons["already_saved"] += 1
-                continue
-            if key in excluded:
+            if self.is_user_excluded(item, excluded):
                 reasons["user_excluded"] += 1
                 continue
+            match_index, match_method = master.find_match(products, item)
+            if match_index is not None:
+                merged, changes = master.reconcile_product(
+                    products[match_index], item
+                )
+                products[match_index] = merged
+                if "release_date" in changes:
+                    updated_items.append(merged)
+                    reasons["release_date_updated"] += 1
+                elif changes:
+                    updated_items.append(merged)
+                    reasons["metadata_updated"] += 1
+                else:
+                    reasons["already_saved"] += 1
+                continue
+            if match_method.startswith("ambiguous_"):
+                reasons["ambiguous_product"] += 1
             products.append(item)
-            existing.add(key)
             added_items.append(item)
             reasons["added"] += 1
 
-        if added_items:
+        if added_items or updated_items:
             products.sort(key=lambda item: (str(item.get("release_date", "")), str(item.get("name", ""))))
             self.store._save_product_file(products)
+        master.log_conflicts()
         return {
             "added": len(added_items),
-            "skipped": len(candidates) - len(added_items),
+            "updated": len(updated_items),
+            "skipped": len(candidates) - len(added_items) - len(updated_items),
             "products": added_items,
+            "updated_products": updated_items,
             "days": days,
             "reasons_by_tcg": {
                 key: dict(value) for key, value in reasons_by_tcg.items()
             },
+            "release_date_conflicts": list(master.last_conflicts),
         }
 
     @classmethod
     def product_key(cls, item: dict[str, Any]) -> str:
+        return ProductMasterManager.identity_key(item)
+
+    @classmethod
+    def legacy_product_key(cls, item: dict[str, Any]) -> str:
         tcg = normalize_key(item.get("tcg_key"), item.get("tcg"))[0]
-        name = re.sub(r"[\s「」『』・･_\-&＆]", "", str(item.get("name", ""))).casefold()
+        name = re.sub(
+            r"[\s「」『』・･_\-&＆]",
+            "",
+            str(item.get("name", "")),
+        ).casefold()
         return f"{tcg}|{name}|{str(item.get('release_date', ''))}"
+
+    @classmethod
+    def is_user_excluded(
+        cls,
+        item: dict[str, Any],
+        excluded: set[str],
+    ) -> bool:
+        stable = cls.product_key(item)
+        legacy = cls.legacy_product_key(item)
+        if stable in excluded or legacy in excluded:
+            return True
+        legacy_prefix = legacy.rsplit("|", 1)[0] + "|"
+        return any(str(value).startswith(legacy_prefix) for value in excluded)
 
     def _build_product(
         self, candidate: dict[str, Any], current: date, days: int
@@ -123,6 +163,21 @@ class AutoMonitorManager:
             "name": name,
             "release_date": release.isoformat(),
             "product_kind": kind,
+            "product_code": str(candidate.get("product_code", "")),
+            "jan_code": str(
+                candidate.get("jan_code") or candidate.get("jan") or ""
+            ),
+            "official_product_id": str(
+                candidate.get("official_product_id")
+                or candidate.get("official_id")
+                or ""
+            ),
+            "manufacturer": str(
+                candidate.get("manufacturer")
+                or candidate.get("maker")
+                or candidate.get("brand")
+                or ""
+            ),
             "official_url": url,
             "source_name": str(candidate.get("source_name", "公式情報ソース")),
             "source_type": "auto_monitor",

@@ -24,6 +24,7 @@ class ProductStore:
         self.last_excluded_retail_offers: list[dict[str, str]] = []
         self.last_excluded_products: list[dict[str, str]] = []
         self.last_load_diagnostics: dict[str, Any] = {}
+        self.last_merge_diagnostics: dict[str, Any] = {}
 
     def load_products(self) -> list[dict[str, Any]]:
         raw_products = self._load_product_file()
@@ -99,31 +100,47 @@ class ProductStore:
     ) -> tuple[list[dict[str, Any]], int]:
         products = self._load_product_file()
         added = 0
-
-        existing_ids = {
-            str(product.get("id", ""))
-            for product in products
-        }
+        updated = 0
+        unchanged = 0
+        ambiguous = 0
         from core.product_master import ProductMasterManager
 
-        existing_keys = {ProductMasterManager.identity_key(product) for product in products}
+        master = ProductMasterManager(self.root)
+        master.last_conflicts = []
 
-        for product in discovered:
-            product_id = str(product.get("id", ""))
-            key = ProductMasterManager.identity_key(product)
+        for incoming in discovered:
+            product_id = str(incoming.get("product_id") or incoming.get("id") or "")
+            id_matches = [
+                index
+                for index, item in enumerate(products)
+                if product_id
+                and product_id
+                == str(item.get("product_id") or item.get("id") or "")
+            ]
+            if len(id_matches) == 1:
+                match_index, match_method = id_matches[0], "product_id"
+            elif len(id_matches) > 1:
+                match_index, match_method = None, "ambiguous_product_id"
+            else:
+                match_index, match_method = master.find_match(products, incoming)
 
-            if (
-                product_id in existing_ids
-                or key in existing_keys
-            ):
+            if match_index is not None:
+                merged, changes = master.reconcile_product(
+                    products[match_index], incoming
+                )
+                products[match_index] = merged
+                if changes:
+                    updated += 1
+                else:
+                    unchanged += 1
                 continue
 
-            products.append(product)
-            existing_ids.add(product_id)
-            existing_keys.add(key)
+            if match_method.startswith("ambiguous_"):
+                ambiguous += 1
+            products.append(dict(incoming))
             added += 1
 
-        if added:
+        if added or updated:
             products.sort(
                 key=lambda item: (
                     str(
@@ -136,6 +153,25 @@ class ProductStore:
                 )
             )
             self._save_product_file(products)
+
+        self.last_merge_diagnostics = {
+            "discovered": len(discovered),
+            "added": added,
+            "updated": updated,
+            "unchanged": unchanged,
+            "ambiguous": ambiguous,
+            "release_date_conflicts": list(master.last_conflicts),
+        }
+        if updated or master.last_conflicts:
+            from core.log_manager import LogManager
+
+            logger = LogManager(self.root)
+            if updated:
+                logger.write(
+                    f"商品情報更新: 発見={len(discovered)} 更新={updated} "
+                    f"追加={added} 変更なし={unchanged}"
+                )
+            master.log_conflicts()
 
         return (
             self.load_products(),

@@ -8,6 +8,7 @@ from typing import Any
 
 from core.application_period import ApplicationPeriodParser
 from core.application_site import normalize_application_site
+from core.product_master import ProductMasterManager
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
 
@@ -40,24 +41,9 @@ class CandidateManager:
         source_url: str,
     ) -> tuple[list[dict[str, Any]], int]:
         candidates = self.load_candidates()
-        existing_keys = {
-            (
-                normalize_key(item.get("tcg_key"), item.get("tcg"))[0],
-                self._normalize_name(
-                    str(item.get("name", ""))
-                ),
-                str(item.get("release_date", "")),
-            )
-            for item in candidates
-        }
-        product_keys = {
-            (
-                normalize_key(item.get("tcg_key"), item.get("tcg"))[0],
-                self._normalize_name(str(item.get("name", ""))),
-                str(item.get("release_date", "")),
-            )
-            for item in self._load_list(self.products_path)
-        }
+        products = self._load_list(self.products_path)
+        identity = ProductMasterManager(self.root)
+        products_changed = False
 
         added = 0
         diagnostic_reasons = Counter()
@@ -100,24 +86,51 @@ class CandidateManager:
                     sites[0].get("url", source_url)
                 )
 
-            key = (
-                tcg_key,
-                self._normalize_name(name),
-                release_date,
+            observed = dict(product)
+            observed["tcg_key"] = tcg_key
+            observed["official_url"] = official_url
+            observed["source_url"] = source_url
+            observed["source_name"] = source_name
+            observed.setdefault("source_type", "official_source")
+
+            product_index, product_match = identity.find_match(
+                products, observed
             )
-            if key in product_keys:
-                diagnostic_reasons["already_product"] += 1
-                continue
-            if key in existing_keys:
-                diagnostic_reasons["already_candidate"] += 1
-                self._refresh_existing_candidate(
-                    candidates,
-                    key,
-                    official_url=official_url,
-                    source_name=source_name,
-                    source_id=source_id,
+            if product_index is not None:
+                merged, changes = identity.reconcile_product(
+                    products[product_index], observed
                 )
+                products[product_index] = merged
+                if changes:
+                    products_changed = True
+                    diagnostic_reasons["existing_product_updated"] += 1
+                else:
+                    diagnostic_reasons["already_product"] += 1
                 continue
+            if product_match.startswith("ambiguous_"):
+                diagnostic_reasons["ambiguous_product"] += 1
+
+            candidate_index, candidate_match = identity.find_match(
+                candidates, observed
+            )
+            if candidate_index is not None:
+                merged, changes = identity.reconcile_product(
+                    candidates[candidate_index], observed
+                )
+                merged["official_url"] = official_url or merged.get(
+                    "official_url", ""
+                )
+                merged["source_name"] = source_name or merged.get(
+                    "source_name", ""
+                )
+                merged["source_id"] = source_id or merged.get("source_id", "")
+                candidates[candidate_index] = merged
+                diagnostic_reasons[
+                    "existing_candidate_updated" if changes else "already_candidate"
+                ] += 1
+                continue
+            if candidate_match.startswith("ambiguous_"):
+                diagnostic_reasons["ambiguous_candidate"] += 1
 
             digest = hashlib.sha256(
                 (
@@ -158,7 +171,6 @@ class CandidateManager:
                     ),
                 }
             )
-            existing_keys.add(key)
             added += 1
             diagnostic_reasons["added"] += 1
 
@@ -176,6 +188,9 @@ class CandidateManager:
             )
 
         self.save_candidates(candidates)
+        if products_changed:
+            self._save_list(self.products_path, products)
+        identity.log_conflicts()
         self.last_merge_diagnostics = {
             "detected": len(discovered),
             "added": added,
