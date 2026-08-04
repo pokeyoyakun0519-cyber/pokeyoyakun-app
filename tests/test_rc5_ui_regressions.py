@@ -396,6 +396,7 @@ class Rc5UiRegressionTest(unittest.TestCase):
                         "site_key": "apply",
                         "url": "https://example.com/apply",
                         "application_url": "https://example.com/apply",
+                        "status": "抽選受付中",
                     }],
                 },
                 {
