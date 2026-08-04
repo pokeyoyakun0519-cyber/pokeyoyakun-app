@@ -40,12 +40,15 @@ class ProductMasterManager:
         r"(?:\s*\([^)]*\))?)\s*$",
         re.IGNORECASE,
     )
-    _IDENTIFIER_FIELDS = (
-        "product_code",
-        "jan_code",
-        "jan",
-        "official_product_id",
-        "official_id",
+    _IDENTIFIER_ALIASES = (
+        ("official_product_id", ("official_product_id", "official_id")),
+        ("product_code", ("product_code",)),
+        ("jan", ("jan", "jan_code")),
+    )
+    _IDENTIFIER_FIELDS = tuple(
+        field
+        for _canonical, aliases in _IDENTIFIER_ALIASES
+        for field in aliases
     )
     _BRAND_FIELDS = ("manufacturer", "maker", "brand")
     _UNKNOWN_KINDS = {"", "その他", "不明", "unknown", "none"}
@@ -94,10 +97,12 @@ class ProductMasterManager:
     @classmethod
     def identifiers(cls, product: dict[str, Any]) -> list[tuple[str, str]]:
         values: list[tuple[str, str]] = []
-        for field in cls._IDENTIFIER_FIELDS:
-            value = cls._normalize_identifier(product.get(field))
-            if value:
-                values.append((field, value))
+        for canonical, aliases in cls._IDENTIFIER_ALIASES:
+            for field in aliases:
+                value = cls._normalize_identifier(product.get(field))
+                if value:
+                    values.append((canonical, value))
+                    break
         return values
 
     @classmethod
@@ -122,18 +127,33 @@ class ProductMasterManager:
             and not cls._has_kind_conflict(item, incoming)
             and not cls._has_brand_conflict(item, incoming)
         ]
-        incoming_ids = set(cls.identifiers(incoming))
+        incoming_ids = dict(cls.identifiers(incoming))
         if incoming_ids:
             matches = [
                 index
                 for index, item in compatible
-                if incoming_ids
-                & set(cls.identifiers(item))
+                if not cls.has_identifier_conflict(item, incoming)
+                and any(
+                    dict(cls.identifiers(item)).get(field) == value
+                    for field, value in incoming_ids.items()
+                )
             ]
             if len(matches) == 1:
                 return matches[0], "identifier"
             if len(matches) > 1:
                 return None, "ambiguous_identifier"
+            if any(
+                cls.has_identifier_conflict(item, incoming)
+                for _index, item in compatible
+            ):
+                return None, "identifier_conflict"
+            return None, "no_match"
+
+        compatible = [
+            (index, item)
+            for index, item in compatible
+            if not cls.identifiers(item)
+        ]
 
         exact_name = cls.normalize_name(
             incoming.get("canonical_name") or incoming.get("name")
@@ -490,6 +510,17 @@ class ProductMasterManager:
         left_brand = cls._brand(left)
         right_brand = cls._brand(right)
         return bool(left_brand and right_brand and left_brand != right_brand)
+
+    @classmethod
+    def has_identifier_conflict(
+        cls, left: dict[str, Any], right: dict[str, Any]
+    ) -> bool:
+        left_ids = dict(cls.identifiers(left))
+        right_ids = dict(cls.identifiers(right))
+        return any(
+            left_ids[field] != right_ids[field]
+            for field in left_ids.keys() & right_ids.keys()
+        )
 
     @staticmethod
     def _kinds_compatible_for_strong_match(left: str, right: str) -> bool:

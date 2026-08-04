@@ -131,7 +131,12 @@ class ProductStore:
                 == str(item.get("product_id") or item.get("id") or "")
             ]
             if len(id_matches) == 1:
-                match_index, match_method = id_matches[0], "product_id"
+                if master.has_identifier_conflict(
+                    products[id_matches[0]], incoming
+                ):
+                    match_index, match_method = None, "identifier_conflict"
+                else:
+                    match_index, match_method = id_matches[0], "product_id"
             elif len(id_matches) > 1:
                 match_index, match_method = None, "ambiguous_product_id"
             else:
