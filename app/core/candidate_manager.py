@@ -8,6 +8,14 @@ from typing import Any
 
 from core.application_period import ApplicationPeriodParser
 from core.application_site import normalize_application_site
+from core.json_file_state import (
+    CANDIDATE_LIST_FIELDS,
+    PRODUCT_LIST_FIELDS,
+    JsonFileResult,
+    ensure_json_writable,
+    inspect_json_file,
+    restore_json_backup,
+)
 from core.product_master import ProductMasterManager
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
@@ -22,9 +30,26 @@ class CandidateManager:
         self.candidates_path = root / "data" / "candidates.json"
         self.products_path = root / "data" / "products.json"
         self.last_merge_diagnostics: dict[str, Any] = {}
+        self.last_candidate_file_result: JsonFileResult | None = None
 
     def load_candidates(self) -> list[dict[str, Any]]:
-        return [normalize_record(item)[0] for item in self._load_list(self.candidates_path)]
+        result = self.inspect_candidates_file()
+        self.last_candidate_file_result = result
+        return [normalize_record(item)[0] for item in (result.data or [])]
+
+    def inspect_candidates_file(self) -> JsonFileResult:
+        return inspect_json_file(
+            self.candidates_path,
+            list,
+            nullable_list_fields=CANDIDATE_LIST_FIELDS,
+        )
+
+    def restore_candidates_backup(self) -> bool:
+        return restore_json_backup(
+            self.candidates_path,
+            list,
+            nullable_list_fields=CANDIDATE_LIST_FIELDS,
+        )
 
     def save_candidates(
         self,
@@ -658,27 +683,35 @@ class CandidateManager:
     def _load_list(
         path: Path,
     ) -> list[dict[str, Any]]:
-        if not path.exists():
-            return []
-
-        try:
-            with path.open(
-                "r",
-                encoding="utf-8",
-            ) as file:
-                data = json.load(file)
-            return data if isinstance(data, list) else []
-        except (
-            OSError,
-            json.JSONDecodeError,
-        ):
-            return []
+        fields = (
+            CANDIDATE_LIST_FIELDS
+            if path.name == "candidates.json"
+            else PRODUCT_LIST_FIELDS
+        )
+        return (
+            inspect_json_file(
+                path,
+                list,
+                nullable_list_fields=fields,
+            ).data
+            or []
+        )
 
     @staticmethod
     def _save_list(
         path: Path,
         data: list[dict[str, Any]],
     ) -> None:
+        fields = (
+            CANDIDATE_LIST_FIELDS
+            if path.name == "candidates.json"
+            else PRODUCT_LIST_FIELDS
+        )
+        ensure_json_writable(
+            path,
+            list,
+            nullable_list_fields=fields,
+        )
         path.parent.mkdir(
             parents=True,
             exist_ok=True,

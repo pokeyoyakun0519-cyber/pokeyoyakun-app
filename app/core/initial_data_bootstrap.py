@@ -8,8 +8,10 @@ from core.candidate_auto_search import CandidateAutoSearch
 from core.auto_monitor_manager import AutoMonitorManager
 from core.config_manager import ConfigManager
 from core.product_store import ProductStore
+from core.product_master import ProductMasterManager
 from core.source_manager import SourceManager
 from core.tcg_categories import normalize_key
+from core.json_file_state import CORRUPT
 
 
 class InitialDataBootstrap:
@@ -29,16 +31,33 @@ class InitialDataBootstrap:
         self.candidate_manager = candidate_manager or CandidateManager()
         self.source_manager = source_manager or SourceManager()
         self.candidate_auto_search = candidate_auto_search or CandidateAutoSearch()
+        self.blocking_json_files: list[str] = []
 
     def should_run(self) -> bool:
+        product_result = self.product_store.inspect_product_file()
+        candidate_result = self.candidate_manager.inspect_candidates_file()
+        master_result = ProductMasterManager(self.product_store.root).inspect_file()
+        source_result = self.source_manager.inspect_sources_file()
+        self.blocking_json_files = [
+            str(result.path)
+            for result in (
+                product_result,
+                candidate_result,
+                master_result,
+                source_result,
+            )
+            if result.state == CORRUPT
+        ]
+        if self.blocking_json_files:
+            return False
         general = self.config_manager.load().get("general", {})
         if not bool(general.get("setup_completed", False)):
             return False
         if not bool(general.get("new_product_auto_fetch", True)):
             return False
-        if self.product_store._load_product_file():
+        if product_result.data:
             return False
-        return not bool(self.candidate_manager.load_candidates())
+        return not bool(candidate_result.data)
 
     def run(
         self,
@@ -47,7 +66,11 @@ class InitialDataBootstrap:
         cancel_requested: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         if not self.should_run():
-            return {"started": False, "reason": "not_empty_or_disabled"}
+            return {
+                "started": False,
+                "reason": "corrupt_json" if self.blocking_json_files else "not_empty_or_disabled",
+                "corrupt_files": list(self.blocking_json_files),
+            }
         if cancel_requested is not None and cancel_requested():
             return {"started": True, "cancelled": True, "phase": "cancelled"}
 

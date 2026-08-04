@@ -3,6 +3,15 @@ from pathlib import Path
 
 from core.runtime_paths import app_root
 from core.user_data_migration import UserDataMigration
+from core.json_file_state import (
+    CORRUPT,
+    CANDIDATE_LIST_FIELDS,
+    MISSING,
+    PRODUCT_LIST_FIELDS,
+    SOURCE_LIST_FIELDS,
+    JsonFileResult,
+    inspect_json_file,
+)
 
 
 class StartupCheck:
@@ -66,11 +75,13 @@ class StartupCheck:
         },
     }
 
-    def __init__(self):
-        self.root = app_root()
+    def __init__(self, root: Path | None = None):
+        self.root = Path(root) if root is not None else app_root()
+        self.json_issues: list[JsonFileResult] = []
 
     def run(self) -> list[str]:
         messages = []
+        self.json_issues = []
         messages.extend(UserDataMigration().run())
 
         for folder_name in self.REQUIRED_FOLDERS:
@@ -83,24 +94,38 @@ class StartupCheck:
             path = self.root / relative_path
             path.parent.mkdir(parents=True, exist_ok=True)
 
-            if not path.exists():
+            if relative_path == "data/products.json":
+                nullable_fields = PRODUCT_LIST_FIELDS
+            elif relative_path == "data/candidates.json":
+                nullable_fields = CANDIDATE_LIST_FIELDS
+            elif relative_path == "config/sources.json":
+                nullable_fields = SOURCE_LIST_FIELDS
+            else:
+                nullable_fields = ()
+            result = inspect_json_file(
+                path,
+                type(default_value),
+                nullable_list_fields=nullable_fields,
+            )
+            if result.state == MISSING:
                 self._write_json(path, default_value)
                 messages.append(f"{relative_path}を作成")
                 continue
+            if result.state == CORRUPT:
+                self.json_issues.append(result)
+                recovery = "（バックアップから復元可能）" if result.recoverable else ""
+                messages.append(f"{relative_path}が破損{recovery}")
 
-            try:
-                json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                broken_path = path.with_suffix(path.suffix + ".broken")
-                try:
-                    if broken_path.exists():
-                        broken_path.unlink()
-                    path.replace(broken_path)
-                except OSError:
-                    pass
-
-                self._write_json(path, default_value)
-                messages.append(f"{relative_path}を破損から復旧")
+        master_path = self.root / "data" / "product_master.json"
+        master_result = inspect_json_file(
+            master_path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
+        if master_result.state == CORRUPT:
+            self.json_issues.append(master_result)
+            recovery = "（バックアップから復元可能）" if master_result.recoverable else ""
+            messages.append(f"data/product_master.jsonが破損{recovery}")
 
         return messages
 

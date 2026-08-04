@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 
 from core.candidate_auto_search import CandidateAutoSearch
+from core.candidate_manager import CandidateManager
+from core.json_file_state import CORRUPT
 from core.error_throttle import ErrorThrottle
 from core.external_notification_config import ExternalNotificationConfig
 from core.external_notifier import ExternalNotifier
@@ -12,6 +14,7 @@ from core.log_manager import LogManager
 from core.lottery_manager import LotteryManager
 from core.notification_store import NotificationStore
 from core.product_store import ProductStore
+from core.product_master import ProductMasterManager
 from core.scheduler_config import SchedulerConfig
 from core.source_manager import SourceManager
 
@@ -230,6 +233,22 @@ class MonitorScheduler(QObject):
             self.log_manager.write(
                 "自動監視ワーカーの二重起動を抑止しました"
             )
+            return
+
+        blocking = [
+            result
+            for result in (
+                ProductStore().inspect_product_file(),
+                CandidateManager().inspect_candidates_file(),
+                ProductMasterManager().inspect_file(),
+                SourceManager().inspect_sources_file(),
+            )
+            if result.state == CORRUPT
+        ]
+        if blocking:
+            names = ", ".join(result.path.name for result in blocking)
+            self.status_changed.emit("自動監視：破損JSONの復元待ち")
+            self.log_manager.write(f"自動監視開始を抑止: 破損JSON {names}")
             return
 
         check_sources = bool(config.get("check_sources", True))

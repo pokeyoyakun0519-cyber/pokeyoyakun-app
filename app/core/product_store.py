@@ -8,6 +8,14 @@ from typing import Any
 
 from core.plugin_manager import PluginManager
 from core.application_site import normalize_application_site
+from core.json_file_state import (
+    CORRUPT,
+    PRODUCT_LIST_FIELDS,
+    JsonFileResult,
+    ensure_json_writable,
+    inspect_json_file,
+    restore_json_backup,
+)
 from core.retail_price_policy import RetailPricePolicy
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
@@ -25,9 +33,14 @@ class ProductStore:
         self.last_excluded_products: list[dict[str, str]] = []
         self.last_load_diagnostics: dict[str, Any] = {}
         self.last_merge_diagnostics: dict[str, Any] = {}
+        self.last_product_file_result: JsonFileResult | None = None
 
     def load_products(self) -> list[dict[str, Any]]:
-        raw_products = self._load_product_file()
+        result = self.inspect_product_file()
+        self.last_product_file_result = result
+        if result.state == CORRUPT:
+            return []
+        raw_products = result.data or []
         products = [normalize_record(item)[0] for item in raw_products]
         from core.activity_timeline import ActivityTimeline
         from core.product_master import ProductMasterManager
@@ -305,26 +318,33 @@ class ProductStore:
     def _load_product_file(
         self,
     ) -> list[dict[str, Any]]:
-        if not self.products_path.exists():
-            return []
+        result = self.inspect_product_file()
+        self.last_product_file_result = result
+        return result.data or []
 
-        try:
-            with self.products_path.open(
-                "r",
-                encoding="utf-8",
-            ) as file:
-                data = json.load(file)
-            return data if isinstance(data, list) else []
-        except (
-            json.JSONDecodeError,
-            OSError,
-        ):
-            return []
+    def inspect_product_file(self) -> JsonFileResult:
+        return inspect_json_file(
+            self.products_path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
+
+    def restore_products_backup(self) -> bool:
+        return restore_json_backup(
+            self.products_path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
 
     def _save_product_file(
         self,
         products: list[dict[str, Any]],
     ) -> None:
+        ensure_json_writable(
+            self.products_path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
         self.products_path.parent.mkdir(
             parents=True,
             exist_ok=True,

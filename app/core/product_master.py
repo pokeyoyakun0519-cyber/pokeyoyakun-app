@@ -11,6 +11,14 @@ from typing import Any
 from core.runtime_paths import app_root
 from core.application_site import normalize_application_site
 from core.tcg_categories import display_name, normalize_key
+from core.json_file_state import (
+    CORRUPT,
+    PRODUCT_LIST_FIELDS,
+    JsonFileResult,
+    ensure_json_writable,
+    inspect_json_file,
+    restore_json_backup,
+)
 
 
 class ProductMasterManager:
@@ -305,7 +313,10 @@ class ProductMasterManager:
             )
 
     def synchronize(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        records = self.load()
+        result = self.inspect_file()
+        if result.state == CORRUPT:
+            return products
+        records = result.data or []
         now = datetime.now(timezone.utc).astimezone().isoformat(
             timespec="seconds"
         )
@@ -406,16 +417,31 @@ class ProductMasterManager:
         return self._merge_products(resolved)
 
     def load(self) -> list[dict[str, Any]]:
-        if not self.path.exists():
-            return []
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return []
-        return data if isinstance(data, list) else []
+        return self.inspect_file().data or []
+
+    def inspect_file(self) -> JsonFileResult:
+        return inspect_json_file(
+            self.path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
+
+    def restore_backup(self) -> bool:
+        return restore_json_backup(
+            self.path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
 
     def _save_if_changed(self, records: list[dict[str, Any]]) -> None:
-        current = self.load()
+        result = self.inspect_file()
+        if result.state == CORRUPT:
+            ensure_json_writable(
+                self.path,
+                list,
+                nullable_list_fields=PRODUCT_LIST_FIELDS,
+            )
+        current = result.data or []
         if current == records:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)

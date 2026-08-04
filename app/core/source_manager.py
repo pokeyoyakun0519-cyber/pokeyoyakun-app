@@ -23,6 +23,14 @@ from core.candidate_manager import CandidateManager
 from core.runtime_paths import app_root
 from core.secure_https import build_https_opener
 from core.tcg_categories import display_name, normalize_key, normalize_record
+from core.json_file_state import (
+    CORRUPT,
+    SOURCE_LIST_FIELDS,
+    JsonFileResult,
+    ensure_json_writable,
+    inspect_json_file,
+    restore_json_backup,
+)
 from core.source_product_extractor import SourceProductExtractor
 
 
@@ -87,23 +95,29 @@ class SourceManager:
         self.candidate_manager = CandidateManager()
 
     def load_sources(self) -> list[dict[str, Any]]:
-        if self.sources_path.exists():
-            try:
-                with self.sources_path.open("r", encoding="utf-8") as file:
-                    data = json.load(file)
-            except (OSError, json.JSONDecodeError):
-                # 壊れた既存ファイルを初期値で上書きしない。
-                return []
-            if not isinstance(data, list):
-                return []
-            sources = [normalize_record(item)[0] for item in data]
-        else:
-            sources = []
+        result = self.inspect_sources_file()
+        if result.state == CORRUPT:
+            return []
+        sources = [normalize_record(item)[0] for item in (result.data or [])]
 
         merged, changed = self._merge_default_sources(sources)
         if changed:
             self.save_sources(merged)
         return merged
+
+    def inspect_sources_file(self) -> JsonFileResult:
+        return inspect_json_file(
+            self.sources_path,
+            list,
+            nullable_list_fields=SOURCE_LIST_FIELDS,
+        )
+
+    def restore_sources_backup(self) -> bool:
+        return restore_json_backup(
+            self.sources_path,
+            list,
+            nullable_list_fields=SOURCE_LIST_FIELDS,
+        )
 
     def _merge_default_sources(
         self,
@@ -176,6 +190,11 @@ class SourceManager:
         }
 
     def save_sources(self, sources: list[dict[str, Any]]) -> None:
+        ensure_json_writable(
+            self.sources_path,
+            list,
+            nullable_list_fields=SOURCE_LIST_FIELDS,
+        )
         self.sources_path.parent.mkdir(parents=True, exist_ok=True)
         with self.sources_path.open("w", encoding="utf-8") as file:
             json.dump(sources, file, ensure_ascii=False, indent=2)
