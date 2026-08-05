@@ -239,6 +239,7 @@ class MonitorScheduler(QObject):
             result
             for result in (
                 ProductStore().inspect_product_file(),
+                ProductStore().inspect_user_state_file(),
                 CandidateManager().inspect_candidates_file(),
                 ProductMasterManager().inspect_file(),
                 SourceManager().inspect_sources_file(),

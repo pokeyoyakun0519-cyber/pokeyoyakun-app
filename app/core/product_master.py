@@ -95,6 +95,74 @@ class ProductMasterManager:
         ))
 
     @classmethod
+    def deterministic_product_id(cls, product: dict[str, Any]) -> str:
+        """外部識別子を含む商品内容から、衝突分離用の安定IDを作る。"""
+        tcg_key = normalize_key(product.get("tcg_key"), product.get("tcg"))[0]
+        identifiers = ";".join(
+            f"{field}:{value}" for field, value in cls.identifiers(product)
+        )
+        key = "|".join((
+            tcg_key,
+            cls.strong_normalize_name(
+                product.get("canonical_name") or product.get("name")
+            ),
+            cls.normalize_product_kind(product.get("product_kind")),
+            cls._brand(product),
+            identifiers,
+        ))
+        return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+
+    @classmethod
+    def split_conflicting_product_ids(
+        cls,
+        products: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+        """同じ内部IDを持つ外部識別子衝突だけを、安定IDへ分離する。"""
+        repaired: list[dict[str, Any]] = []
+        by_id: dict[str, list[dict[str, Any]]] = {}
+        warnings: list[dict[str, str]] = []
+        used_ids = {
+            str(item.get("product_id") or item.get("id") or "").strip()
+            for item in products
+            if str(item.get("product_id") or item.get("id") or "").strip()
+        }
+        for raw in products:
+            item = dict(raw)
+            original_id = str(
+                item.get("product_id") or item.get("id") or ""
+            ).strip()
+            prior = by_id.get(original_id, []) if original_id else []
+            if prior and any(
+                cls.has_identifier_conflict(value, item)
+                or normalize_key(value.get("tcg_key"), value.get("tcg"))[0]
+                != normalize_key(item.get("tcg_key"), item.get("tcg"))[0]
+                or cls._has_kind_conflict(value, item)
+                or cls._has_brand_conflict(value, item)
+                for value in prior
+            ):
+                new_id = cls.deterministic_product_id(item)
+                counter = 1
+                while new_id in used_ids:
+                    seed = f"{cls.deterministic_product_id(item)}|{counter}"
+                    new_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+                    counter += 1
+                item["product_id"] = new_id
+                item["id"] = new_id
+                used_ids.add(new_id)
+                warnings.append({
+                    "old_product_id": original_id,
+                    "new_product_id": new_id,
+                    "product_name": str(
+                        item.get("canonical_name") or item.get("name") or ""
+                    ),
+                    "reason": "product_identity_conflict",
+                })
+            elif original_id:
+                by_id.setdefault(original_id, []).append(item)
+            repaired.append(item)
+        return repaired, warnings
+
+    @classmethod
     def identifiers(cls, product: dict[str, Any]) -> list[tuple[str, str]]:
         values: list[tuple[str, str]] = []
         for canonical, aliases in cls._IDENTIFIER_ALIASES:
@@ -323,6 +391,15 @@ class ProductMasterManager:
 
         logger = LogManager(self.root)
         for conflict in self.last_conflicts:
+            if conflict.get("reason") == "product_identity_conflict":
+                logger.write(
+                    "商品ID衝突を分離: "
+                    f'{conflict.get("product_name", "")} '
+                    f'{conflict.get("old_product_id", "")} -> '
+                    f'{conflict.get("new_product_id", "")}',
+                    level="WARNING",
+                )
+                continue
             logger.write(
                 "発売日競合: "
                 f'{conflict.get("product_name", "")} '
@@ -336,12 +413,19 @@ class ProductMasterManager:
         result = self.inspect_file()
         if result.state == CORRUPT:
             return products
-        records = result.data or []
+        records, record_id_warnings = self.split_conflicting_product_ids(
+            result.data or []
+        )
+        products, product_id_warnings = self.split_conflicting_product_ids(
+            products
+        )
         now = datetime.now(timezone.utc).astimezone().isoformat(
             timespec="seconds"
         )
         self.last_new_records = []
         self.last_conflicts = []
+        for warning in (*record_id_warnings, *product_id_warnings):
+            self.last_conflicts.append(dict(warning))
         resolved: list[dict[str, Any]] = []
 
         for raw in products:
@@ -363,7 +447,20 @@ class ProductMasterManager:
             record = records[match_index] if match_index is not None else None
             if record is None:
                 original_id = str(product.get("product_id") or product.get("id") or "").strip()
-                product_id = original_id or hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+                record_ids = {
+                    str(item.get("product_id") or item.get("id") or "").strip()
+                    for item in records
+                }
+                product_id = original_id
+                if not product_id or product_id in record_ids:
+                    product_id = self.deterministic_product_id(product)
+                    counter = 1
+                    while product_id in record_ids:
+                        seed = f"{self.deterministic_product_id(product)}|{counter}"
+                        product_id = hashlib.sha256(
+                            seed.encode("utf-8")
+                        ).hexdigest()[:16]
+                        counter += 1
                 record = {
                     "product_id": product_id,
                     "canonical_name": self.canonical_name(alias),

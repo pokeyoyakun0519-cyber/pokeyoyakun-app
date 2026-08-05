@@ -102,10 +102,19 @@ class StartupCheck:
                 nullable_fields = SOURCE_LIST_FIELDS
             else:
                 nullable_fields = ()
+            user_state_fields = (
+                "reserved_product_ids",
+                "auto_monitor_excluded_keys",
+            ) if relative_path == "config/user_state.json" else ()
+            user_state_types = (
+                ("site_applications", dict),
+            ) if relative_path == "config/user_state.json" else ()
             result = inspect_json_file(
                 path,
                 type(default_value),
                 nullable_list_fields=nullable_fields,
+                nullable_dict_list_fields=user_state_fields,
+                dict_field_types=user_state_types,
             )
             if result.state == MISSING:
                 self._write_json(path, default_value)

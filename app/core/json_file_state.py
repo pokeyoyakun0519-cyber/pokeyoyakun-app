@@ -45,12 +45,20 @@ def inspect_json_file(
     expected_type: type,
     *,
     nullable_list_fields: tuple[str, ...] = (),
+    nullable_dict_list_fields: tuple[str, ...] = (),
+    dict_field_types: tuple[tuple[str, type], ...] = (),
 ) -> JsonFileResult:
     path = Path(path)
     backup_path = path.with_suffix(path.suffix + ".bak")
     if not path.exists():
         broken_exists = path.with_suffix(path.suffix + ".broken").exists()
-        backup_result = _read_json(backup_path, expected_type, nullable_list_fields)
+        backup_result = _read_json(
+            backup_path,
+            expected_type,
+            nullable_list_fields,
+            nullable_dict_list_fields,
+            dict_field_types,
+        )
         if broken_exists or backup_path.exists():
             return JsonFileResult(
                 path,
@@ -61,10 +69,22 @@ def inspect_json_file(
             )
         return JsonFileResult(path, MISSING, backup_path=backup_path)
 
-    result = _read_json(path, expected_type, nullable_list_fields)
+    result = _read_json(
+        path,
+        expected_type,
+        nullable_list_fields,
+        nullable_dict_list_fields,
+        dict_field_types,
+    )
     if result.state != CORRUPT:
         return result
-    backup_result = _read_json(backup_path, expected_type, nullable_list_fields)
+    backup_result = _read_json(
+        backup_path,
+        expected_type,
+        nullable_list_fields,
+        nullable_dict_list_fields,
+        dict_field_types,
+    )
     return JsonFileResult(
         path,
         CORRUPT,
@@ -79,9 +99,15 @@ def ensure_json_writable(
     expected_type: type,
     *,
     nullable_list_fields: tuple[str, ...] = (),
+    nullable_dict_list_fields: tuple[str, ...] = (),
+    dict_field_types: tuple[tuple[str, type], ...] = (),
 ) -> None:
     result = inspect_json_file(
-        path, expected_type, nullable_list_fields=nullable_list_fields
+        path,
+        expected_type,
+        nullable_list_fields=nullable_list_fields,
+        nullable_dict_list_fields=nullable_dict_list_fields,
+        dict_field_types=dict_field_types,
     )
     if result.state == CORRUPT:
         raise CorruptJsonError(f"破損JSONへの保存を拒否しました: {path}")
@@ -92,10 +118,18 @@ def restore_json_backup(
     expected_type: type,
     *,
     nullable_list_fields: tuple[str, ...] = (),
+    nullable_dict_list_fields: tuple[str, ...] = (),
+    dict_field_types: tuple[tuple[str, type], ...] = (),
 ) -> bool:
     path = Path(path)
     backup_path = path.with_suffix(path.suffix + ".bak")
-    backup_result = _read_json(backup_path, expected_type, nullable_list_fields)
+    backup_result = _read_json(
+        backup_path,
+        expected_type,
+        nullable_list_fields,
+        nullable_dict_list_fields,
+        dict_field_types,
+    )
     if backup_result.state not in {VALID, VALID_EMPTY}:
         return False
 
@@ -113,6 +147,8 @@ def _read_json(
     path: Path,
     expected_type: type,
     nullable_list_fields: tuple[str, ...],
+    nullable_dict_list_fields: tuple[str, ...],
+    dict_field_types: tuple[tuple[str, type], ...],
 ) -> JsonFileResult:
     if not path.exists():
         return JsonFileResult(path, MISSING)
@@ -128,6 +164,14 @@ def _read_json(
         )
     if nullable_list_fields:
         data, error = _normalize_nullable_lists(data, nullable_list_fields)
+        if error:
+            return JsonFileResult(path, CORRUPT, error=error)
+    if nullable_dict_list_fields or dict_field_types:
+        data, error = _normalize_dict_fields(
+            data,
+            nullable_dict_list_fields,
+            dict_field_types,
+        )
         if error:
             return JsonFileResult(path, CORRUPT, error=error)
     state = VALID_EMPTY if not data else VALID
@@ -151,4 +195,24 @@ def _normalize_nullable_lists(
             elif not isinstance(value, list):
                 return [], f"項目{index}.{field}がlistまたはnullではありません"
         normalized.append(record)
+    return normalized, ""
+
+
+def _normalize_dict_fields(
+    data: dict[str, Any],
+    nullable_list_fields: tuple[str, ...],
+    field_types: tuple[tuple[str, type], ...],
+) -> tuple[dict[str, Any], str]:
+    normalized = dict(data)
+    for field in nullable_list_fields:
+        if field not in normalized:
+            continue
+        value = normalized[field]
+        if value is None:
+            normalized[field] = []
+        elif not isinstance(value, list):
+            return {}, f"{field}がlistまたはnullではありません"
+    for field, expected_type in field_types:
+        if field in normalized and not isinstance(normalized[field], expected_type):
+            return {}, f"{field}が{expected_type.__name__}ではありません"
     return normalized, ""
