@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -242,6 +244,22 @@ def verify_user_edition() -> None:
         raise SystemExit("\n".join(errors))
 
 
+def _build_commit() -> str:
+    value = os.environ.get("POKEYOYA_BUILD_COMMIT", "").strip().lower()
+    if not value:
+        try:
+            value = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=PROJECT_ROOT,
+                text=True,
+            ).strip().lower()
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise SystemExit("ビルド元Commit SHAを取得できません。") from error
+    if re.fullmatch(r"[0-9a-f]{40}", value) is None:
+        raise SystemExit("ビルド元Commit SHAの形式が不正です。")
+    return value
+
+
 def main() -> None:
     print("ポケヨヤ君 User Editionをビルドします。")
     print("管理サーバー・管理CLI・開発ツールは含めません。")
@@ -299,6 +317,7 @@ def main() -> None:
     write_integrity_manifest(
         DIST_DIR,
         [f"{target['name']}.exe" for target in TARGETS],
+        build_commit=_build_commit(),
     )
 
     verify_user_edition()

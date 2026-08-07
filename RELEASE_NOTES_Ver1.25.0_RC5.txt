@@ -35,9 +35,13 @@ RC1から継続する機能
 テスター向け注意事項
 - RC4以前のSetup.exeは公開せず、RC5 Setup.exeを使用してください。
 - RC5は予期しない不具合を含む可能性があります。
+- RC5の実行ファイルとインストーラーにはAuthenticodeコード署名がありません。
+- Windows SmartScreen / Smart App Controlで警告または実行ブロックが表示される可能性があります。
+- 正式版までにコード署名へ対応する予定です。Windowsのセキュリティ設定を回避・無効化しないでください。
 - 不具合はアプリの「ご意見・ご要望」から報告してください。
 - 個人情報、ライセンスキー、認証トークン、端末コードを本文へ記載しないでください。
 - 3か月無料ライセンスは管理者がテスターごとに手動発行します。
 
 本番接続先
-https://pokeyoyakun.duckdns.org
+- ライセンスAPI: https://api.pokeyoyakun.com
+- Feedback / Roadmap: https://pokeyoyakun.duckdns.org

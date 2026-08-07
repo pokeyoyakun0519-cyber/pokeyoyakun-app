@@ -73,7 +73,12 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def write_integrity_manifest(dist_dir: Path, executable_names: list[str]) -> Path:
+def write_integrity_manifest(
+    dist_dir: Path,
+    executable_names: list[str],
+    *,
+    build_commit: str | None = None,
+) -> Path:
     files = {}
     for name in executable_names:
         path = dist_dir / name
@@ -85,6 +90,8 @@ def write_integrity_manifest(dist_dir: Path, executable_names: list[str]) -> Pat
         "algorithm": "sha256",
         "files": files,
     }
+    if build_commit:
+        manifest["build_commit"] = build_commit
     destination = dist_dir / "release-integrity.json"
     destination.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
