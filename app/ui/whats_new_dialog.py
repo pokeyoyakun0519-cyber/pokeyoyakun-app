@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from core.version import APP_VERSION
+from core.version import APP_CHANNEL, APP_VERSION
 from core.whats_new_manager import WhatsNewManager
 
 
@@ -22,7 +22,7 @@ class WhatsNewDialog(QDialog):
         layout.setContentsMargins(24, 22, 24, 22)
         layout.setSpacing(14)
 
-        title = QLabel(f"ポケヨヤ君 Ver.{APP_VERSION}")
+        title = QLabel(f"ポケヨヤ君 Ver.{APP_VERSION} {APP_CHANNEL.upper()}")
         title.setObjectName("PageTitle")
         layout.addWidget(title)
 

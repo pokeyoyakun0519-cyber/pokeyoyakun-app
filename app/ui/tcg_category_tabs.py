@@ -71,12 +71,7 @@ class TcgCategoryTabs(QWidget):
         self._counts = {key: max(0, int(counts.get(key, 0))) for key in self._keys}
         for index, key in enumerate(self._keys):
             self.tab_bar.setTabText(index, self._label(key, self._counts[key]))
-            visible = (
-                key == ALL_CATEGORY_KEY
-                or self._counts[key] > 0
-                or key == self._selected_key
-            )
-            self.tab_bar.setTabVisible(index, visible)
+            self.tab_bar.setTabVisible(index, True)
         selected_index = self._keys.index(self._selected_key)
         if self.tab_bar.currentIndex() != selected_index:
             self.tab_bar.setCurrentIndex(selected_index)

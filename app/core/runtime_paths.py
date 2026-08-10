@@ -37,6 +37,12 @@ def app_root() -> Path:
 
     Program Filesへ直接設定を書こうとして権限エラーになる問題を避ける。
     """
+    explicit_root = os.environ.get("POKEYOYA_DATA_ROOT", "").strip()
+    if explicit_root:
+        root = Path(explicit_root).expanduser().resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+
     if not is_frozen():
         return install_root()
 

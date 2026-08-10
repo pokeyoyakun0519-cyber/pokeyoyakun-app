@@ -1,0 +1,32 @@
+{
+  "general": {
+    "auto_input_enabled": false,
+    "new_product_auto_fetch": true,
+    "play_notification_sound": true,
+    "show_popup": true
+  },
+  "profile": {
+    "name": "",
+    "furigana": "",
+    "email": "",
+    "phone": "",
+    "postal_code": "",
+    "address": ""
+  },
+  "notification": {
+    "sound_file": ""
+  },
+  "games": {
+    "pokemon": true,
+    "onepiece": true,
+    "gundam": true
+  },
+  "sites": {
+    "pokemon_center": true,
+    "amazon": true,
+    "rakuten": true,
+    "yodobashi": true,
+    "biccamera": true,
+    "amiami": false
+  }
+}

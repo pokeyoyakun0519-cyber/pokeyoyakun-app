@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -8,6 +10,7 @@ from pathlib import Path
 
 from release_security import (
     scan_repository,
+    verify_public_license_endpoint,
     verify_distribution,
     write_integrity_manifest,
 )
@@ -17,10 +20,10 @@ BUILD_OWNER_EDITION = False
 APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
-DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc3"
+DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc5"
 TEMP_BUILD_ROOT = (
     Path(tempfile.gettempdir())
-    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC3"
+    / "PokeyoyaKun_UserEdition_Ver1.25.0_RC5"
 )
 BUILD_DIR = TEMP_BUILD_ROOT / "build"
 SPEC_DIR = TEMP_BUILD_ROOT / "spec"
@@ -59,6 +62,7 @@ def ensure_dependencies() -> None:
         "PySide6",
         "certifi",
         "google-api-python-client",
+        "google-auth",
         "google-auth-oauthlib",
         "google-auth-httplib2",
     )
@@ -133,11 +137,21 @@ def build_target(
         "--add-data",
         f"{ASSETS_DIR};assets",
         "--add-data",
+        f"{APP_DIR / 'resources'};resources",
+        "--add-data",
         f"{APP_DIR / 'core' / 'online_license_endpoint.json'};core",
+        "--add-data",
+        f"{APP_DIR / 'core' / 'online_license_public_keys.json'};core",
+        "--collect-all",
+        "google.auth",
         "--collect-all",
         "googleapiclient",
         "--collect-all",
         "google_auth_oauthlib",
+        "--collect-all",
+        "httplib2",
+        "--collect-submodules",
+        "requests",
         "--collect-all",
         "google.oauth2",
         "--hidden-import",
@@ -148,6 +162,21 @@ def build_target(
         "google_auth_oauthlib.flow",
         "--hidden-import",
         "googleapiclient.discovery",
+        "--hidden-import",
+        "googleapiclient.errors",
+        "--hidden-import",
+        "googleapiclient.http",
+        "--hidden-import",
+        "google_auth_httplib2",
+        "--hidden-import",
+        "urllib3.util.ssl_",
+        "--runtime-hook",
+        str(
+            PROJECT_ROOT
+            / "tools"
+            / "pyinstaller_runtime_hooks"
+            / "gmail_requests_compat.py"
+        ),
         "--collect-data",
         "certifi",
         "--exclude-module",
@@ -215,9 +244,26 @@ def verify_user_edition() -> None:
         raise SystemExit("\n".join(errors))
 
 
+def _build_commit() -> str:
+    value = os.environ.get("POKEYOYA_BUILD_COMMIT", "").strip().lower()
+    if not value:
+        try:
+            value = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=PROJECT_ROOT,
+                text=True,
+            ).strip().lower()
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise SystemExit("ビルド元Commit SHAを取得できません。") from error
+    if re.fullmatch(r"[0-9a-f]{40}", value) is None:
+        raise SystemExit("ビルド元Commit SHAの形式が不正です。")
+    return value
+
+
 def main() -> None:
     print("ポケヨヤ君 User Editionをビルドします。")
     print("管理サーバー・管理CLI・開発ツールは含めません。")
+    verify_public_license_endpoint(PROJECT_ROOT)
     findings = scan_repository(PROJECT_ROOT)
     if findings:
         raise SystemExit(
@@ -271,6 +317,7 @@ def main() -> None:
     write_integrity_manifest(
         DIST_DIR,
         [f"{target['name']}.exe" for target in TARGETS],
+        build_commit=_build_commit(),
     )
 
     verify_user_edition()

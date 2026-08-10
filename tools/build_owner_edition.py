@@ -17,8 +17,8 @@ BUILD_OWNER_EDITION = True
 APP_DIR = PROJECT_ROOT / "app"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
-DIST_DIR = PROJECT_ROOT / "release" / "owner_dist_rc3"
-TEMP_BUILD_ROOT = Path(tempfile.gettempdir()) / "PokeyoyaKun_Owner_Ver1.25.0_RC3"
+DIST_DIR = PROJECT_ROOT / "release" / "owner_dist_rc5"
+TEMP_BUILD_ROOT = Path(tempfile.gettempdir()) / "PokeyoyaKun_Owner_Ver1.25.0_RC5"
 BUILD_DIR = TEMP_BUILD_ROOT / "build"
 SPEC_DIR = TEMP_BUILD_ROOT / "spec"
 ICON_PATH = ASSETS_DIR / "pokeyoya_icon.ico"
@@ -115,6 +115,8 @@ def build_target(target: dict[str, Path | str]) -> None:
         str(VERSION_FILE),
         "--add-data",
         f"{ASSETS_DIR};assets",
+        "--add-data",
+        f"{APP_DIR / 'resources'};resources",
         "--collect-all",
         "googleapiclient",
         "--collect-all",

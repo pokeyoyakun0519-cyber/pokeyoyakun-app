@@ -8,7 +8,7 @@ from pathlib import Path
 
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key
-from typing import Any
+from typing import Any, Callable
 
 
 WIN_KEYWORDS = [
@@ -229,11 +229,16 @@ class LotteryManager:
         ]
         self.save_items(items)
 
-    def check_all(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    def check_all(
+        self,
+        cancel_requested: Callable[[], bool] | None = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         items = self.load_items()
         newly_won = []
 
         for item in items:
+            if cancel_requested is not None and cancel_requested():
+                break
             previous_status = item.get("status", "未確認")
             result = self._fetch_and_judge(item.get("url", ""))
 
@@ -244,6 +249,8 @@ class LotteryManager:
 
             if previous_status != "当選候補" and result["status"] == "当選候補":
                 newly_won.append(item.copy())
+            if cancel_requested is not None and cancel_requested():
+                break
 
         self.save_items(items)
         return items, newly_won

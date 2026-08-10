@@ -1,8 +1,9 @@
 from PySide6.QtCore import QObject
 from PySide6.QtGui import QAction, QIcon
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 from core.behavior_config import BehaviorConfig
 from core.runtime_paths import bundled_root
+from core.safe_product_url import can_open_product_url, open_product_url
 
 class TrayController(QObject):
     def __init__(self, window, scheduler, parent=None):
@@ -33,6 +34,8 @@ class TrayController(QObject):
 
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._activated)
+        self.tray.messageClicked.connect(self._open_last_notification_action)
+        self.last_notification_action_url = ""
         self.tray.show()
 
         self.scheduler.run_completed.connect(self._monitor_completed)
@@ -56,7 +59,7 @@ class TrayController(QObject):
     def quit_application(self):
         self.window.allow_close = True
         self.tray.hide()
-        QApplication.quit()
+        self.window.request_application_quit()
 
     def _activated(self, reason):
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
@@ -74,3 +77,17 @@ class TrayController(QObject):
                 QSystemTrayIcon.Information,
                 5000,
             )
+
+    def show_application_reminder(self, title: str, message: str, action_url: str) -> None:
+        self.last_notification_action_url = action_url if can_open_product_url(action_url) else ""
+        suffix = "\n通知をクリックして応募ページを開く" if self.last_notification_action_url else ""
+        self.tray.showMessage(
+            title,
+            message + suffix,
+            QSystemTrayIcon.Warning,
+            10_000,
+        )
+
+    def _open_last_notification_action(self):
+        if self.last_notification_action_url:
+            open_product_url(self.last_notification_action_url)

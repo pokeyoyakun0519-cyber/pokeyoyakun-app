@@ -14,7 +14,8 @@ ENDPOINT_PATH = (
     Path(__file__).resolve().parent
     / "online_license_endpoint.json"
 )
-UNCONFIGURED_PUBLIC_URL = "https://license.example.invalid"
+PRODUCTION_PUBLIC_URL = "https://api.pokeyoyakun.com"
+UNCONFIGURED_PUBLIC_URL = ""
 
 
 def load_bundled_public_url(

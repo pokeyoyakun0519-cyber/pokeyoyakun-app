@@ -1,9 +1,23 @@
 import json
 import re
+import shutil
+from collections import Counter
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 from core.plugin_manager import PluginManager
+from core.application_site import normalize_application_site
+from core.json_file_state import (
+    CORRUPT,
+    PRODUCT_LIST_FIELDS,
+    CorruptJsonError,
+    JsonFileResult,
+    ensure_json_writable,
+    inspect_json_file,
+    restore_json_backup,
+)
+from core.retail_price_policy import RetailPricePolicy
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
 
@@ -11,15 +25,86 @@ from core.tcg_categories import display_name, normalize_key, normalize_record
 class ProductStore:
     """商品データ、プラグイン更新、予約状態を管理する。"""
 
-    def __init__(self):
-        root = app_root()
-        self.products_path = root / "data" / "products.json"
-        self.user_state_path = root / "config" / "user_state.json"
+    USER_STATE_LIST_FIELDS = (
+        "reserved_product_ids",
+        "auto_monitor_excluded_keys",
+    )
+    USER_STATE_FIELD_TYPES = (("site_applications", dict),)
+
+    def __init__(self, root: Path | None = None):
+        self.root = Path(root) if root is not None else app_root()
+        self.products_path = self.root / "data" / "products.json"
+        self.user_state_path = self.root / "config" / "user_state.json"
         self.plugin_manager = PluginManager()
+        self.last_excluded_retail_offers: list[dict[str, str]] = []
+        self.last_excluded_products: list[dict[str, str]] = []
+        self.last_load_diagnostics: dict[str, Any] = {}
+        self.last_merge_diagnostics: dict[str, Any] = {}
+        self.last_product_file_result: JsonFileResult | None = None
+        self.last_user_state_file_result: JsonFileResult | None = None
+        self.last_product_id_warnings: list[dict[str, str]] = []
+        self._legacy_product_ids: dict[str, str] = {}
 
     def load_products(self) -> list[dict[str, Any]]:
-        products = [normalize_record(item)[0] for item in self._load_product_file()]
-        return self._apply_user_state_and_archive(products)
+        result = self.inspect_product_file()
+        self.last_product_file_result = result
+        if result.state == CORRUPT:
+            return []
+        raw_products = result.data or []
+        products = [normalize_record(item)[0] for item in raw_products]
+        from core.activity_timeline import ActivityTimeline
+        from core.product_master import ProductMasterManager
+
+        products = self._repair_product_ids(products)
+        master = ProductMasterManager(self.root)
+        products = master.synchronize(products)
+        timeline = ActivityTimeline(self.root)
+        for record in master.last_new_records:
+            timeline.add(
+                "新商品",
+                f'{record.get("canonical_name", "商品")}追加',
+                product_id=str(record.get("product_id", "")),
+                occurred_at=str(record.get("created_at", "")),
+            )
+        from core.store_history import StoreHistoryManager
+
+        store_history = StoreHistoryManager(self.root)
+        for product in products:
+            product_id = str(product.get("product_id", product.get("id", "")))
+            for site in product.get("sites", []):
+                occurred = str(site.get("created_at") or site.get("detected_at") or site.get("candidate_added_at") or "")
+                if not occurred:
+                    continue
+                status = str(site.get("status", ""))
+                action = "抽選追加" if "抽選" in status else "予約追加" if "予約" in status else "商品追加"
+                store_id = str(site.get("site_key", site.get("id", "")))
+                detail = str(product.get("canonical_name", product.get("name", "商品")))
+                store_history.record(store_id, action, detail, occurred_at=occurred)
+                timeline.add(action, f'{site.get("name", "店舗")} {action}', product_id=product_id, store_id=store_id, occurred_at=occurred)
+        from core.product_image_cache import ProductImageCache
+
+        ProductImageCache(self.root).cleanup(
+            active_product_ids={
+                str(product.get("product_id", product.get("id", "")))
+                for product in products
+            }
+        )
+        visible = self._apply_user_state_and_archive(products)
+        per_tcg = Counter(
+            normalize_key(item.get("tcg_key"), item.get("tcg"))[0]
+            for item in visible
+        )
+        self.last_load_diagnostics = {
+            "storage_type": "json",
+            "storage_path": str(self.products_path),
+            "raw_count": len(raw_products),
+            "normalized_count": len(products),
+            "visible_count": len(visible),
+            "per_tcg": dict(per_tcg),
+            "excluded_products": list(self.last_excluded_products),
+            "excluded_retail_offers": list(self.last_excluded_retail_offers),
+        }
+        return visible
 
     def update_from_plugins(
         self,
@@ -29,7 +114,7 @@ class ProductStore:
         )
         self._save_product_file(products)
         return (
-            self._apply_user_state_and_archive(products),
+            self.load_products(),
             messages,
         )
 
@@ -39,42 +124,64 @@ class ProductStore:
     ) -> tuple[list[dict[str, Any]], int]:
         products = self._load_product_file()
         added = 0
+        updated = 0
+        unchanged = 0
+        ambiguous = 0
+        from core.product_master import ProductMasterManager
 
-        existing_ids = {
-            str(product.get("id", ""))
-            for product in products
-        }
-        existing_keys = {
-            (
-                self._normalize_name(
-                    str(product.get("name", ""))
-                ),
-                str(product.get("release_date", "")),
+        master = ProductMasterManager(self.root)
+        master.last_conflicts = []
+
+        for incoming in discovered:
+            identifier_match, identifier_method = master.find_match(
+                products, incoming
             )
-            for product in products
-        }
+            if master.identifiers(incoming):
+                match_index, match_method = identifier_match, identifier_method
+                product_id = ""
+            else:
+                product_id = str(
+                    incoming.get("product_id") or incoming.get("id") or ""
+                )
+            id_matches = [
+                index
+                for index, item in enumerate(products)
+                if product_id
+                and product_id
+                == str(item.get("product_id") or item.get("id") or "")
+            ]
+            if master.identifiers(incoming):
+                pass
+            elif len(id_matches) == 1:
+                if master.has_identifier_conflict(
+                    products[id_matches[0]], incoming
+                ):
+                    match_index, match_method = None, "identifier_conflict"
+                else:
+                    match_index, match_method = id_matches[0], "product_id"
+            elif len(id_matches) > 1:
+                match_index, match_method = None, "ambiguous_product_id"
+            else:
+                match_index, match_method = master.find_match(products, incoming)
 
-        for product in discovered:
-            product_id = str(product.get("id", ""))
-            key = (
-                self._normalize_name(
-                    str(product.get("name", ""))
-                ),
-                str(product.get("release_date", "")),
-            )
-
-            if (
-                product_id in existing_ids
-                or key in existing_keys
-            ):
+            if match_index is not None:
+                merged, changes = master.reconcile_product(
+                    products[match_index], incoming
+                )
+                products[match_index] = merged
+                if changes:
+                    updated += 1
+                else:
+                    unchanged += 1
                 continue
 
-            products.append(product)
-            existing_ids.add(product_id)
-            existing_keys.add(key)
+            if match_method.startswith("ambiguous_"):
+                ambiguous += 1
+            products.append(dict(incoming))
+            products = self._repair_product_ids(products)
             added += 1
 
-        if added:
+        if added or updated:
             products.sort(
                 key=lambda item: (
                     str(
@@ -88,8 +195,28 @@ class ProductStore:
             )
             self._save_product_file(products)
 
+        self.last_merge_diagnostics = {
+            "discovered": len(discovered),
+            "added": added,
+            "updated": updated,
+            "unchanged": unchanged,
+            "ambiguous": ambiguous,
+            "release_date_conflicts": list(master.last_conflicts),
+            "product_id_warnings": list(self.last_product_id_warnings),
+        }
+        if updated or master.last_conflicts:
+            from core.log_manager import LogManager
+
+            logger = LogManager(self.root)
+            if updated:
+                logger.write(
+                    f"商品情報更新: 発見={len(discovered)} 更新={updated} "
+                    f"追加={added} 変更なし={unchanged}"
+                )
+            master.log_conflicts()
+
         return (
-            self._apply_user_state_and_archive(products),
+            self.load_products(),
             added,
         )
 
@@ -197,34 +324,94 @@ class ProductStore:
         state["reserved_product_ids"] = []
         self._save_user_state(state)
 
+    def exclude_auto_monitored_product(self, product_id: str) -> bool:
+        products = self._load_product_file()
+        target = next(
+            (item for item in products if str(item.get("id", "")) == product_id),
+            None,
+        )
+        if not target or not bool(target.get("auto_monitored")):
+            return False
+        from core.auto_monitor_manager import AutoMonitorManager
+
+        state = self._load_user_state()
+        excluded = set(state.get("auto_monitor_excluded_keys", []))
+        excluded.add(AutoMonitorManager.product_key(target))
+        state["auto_monitor_excluded_keys"] = sorted(excluded)
+        self._save_user_state(state)
+        self._save_product_file(
+            [item for item in products if str(item.get("id", "")) != product_id]
+        )
+        return True
+
     def _load_product_file(
         self,
     ) -> list[dict[str, Any]]:
-        if not self.products_path.exists():
-            return []
+        result = self.inspect_product_file()
+        self.last_product_file_result = result
+        return self._repair_product_ids(result.data or [])
 
-        try:
-            with self.products_path.open(
-                "r",
-                encoding="utf-8",
-            ) as file:
-                data = json.load(file)
-            return data if isinstance(data, list) else []
-        except (
-            json.JSONDecodeError,
-            OSError,
-        ):
-            return []
+    def _repair_product_ids(
+        self,
+        products: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        from core.product_master import ProductMasterManager
+
+        repaired, warnings = ProductMasterManager.split_conflicting_product_ids(
+            products
+        )
+        for warning in warnings:
+            if warning not in self.last_product_id_warnings:
+                self.last_product_id_warnings.append(warning)
+            self._legacy_product_ids[warning["new_product_id"]] = (
+                warning["old_product_id"]
+            )
+        if warnings:
+            from core.log_manager import LogManager
+
+            logger = LogManager(self.root)
+            for warning in warnings:
+                logger.write(
+                    "商品ID衝突を分離: "
+                    f'{warning["product_name"]} '
+                    f'{warning["old_product_id"]} -> '
+                    f'{warning["new_product_id"]}',
+                    level="WARNING",
+                )
+        return repaired
+
+    def inspect_product_file(self) -> JsonFileResult:
+        return inspect_json_file(
+            self.products_path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
+
+    def restore_products_backup(self) -> bool:
+        return restore_json_backup(
+            self.products_path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
 
     def _save_product_file(
         self,
         products: list[dict[str, Any]],
     ) -> None:
+        ensure_json_writable(
+            self.products_path,
+            list,
+            nullable_list_fields=PRODUCT_LIST_FIELDS,
+        )
         self.products_path.parent.mkdir(
             parents=True,
             exist_ok=True,
         )
-        with self.products_path.open(
+        backup = self.products_path.with_suffix(".json.bak")
+        if self.products_path.exists():
+            shutil.copy2(self.products_path, backup)
+        temporary = self.products_path.with_suffix(".json.tmp")
+        with temporary.open(
             "w",
             encoding="utf-8",
         ) as file:
@@ -234,44 +421,73 @@ class ProductStore:
                 ensure_ascii=False,
                 indent=2,
             )
+        temporary.replace(self.products_path)
 
     def _load_user_state(
         self,
     ) -> dict[str, Any]:
-        if not self.user_state_path.exists():
-            return {
-                "reserved_product_ids": [],
-                "site_applications": {},
-            }
+        result = self.inspect_user_state_file()
+        self.last_user_state_file_result = result
+        if result.state == CORRUPT:
+            raise CorruptJsonError(
+                f"破損user_state.jsonの利用を拒否しました: {self.user_state_path}"
+            )
+        state = self._default_user_state()
+        if result.data:
+            state.update(result.data)
+        return state
 
+    def _load_user_state_for_display(self) -> dict[str, Any] | None:
         try:
-            with self.user_state_path.open(
-                "r",
-                encoding="utf-8",
-            ) as file:
-                data = json.load(file)
-            return data if isinstance(data, dict) else {
-                "reserved_product_ids": [],
-                "site_applications": {},
-            }
-        except (
-            json.JSONDecodeError,
-            OSError,
-        ):
-            return {
-                "reserved_product_ids": [],
-                "site_applications": {},
-            }
+            return self._load_user_state()
+        except CorruptJsonError:
+            return None
+
+    def inspect_user_state_file(self) -> JsonFileResult:
+        return inspect_json_file(
+            self.user_state_path,
+            dict,
+            nullable_dict_list_fields=self.USER_STATE_LIST_FIELDS,
+            dict_field_types=self.USER_STATE_FIELD_TYPES,
+        )
+
+    def restore_user_state_backup(self) -> bool:
+        restored = restore_json_backup(
+            self.user_state_path,
+            dict,
+            nullable_dict_list_fields=self.USER_STATE_LIST_FIELDS,
+            dict_field_types=self.USER_STATE_FIELD_TYPES,
+        )
+        self.last_user_state_file_result = self.inspect_user_state_file()
+        return restored
+
+    @staticmethod
+    def _default_user_state() -> dict[str, Any]:
+        return {
+            "reserved_product_ids": [],
+            "site_applications": {},
+            "auto_monitor_excluded_keys": [],
+        }
 
     def _save_user_state(
         self,
         state: dict[str, Any],
     ) -> None:
+        ensure_json_writable(
+            self.user_state_path,
+            dict,
+            nullable_dict_list_fields=self.USER_STATE_LIST_FIELDS,
+            dict_field_types=self.USER_STATE_FIELD_TYPES,
+        )
         self.user_state_path.parent.mkdir(
             parents=True,
             exist_ok=True,
         )
-        with self.user_state_path.open(
+        backup = self.user_state_path.with_suffix(".json.bak")
+        if self.user_state_path.exists():
+            shutil.copy2(self.user_state_path, backup)
+        temporary = self.user_state_path.with_suffix(".json.tmp")
+        with temporary.open(
             "w",
             encoding="utf-8",
         ) as file:
@@ -281,27 +497,58 @@ class ProductStore:
                 ensure_ascii=False,
                 indent=2,
             )
+        temporary.replace(self.user_state_path)
 
     def _apply_user_state_and_archive(
         self,
         products: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        state = self._load_user_state()
+        self.last_excluded_products = []
+        self.last_excluded_retail_offers = []
+        state = self._load_user_state_for_display()
         reserved_ids = set(
-            state.get("reserved_product_ids", [])
+            state.get("reserved_product_ids", []) if state else []
         )
         applications = state.get(
             "site_applications",
             {},
-        )
+        ) if state else {}
+
+        legacy_site_counts: Counter = Counter()
+        for product in products:
+            new_id = str(product.get("id") or product.get("product_id") or "")
+            legacy_id = self._legacy_product_ids.get(new_id)
+            if not legacy_id:
+                continue
+            for site in product.get("sites", []):
+                if isinstance(site, dict):
+                    legacy_site_counts[self._site_state_key(
+                        legacy_id,
+                        str(site.get("site_key", "")),
+                        str(site.get("url", "")),
+                    )] += 1
 
         visible_products = []
         today = date.today()
 
         for product in products:
+            if product.get("source_type") == "retail_search":
+                product["sites"] = self._filter_retail_sites(product)
+                if not product["sites"]:
+                    self.last_excluded_products.append({
+                        "product": str(product.get("name", "")),
+                        "reason": "retail_offer_rejected",
+                    })
+                    continue
             product["reserved"] = (
                 product.get("id") in reserved_ids
             )
+
+            product["sites"] = [
+                normalize_application_site(site, product=product)
+                for site in product.get("sites", [])
+                if isinstance(site, dict)
+            ]
 
             for site in product.get("sites", []):
                 key = self._site_state_key(
@@ -310,9 +557,20 @@ class ProductStore:
                     str(site.get("url", "")),
                 )
                 saved = dict(applications.get(key, {}))
-                applied = bool(saved.get("applied", False))
+                if not saved:
+                    legacy_id = self._legacy_product_ids.get(
+                        str(product.get("id") or product.get("product_id") or "")
+                    )
+                    legacy_key = self._site_state_key(
+                        legacy_id,
+                        str(site.get("site_key", "")),
+                        str(site.get("url", "")),
+                    ) if legacy_id else ""
+                    if legacy_key and legacy_site_counts[legacy_key] == 1:
+                        saved = dict(applications.get(legacy_key, {}))
+                applied = bool(saved.get("applied", site.get("applied", False)))
                 result_status = str(
-                    saved.get("result_status", "未確認")
+                    saved.get("result_status", site.get("result_status", "未確認"))
                 )
                 site["applied"] = applied
                 site["result_status"] = result_status
@@ -324,9 +582,9 @@ class ProductStore:
                 )[0] if (saved.get("tcg_key") or saved.get("tcg")) else product_key
                 site["tcg_key"] = saved_key
                 site["tcg"] = display_name(saved_key)
-                site["applied_at"] = str(saved.get("applied_at", ""))
+                site["applied_at"] = str(saved.get("applied_at", site.get("applied_at", "")))
                 site["result_checked_at"] = str(
-                    saved.get("result_checked_at", "")
+                    saved.get("result_checked_at", site.get("result_checked_at", ""))
                 )
                 for reference_key in (
                     "receipt_number", "reception_number", "order_number"
@@ -346,6 +604,10 @@ class ProductStore:
                 ).date()
 
                 if (today - release_date).days > 183:
+                    self.last_excluded_products.append({
+                        "product": str(product.get("name", "")),
+                        "reason": "released_more_than_183_days_ago",
+                    })
                     continue
 
             except (
@@ -358,6 +620,33 @@ class ProductStore:
             visible_products.append(product)
 
         return visible_products
+
+    def _filter_retail_sites(self, product: dict[str, Any]) -> list[dict[str, Any]]:
+        verified_site_keys = {
+            "amazon_jp", "yodobashi_lottery", "yodobashi_retail", "geo",
+            "seven_net", "rakuten_books", "lawson_loppi", "premium_bandai",
+            "biccamera", "joshin", "edion", "toysrus", "sanyodo",
+            "pokemon_center_online",
+        }
+        output = []
+        for raw in product.get("sites", []):
+            if not isinstance(raw, dict):
+                continue
+            site = dict(raw)
+            site.setdefault(
+                "retailer_verified", site.get("site_key") in verified_site_keys
+            )
+            decision = RetailPricePolicy.evaluate(product, site)
+            if not decision["accepted"]:
+                self.last_excluded_retail_offers.append({
+                    "product": str(product.get("name", "")),
+                    "store": str(site.get("name", "")),
+                    "reason": str(decision["exclusion_reason"]),
+                })
+                continue
+            site.update(decision)
+            output.append(site)
+        return output
 
     @staticmethod
     def _site_state_key(

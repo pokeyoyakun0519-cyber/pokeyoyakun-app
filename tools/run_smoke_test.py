@@ -10,7 +10,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = PROJECT_ROOT / "app"
-DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc3"
+DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc5"
 
 
 def run_command(
@@ -43,6 +43,7 @@ def build_environment() -> dict[str, str]:
     env.setdefault("QT_QPA_PLATFORM", "offscreen")
     temp_root = Path(tempfile.mkdtemp(prefix="pokeyoya_smoke_"))
     env["LOCALAPPDATA"] = str(temp_root)
+    env["POKEYOYA_DATA_ROOT"] = str(temp_root / "PokeyoyaKun")
     return env
 
 

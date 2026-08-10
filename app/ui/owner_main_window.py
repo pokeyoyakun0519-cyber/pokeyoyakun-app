@@ -19,12 +19,6 @@ class OwnerMainWindow(MainWindow):
     def _edition_banner(self):
         banner = QFrame()
         banner.setObjectName("OwnerEditionBanner")
-        banner.setStyleSheet(
-            "QFrame#OwnerEditionBanner {"
-            "background-color: #7f1d1d; border-bottom: 2px solid #f59e0b;"
-            "}"
-            "QLabel { color: white; font-weight: 700; }"
-        )
         layout = QHBoxLayout(banner)
         layout.setContentsMargins(20, 8, 20, 8)
         edition = QLabel("Owner Edition")
@@ -34,6 +28,9 @@ class OwnerMainWindow(MainWindow):
         layout.addStretch()
         layout.addWidget(notice)
         return banner
+
+    def _is_owner_edition(self):
+        return True
 
     def _navigation_labels(self):
         return [
@@ -57,6 +54,12 @@ class OwnerMainWindow(MainWindow):
             f"Version {APP_VERSION} {APP_CHANNEL.upper()} OWNER\n"
             "開発者専用・配布禁止"
         )
+
+    def _developer_menu_expanded(self):
+        return self.ui_mode == "detailed"
+
+    def _developer_menu_title(self):
+        return "Owner開発者メニュー"
 
     def _add_license_page(self, page_map):
         # Owner用バイナリには認証画面・認証ページを生成しない。

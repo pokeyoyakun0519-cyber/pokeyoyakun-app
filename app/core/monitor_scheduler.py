@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 
 from core.candidate_auto_search import CandidateAutoSearch
+from core.candidate_manager import CandidateManager
+from core.json_file_state import CORRUPT
 from core.error_throttle import ErrorThrottle
 from core.external_notification_config import ExternalNotificationConfig
 from core.external_notifier import ExternalNotifier
@@ -12,6 +14,7 @@ from core.log_manager import LogManager
 from core.lottery_manager import LotteryManager
 from core.notification_store import NotificationStore
 from core.product_store import ProductStore
+from core.product_master import ProductMasterManager
 from core.scheduler_config import SchedulerConfig
 from core.source_manager import SourceManager
 
@@ -34,6 +37,16 @@ class MonitorWorker(QObject):
         self.check_candidate_retail = check_candidate_retail
         self.candidate_interval_minutes = candidate_interval_minutes
         self.check_gmail_results = check_gmail_results
+        self._cancel_requested = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel_requested.set()
+
+    def is_cancel_requested(self) -> bool:
+        return (
+            self._cancel_requested.is_set()
+            or QThread.currentThread().isInterruptionRequested()
+        )
 
     @Slot()
     def run(self):
@@ -49,30 +62,63 @@ class MonitorWorker(QObject):
                 },
                 "due_results": [],
                 "gmail_results": [],
+                "cancelled": False,
             }
 
+            if self.is_cancel_requested():
+                result["cancelled"] = True
+                self.completed.emit(result)
+                return
+
             if self.check_sources:
-                sources, changed = SourceManager().check_all()
+                sources, changed = SourceManager().check_all(
+                    cancel_requested=self.is_cancel_requested
+                )
                 result["source_count"] = len(sources)
                 result["changed_sources"] = changed
 
+            if self.is_cancel_requested():
+                result["cancelled"] = True
+                self.completed.emit(result)
+                return
+
             if self.check_lotteries:
-                lotteries, newly_won = LotteryManager().check_all()
+                lotteries, newly_won = LotteryManager().check_all(
+                    cancel_requested=self.is_cancel_requested
+                )
                 result["lottery_count"] = len(lotteries)
                 result["newly_won"] = newly_won
+
+            if self.is_cancel_requested():
+                result["cancelled"] = True
+                self.completed.emit(result)
+                return
 
             if self.check_candidate_retail:
                 result["candidate_search"] = (
                     CandidateAutoSearch().run_due(
-                        self.candidate_interval_minutes
+                        self.candidate_interval_minutes,
+                        cancel_requested=self.is_cancel_requested,
                     )
                 )
+
+            if self.is_cancel_requested():
+                result["cancelled"] = True
+                self.completed.emit(result)
+                return
 
             if self.check_gmail_results:
                 result["gmail_results"] = (
                     GmailResultService()
-                    .scan_all_enabled()
+                    .scan_all_enabled(
+                        cancel_requested=self.is_cancel_requested
+                    )
                 )
+
+            if self.is_cancel_requested():
+                result["cancelled"] = True
+                self.completed.emit(result)
+                return
 
             result["due_results"] = (
                 ProductStore().get_due_result_sites()
@@ -86,6 +132,7 @@ class MonitorWorker(QObject):
 class MonitorScheduler(QObject):
     status_changed = Signal(str)
     run_completed = Signal(dict)
+    worker_finished = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -103,6 +150,9 @@ class MonitorScheduler(QObject):
         self.thread = None
         self.worker = None
         self.running = False
+        self.suspended = False
+        self.shutting_down = False
+        self.suspend_reason = ""
 
         self.timer.start()
         QTimer.singleShot(1500, self._check_due)
@@ -110,10 +160,35 @@ class MonitorScheduler(QObject):
     def reload_config(self):
         self._check_due()
 
+    def suspend(self, reason: str = ""):
+        self.suspended = True
+        self.suspend_reason = str(reason)
+        self.timer.stop()
+
+    def resume(self):
+        if self.shutting_down:
+            return
+        self.suspended = False
+        self.suspend_reason = ""
+        self.timer.start()
+        self._check_due()
+
     def run_now(self):
+        if self.suspended or self.shutting_down:
+            self.log_manager.write(
+                "自動監視開始を抑止: "
+                + (self.suspend_reason or "終了処理中")
+            )
+            return
         self._start_run(self.config_manager.load())
 
     def _check_due(self):
+        if self.suspended or self.shutting_down:
+            self.status_changed.emit(
+                "自動監視："
+                + ("終了処理中" if self.shutting_down else "初回商品取得待ち")
+            )
+            return
         config = self.config_manager.load()
 
         if not config.get("enabled", False):
@@ -148,7 +223,33 @@ class MonitorScheduler(QObject):
         )
 
     def _start_run(self, config: dict):
+        if self.suspended or self.shutting_down:
+            self.log_manager.write(
+                "自動監視ワーカー開始を抑止: "
+                + (self.suspend_reason or "終了処理中")
+            )
+            return
         if self.running:
+            self.log_manager.write(
+                "自動監視ワーカーの二重起動を抑止しました"
+            )
+            return
+
+        blocking = [
+            result
+            for result in (
+                ProductStore().inspect_product_file(),
+                ProductStore().inspect_user_state_file(),
+                CandidateManager().inspect_candidates_file(),
+                ProductMasterManager().inspect_file(),
+                SourceManager().inspect_sources_file(),
+            )
+            if result.state == CORRUPT
+        ]
+        if blocking:
+            names = ", ".join(result.path.name for result in blocking)
+            self.status_changed.emit("自動監視：破損JSONの復元待ち")
+            self.log_manager.write(f"自動監視開始を抑止: 破損JSON {names}")
             return
 
         check_sources = bool(config.get("check_sources", True))
@@ -196,11 +297,16 @@ class MonitorScheduler(QObject):
         self.worker.failed.connect(self._on_failed)
         self.worker.completed.connect(self.thread.quit)
         self.worker.failed.connect(self.thread.quit)
+        self.worker.completed.connect(self.worker.deleteLater)
+        self.worker.failed.connect(self.worker.deleteLater)
         self.thread.finished.connect(self._cleanup_thread)
         self.thread.start()
 
     @Slot(dict)
     def _on_completed(self, result: dict):
+        if self.shutting_down or result.get("cancelled"):
+            self.running = False
+            return
         config = self.config_manager.load()
         config["last_run"] = datetime.now().isoformat(
             timespec="seconds"
@@ -623,6 +729,9 @@ class MonitorScheduler(QObject):
 
     @Slot(str)
     def _on_failed(self, message: str):
+        if self.shutting_down:
+            self.running = False
+            return
         self.log_manager.write(
             f"自動監視失敗: {message}",
             level="ERROR",
@@ -702,10 +811,41 @@ class MonitorScheduler(QObject):
         ).start()
 
     def _cleanup_thread(self):
-        if self.worker is not None:
-            self.worker.deleteLater()
         if self.thread is not None:
             self.thread.deleteLater()
 
         self.worker = None
         self.thread = None
+        self.running = False
+        self.worker_finished.emit()
+
+    def request_shutdown(self) -> None:
+        if self.shutting_down:
+            return
+        self.shutting_down = True
+        self.suspended = True
+        self.suspend_reason = "終了処理中"
+        self.timer.stop()
+        if self.worker is not None:
+            self.worker.cancel()
+        if self.thread is not None and self.thread.isRunning():
+            self.thread.requestInterruption()
+            self.thread.quit()
+
+    def wait_for_shutdown(self, timeout_ms: int = 5000) -> bool:
+        thread = self.thread
+        if thread is None or not thread.isRunning():
+            return True
+        bounded_timeout = max(0, min(int(timeout_ms), 10_000))
+        stopped = thread.wait(bounded_timeout)
+        if not stopped:
+            self.log_manager.write(
+                "自動監視ワーカーは終了待機上限を超えました。"
+                "強制終了せず、安全な処理区切りまで待機します。",
+                level="WARNING",
+            )
+        return bool(stopped)
+
+    def shutdown(self, timeout_ms: int = 5000) -> bool:
+        self.request_shutdown()
+        return self.wait_for_shutdown(timeout_ms)

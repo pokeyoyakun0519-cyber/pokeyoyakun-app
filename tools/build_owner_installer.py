@@ -11,8 +11,8 @@ SCRIPT = PROJECT_ROOT / "installer" / "PokeyoyaKun_Owner_Setup.iss"
 OUTPUT = (
     PROJECT_ROOT
     / "release"
-    / "owner_installer_rc3"
-    / "PokeyoyaKun_Owner_Setup_Ver1.25.0_RC3.exe"
+    / "owner_installer_rc5"
+    / "PokeyoyaKun_Owner_Setup_Ver1.25.0_RC5.exe"
 )
 
 

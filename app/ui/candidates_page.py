@@ -195,6 +195,14 @@ class CandidateCard(QFrame):
         )
         release.setObjectName("MutedText")
 
+        kind_and_added = QLabel(
+            "商品種別："
+            + str(candidate.get("product_kind", "その他"))
+            + "　候補追加日時："
+            + str(candidate.get("created_at", "未記録"))
+        )
+        kind_and_added.setObjectName("MutedText")
+
         confidence = float(
             candidate.get(
                 "candidate_confidence",
@@ -222,6 +230,7 @@ class CandidateCard(QFrame):
         layout.addLayout(header)
         layout.addWidget(source)
         layout.addWidget(release)
+        layout.addWidget(kind_and_added)
         layout.addWidget(confidence_label)
         layout.addWidget(last_searched)
 
@@ -280,6 +289,10 @@ class CandidateCard(QFrame):
                         "情報あり",
                     )
                     + confidence_text
+                    + "\n  "
+                    + str(hit.get("price_status", "価格未確認"))
+                    + " / 販売元: "
+                    + str(hit.get("seller", "未確認"))
                     + (
                         "\n  "
                         + hit.get(
@@ -295,6 +308,27 @@ class CandidateCard(QFrame):
                 )
                 hit_label.setWordWrap(True)
                 layout.addWidget(hit_label)
+
+        diagnostics = candidate.get("search_diagnostics", {})
+        if diagnostics:
+            diagnostic_label = QLabel(
+                "検索診断："
+                f'検索店舗 {diagnostics.get("searched_store_count", 0)} / '
+                f'発見 {diagnostics.get("found_store_count", 0)} / '
+                f'正規販売 {diagnostics.get("regular_retail_count", 0)} / '
+                f'除外 {diagnostics.get("excluded_count", 0)} / '
+                f'新規店舗候補 {diagnostics.get("new_store_candidate_count", 0)}\n'
+                f'店舗名検出 {diagnostics.get("discovered_store_name_count", 0)} / '
+                f'既存一致 {diagnostics.get("existing_store_match_count", 0)} / '
+                f'重複 {diagnostics.get("duplicate_excluded_count", 0)} / '
+                f'URL拒否 {diagnostics.get("url_safety_rejected_count", 0)} / '
+                f'根拠不足 {diagnostics.get("insufficient_evidence_count", 0)} / '
+                f'保存失敗 {diagnostics.get("save_failure_count", 0)}\n'
+                "最終確認：" + str(diagnostics.get("checked_at", "未実行"))
+            )
+            diagnostic_label.setObjectName("MutedText")
+            diagnostic_label.setWordWrap(True)
+            layout.addWidget(diagnostic_label)
 
         search_message = candidate.get(
             "search_message",
@@ -319,6 +353,7 @@ class CandidatesPage(QFrame):
         self.search_thread = None
         self.search_worker = None
         self.searching = False
+        self.shutting_down = False
         self.search_summary: list[str] = []
         self.search_started_at = 0.0
         self.search_total_candidates = 0
@@ -558,6 +593,8 @@ class CandidatesPage(QFrame):
         self,
         candidates: list[dict],
     ) -> None:
+        if self.shutting_down:
+            return
         self.searching = True
         self.search_summary = []
         self.search_started_at = time.monotonic()
@@ -612,6 +649,15 @@ class CandidatesPage(QFrame):
         self.search_worker.cancelled.connect(
             self.search_thread.quit
         )
+        self.search_worker.completed.connect(
+            self.search_worker.deleteLater
+        )
+        self.search_worker.failed.connect(
+            self.search_worker.deleteLater
+        )
+        self.search_worker.cancelled.connect(
+            self.search_worker.deleteLater
+        )
         self.search_thread.finished.connect(
             self._cleanup_search_thread
         )
@@ -625,6 +671,8 @@ class CandidatesPage(QFrame):
         total: int,
         message: str,
     ) -> None:
+        if self.shutting_down:
+            return
         self.progress_bar.setMaximum(
             max(1, total)
         )
@@ -651,6 +699,8 @@ class CandidatesPage(QFrame):
         hits: list,
         messages: list,
     ) -> None:
+        if self.shutting_down:
+            return
         updated = (
             self.candidate_manager
             .update_search_result(
@@ -682,6 +732,8 @@ class CandidatesPage(QFrame):
         total: int,
         total_hits: int,
     ) -> None:
+        if self.shutting_down:
+            return
         self.progress_bar.setValue(
             self.progress_bar.maximum()
         )
@@ -711,6 +763,8 @@ class CandidatesPage(QFrame):
         self,
         message: str,
     ) -> None:
+        if self.shutting_down:
+            return
         self.log_manager.write(
             f"バックグラウンド販売情報検索失敗: {message}",
             level="ERROR",
@@ -728,6 +782,8 @@ class CandidatesPage(QFrame):
 
     @Slot()
     def _on_search_cancelled(self) -> None:
+        if self.shutting_down:
+            return
         elapsed = self._format_elapsed(
             time.monotonic()
             - self.search_started_at
@@ -747,6 +803,30 @@ class CandidatesPage(QFrame):
             "キャンセルします..."
         )
         self.search_worker.request_cancel()
+
+    def request_shutdown(self) -> None:
+        self.shutting_down = True
+        if self.search_worker is not None:
+            self.search_worker.request_cancel()
+        if self.search_thread is not None and self.search_thread.isRunning():
+            self.search_thread.requestInterruption()
+            self.search_thread.quit()
+
+    def wait_for_shutdown(self, timeout_ms: int) -> bool:
+        thread = self.search_thread
+        if thread is None or not thread.isRunning():
+            return True
+        stopped = thread.wait(max(0, min(int(timeout_ms), 10_000)))
+        if not stopped:
+            self.log_manager.write(
+                "候補検索ワーカーは終了待機上限を超えました。"
+                "強制終了せず、安全な処理区切りまで待機します。",
+                level="WARNING",
+            )
+        return bool(stopped)
+
+    def is_shutdown_complete(self) -> bool:
+        return self.search_thread is None or not self.search_thread.isRunning()
 
     def _finish_search(self) -> None:
         self.searching = False
@@ -774,8 +854,6 @@ class CandidatesPage(QFrame):
 
     @Slot()
     def _cleanup_search_thread(self) -> None:
-        if self.search_worker is not None:
-            self.search_worker.deleteLater()
         if self.search_thread is not None:
             self.search_thread.deleteLater()
 

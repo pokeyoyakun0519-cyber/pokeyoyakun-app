@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "interval_minutes": 30,
+  "check_sources": true,
+  "check_lotteries": true,
+  "last_run": ""
+}

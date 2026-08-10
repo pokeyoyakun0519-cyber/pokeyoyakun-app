@@ -1,13 +1,15 @@
 from datetime import datetime
 from pathlib import Path
 
+from core.runtime_paths import app_root
+
 
 class LogManager:
     """ポケヨヤ君の動作履歴をlogs/app.logへ保存する。"""
 
-    def __init__(self):
-        project_root = Path(__file__).resolve().parents[2]
-        self.log_path = project_root / "logs" / "app.log"
+    def __init__(self, root: Path | None = None):
+        self.root = Path(root) if root is not None else app_root()
+        self.log_path = self.root / "logs" / "app.log"
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def write(self, message: str, level: str = "INFO") -> None:

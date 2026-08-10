@@ -1,10 +1,22 @@
 import hashlib
 import json
 import re
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from core.application_period import ApplicationPeriodParser
+from core.application_site import normalize_application_site
+from core.json_file_state import (
+    CANDIDATE_LIST_FIELDS,
+    PRODUCT_LIST_FIELDS,
+    JsonFileResult,
+    ensure_json_writable,
+    inspect_json_file,
+    restore_json_backup,
+)
+from core.product_master import ProductMasterManager
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
 
@@ -12,13 +24,32 @@ from core.tcg_categories import display_name, normalize_key, normalize_record
 class CandidateManager:
     """公式発表、新弾候補、販売サイト検索状態を管理する。"""
 
-    def __init__(self):
-        root = app_root()
+    def __init__(self, root: Path | None = None):
+        root = root or app_root()
+        self.root = root
         self.candidates_path = root / "data" / "candidates.json"
         self.products_path = root / "data" / "products.json"
+        self.last_merge_diagnostics: dict[str, Any] = {}
+        self.last_candidate_file_result: JsonFileResult | None = None
 
     def load_candidates(self) -> list[dict[str, Any]]:
-        return [normalize_record(item)[0] for item in self._load_list(self.candidates_path)]
+        result = self.inspect_candidates_file()
+        self.last_candidate_file_result = result
+        return [normalize_record(item)[0] for item in (result.data or [])]
+
+    def inspect_candidates_file(self) -> JsonFileResult:
+        return inspect_json_file(
+            self.candidates_path,
+            list,
+            nullable_list_fields=CANDIDATE_LIST_FIELDS,
+        )
+
+    def restore_candidates_backup(self) -> bool:
+        return restore_json_backup(
+            self.candidates_path,
+            list,
+            nullable_list_fields=CANDIDATE_LIST_FIELDS,
+        )
 
     def save_candidates(
         self,
@@ -35,19 +66,17 @@ class CandidateManager:
         source_url: str,
     ) -> tuple[list[dict[str, Any]], int]:
         candidates = self.load_candidates()
-        existing_keys = {
-            (
-                self._normalize_name(
-                    str(item.get("name", ""))
-                ),
-                str(item.get("release_date", "")),
-            )
-            for item in candidates
-        }
+        products = self._load_list(self.products_path)
+        identity = ProductMasterManager(self.root)
+        products_changed = False
 
         added = 0
+        diagnostic_reasons = Counter()
+        detected_by_tcg = Counter()
 
         for product in discovered:
+            tcg_key = normalize_key(product.get("tcg_key"), product.get("tcg"))[0]
+            detected_by_tcg[tcg_key] += 1
             name = str(product.get("name", "")).strip()
             release_date = str(
                 product.get("release_date", "")
@@ -66,30 +95,67 @@ class CandidateManager:
             )
 
             if not name:
+                diagnostic_reasons["missing_name"] += 1
                 continue
             if confidence < 0.72:
+                diagnostic_reasons["low_confidence"] += 1
+                continue
+            if not self._is_new_release_candidate(product, tcg_key):
+                diagnostic_reasons["not_new_release_product"] += 1
                 continue
 
-            official_url = source_url
+            official_url = str(product.get("official_url", "")) or source_url
             sites = product.get("sites", [])
             if sites:
                 official_url = str(
                     sites[0].get("url", source_url)
                 )
 
-            key = (
-                self._normalize_name(name),
-                release_date,
+            observed = dict(product)
+            observed["tcg_key"] = tcg_key
+            observed["official_url"] = official_url
+            observed["source_url"] = source_url
+            observed["source_name"] = source_name
+            observed.setdefault("source_type", "official_source")
+
+            product_index, product_match = identity.find_match(
+                products, observed
             )
-            if key in existing_keys:
-                self._refresh_existing_candidate(
-                    candidates,
-                    key,
-                    official_url=official_url,
-                    source_name=source_name,
-                    source_id=source_id,
+            if product_index is not None:
+                merged, changes = identity.reconcile_product(
+                    products[product_index], observed
                 )
+                products[product_index] = merged
+                if changes:
+                    products_changed = True
+                    diagnostic_reasons["existing_product_updated"] += 1
+                else:
+                    diagnostic_reasons["already_product"] += 1
                 continue
+            if product_match.startswith("ambiguous_"):
+                diagnostic_reasons["ambiguous_product"] += 1
+
+            candidate_index, candidate_match = identity.find_match(
+                candidates, observed
+            )
+            if candidate_index is not None:
+                merged, changes = identity.reconcile_product(
+                    candidates[candidate_index], observed
+                )
+                merged["official_url"] = official_url or merged.get(
+                    "official_url", ""
+                )
+                merged["source_name"] = source_name or merged.get(
+                    "source_name", ""
+                )
+                merged["source_id"] = source_id or merged.get("source_id", "")
+                candidates[candidate_index] = merged
+                diagnostic_reasons[
+                    "existing_candidate_updated" if changes else "already_candidate"
+                ] += 1
+                continue
+            if candidate_match.startswith("ambiguous_"):
+                diagnostic_reasons["ambiguous_candidate"] += 1
 
             digest = hashlib.sha256(
                 (
@@ -106,14 +172,17 @@ class CandidateManager:
                     "source_url": source_url,
                     "official_url": official_url,
                     "name": name,
-                    "tcg_key": normalize_key(
-                        product.get("tcg_key"), product.get("tcg")
-                    )[0],
+                    "tcg_key": tcg_key,
                     "tcg": display_name(
                         normalize_key(product.get("tcg_key"), product.get("tcg"))[0],
                         product.get("tcg"),
                     ),
                     "release_date": release_date,
+                    "product_kind": str(product.get("product_kind", "その他")),
+                    "product_code": str(product.get("product_code", "")),
+                    "msrp": product.get("msrp"),
+                    "msrp_includes_tax": bool(product.get("msrp_includes_tax", True)),
+                    "reference_price": product.get("reference_price"),
                     "status": "販売・抽選情報を検索待ち",
                     "candidate_confidence": confidence,
                     "candidate_reasons": reasons,
@@ -121,13 +190,14 @@ class CandidateManager:
                     "last_searched": "",
                     "retail_hits": [],
                     "search_message": "",
+                    "search_diagnostics": {},
                     "created_at": datetime.now().isoformat(
                         timespec="seconds"
                     ),
                 }
             )
-            existing_keys.add(key)
             added += 1
+            diagnostic_reasons["added"] += 1
 
         if added:
             candidates.sort(
@@ -143,6 +213,31 @@ class CandidateManager:
             )
 
         self.save_candidates(candidates)
+        if products_changed:
+            self._save_list(self.products_path, products)
+        identity.log_conflicts()
+        self.last_merge_diagnostics = {
+            "detected": len(discovered),
+            "added": added,
+            "detected_by_tcg": dict(detected_by_tcg),
+            "reasons": dict(diagnostic_reasons),
+        }
+        try:
+            from core.auto_monitor_manager import AutoMonitorManager
+            from core.config_manager import ConfigManager
+            from core.product_store import ProductStore
+
+            promotion = AutoMonitorManager(
+                ConfigManager(self.root), ProductStore(self.root)
+            ).add_due_candidates(candidates)
+            self.last_merge_diagnostics["promotion"] = {
+                key: value
+                for key, value in promotion.items()
+                if key != "products"
+            }
+        except (OSError, ValueError, TypeError):
+            # 公式候補の保存は成功扱いとし、自動追加だけ次回起動へ回す。
+            pass
         return candidates, added
 
     def build_candidates_from_sources(
@@ -166,6 +261,11 @@ class CandidateManager:
                             "release_date",
                             "",
                         ),
+                        "product_kind": item.get("product_kind", "その他"),
+                        "product_code": item.get("product_code", ""),
+                        "msrp": item.get("msrp"),
+                        "msrp_includes_tax": item.get("msrp_includes_tax", True),
+                        "reference_price": item.get("reference_price"),
                         "tcg_key": normalize_key(
                             source.get("tcg_key"), source.get("tcg")
                         )[0],
@@ -238,11 +338,14 @@ class CandidateManager:
                 "tcg_key": normalize_key(tcg_key)[0],
                 "tcg": display_name(normalize_key(tcg_key)[0]),
                 "release_date": "",
+                "product_kind": "その他",
+                "product_code": "",
                 "status": "販売・抽選情報を検索待ち",
                 "approved": False,
                 "last_searched": "",
                 "retail_hits": [],
                 "search_message": "",
+                "search_diagnostics": {},
                 "created_at": datetime.now().isoformat(
                     timespec="seconds"
                 ),
@@ -280,6 +383,9 @@ class CandidateManager:
             candidate["search_message"] = "\n".join(
                 messages
             )
+            candidate["search_diagnostics"] = self._build_search_diagnostics(
+                hits, messages
+            )
 
             if hits:
                 candidate["status"] = (
@@ -315,8 +421,9 @@ class CandidateManager:
             if candidate.get("id") != candidate_id:
                 continue
 
-            candidate["tcg_key"] = tcg_key
-            candidate["tcg"] = tcg_label
+            normalized_key = normalize_key(tcg_key, tcg_label)[0]
+            candidate["tcg_key"] = normalized_key
+            candidate["tcg"] = display_name(normalized_key, tcg_label)
 
             if release_date:
                 candidate["release_date"] = release_date
@@ -355,6 +462,20 @@ class CandidateManager:
             hit.setdefault("application_period", "")
             hit.setdefault("result_date", "")
             hit.setdefault("order_period", "")
+            evidence_text = "\n".join(
+                str(hit.get(key, ""))
+                for key in (
+                    "application_period", "order_period", "result_date",
+                    "notice", "text", "description", "status",
+                )
+                if hit.get(key)
+            )
+            hit = ApplicationPeriodParser().enrich_site(
+                hit,
+                evidence_text,
+                release_date=str(candidate.get("release_date", "")),
+            )
+            hit = normalize_application_site(hit, product=candidate)
             hits.append(hit)
         if not hits:
             return
@@ -390,6 +511,11 @@ class CandidateManager:
                 "official_url",
                 "",
             ),
+            "product_kind": candidate.get("product_kind", "その他"),
+            "product_code": candidate.get("product_code", ""),
+            "msrp": candidate.get("msrp"),
+            "msrp_includes_tax": candidate.get("msrp_includes_tax", True),
+            "reference_price": candidate.get("reference_price"),
             "sites": hits,
         }
 
@@ -444,7 +570,7 @@ class CandidateManager:
     def _refresh_existing_candidate(
         cls,
         candidates: list[dict[str, Any]],
-        key: tuple[str, str],
+        key: tuple[str, str, str],
         *,
         official_url: str,
         source_name: str,
@@ -452,6 +578,7 @@ class CandidateManager:
     ) -> None:
         for item in candidates:
             item_key = (
+                normalize_key(item.get("tcg_key"), item.get("tcg"))[0],
                 cls._normalize_name(
                     str(item.get("name", ""))
                 ),
@@ -475,6 +602,76 @@ class CandidateManager:
             break
 
     @staticmethod
+    def _is_new_release_candidate(product: dict[str, Any], tcg_key: str) -> bool:
+        if tcg_key not in {"onepiece", "gundam"}:
+            return bool(str(product.get("name", "")).strip())
+        allowed = {
+            "onepiece": {
+                "ブースターパック", "エクストラブースター", "スタートデッキ",
+                "プレミアムカードコレクション", "プレミアム商品",
+            },
+            "gundam": {
+                "ブースターパック", "スタートデッキ", "プレミアムバンダイ", "その他",
+            },
+        }
+        kind = str(product.get("product_kind", "その他"))
+        if kind not in allowed[tcg_key]:
+            return False
+        name = str(product.get("name", ""))
+        if kind == "その他":
+            lowered_name = name.casefold()
+            if any(term in lowered_name for term in (
+                "スリーブ", "プレイマット", "ケース", "アクセサリー", "sleeve", "playmat", "case",
+            )):
+                return False
+            if not re.search(r"カード|セット|コレクション|card|set|collection", lowered_name, re.IGNORECASE):
+                return False
+        try:
+            release = datetime.strptime(
+                str(product.get("release_date", "")), "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            return False
+        age_days = (date.today() - release).days
+        if age_days > 45 or age_days < -730:
+            return False
+        url = str(product.get("official_url", ""))
+        if not url:
+            sites = product.get("sites", [])
+            url = str(sites[0].get("url", "")) if sites else ""
+        if not url.startswith("https://"):
+            return False
+        lowered = (name + " " + url).casefold()
+        return not any(
+            term in lowered for term in ("cardlist", "event", "rule", "カードリスト", "イベント", "ルール")
+        )
+
+    @staticmethod
+    def _build_search_diagnostics(
+        hits: list[dict[str, Any]], messages: list[str]
+    ) -> dict[str, Any]:
+        for message in reversed(messages):
+            if not message.startswith("店舗発見診断JSON:"):
+                continue
+            try:
+                parsed = json.loads(message.removeprefix("店舗発見診断JSON:"))
+            except json.JSONDecodeError:
+                break
+            if isinstance(parsed, dict):
+                return parsed
+        excluded = [message.removeprefix("除外: ") for message in messages if message.startswith("除外: ")]
+        searched = [message for message in messages if not message.startswith(("除外:", "検索診断:", "店舗発見診断JSON:"))]
+        return {
+            "searched_store_count": len(searched),
+            "found_store_count": len({str(hit.get("site_key", "")) for hit in hits}) + len(excluded),
+            "regular_retail_count": len({str(hit.get("site_key", "")) for hit in hits}),
+            "excluded_count": len(excluded),
+            "new_store_candidate_count": sum("管理者確認待ち" in message for message in messages),
+            "excluded_reasons": excluded,
+            "checked_at": datetime.now().isoformat(timespec="seconds"),
+        }
+
+    @staticmethod
     def _normalize_name(name: str) -> str:
         return re.sub(
             r"[\s「」『』・･_\-&＆]",
@@ -486,27 +683,35 @@ class CandidateManager:
     def _load_list(
         path: Path,
     ) -> list[dict[str, Any]]:
-        if not path.exists():
-            return []
-
-        try:
-            with path.open(
-                "r",
-                encoding="utf-8",
-            ) as file:
-                data = json.load(file)
-            return data if isinstance(data, list) else []
-        except (
-            OSError,
-            json.JSONDecodeError,
-        ):
-            return []
+        fields = (
+            CANDIDATE_LIST_FIELDS
+            if path.name == "candidates.json"
+            else PRODUCT_LIST_FIELDS
+        )
+        return (
+            inspect_json_file(
+                path,
+                list,
+                nullable_list_fields=fields,
+            ).data
+            or []
+        )
 
     @staticmethod
     def _save_list(
         path: Path,
         data: list[dict[str, Any]],
     ) -> None:
+        fields = (
+            CANDIDATE_LIST_FIELDS
+            if path.name == "candidates.json"
+            else PRODUCT_LIST_FIELDS
+        )
+        ensure_json_writable(
+            path,
+            list,
+            nullable_list_fields=fields,
+        )
         path.parent.mkdir(
             parents=True,
             exist_ok=True,

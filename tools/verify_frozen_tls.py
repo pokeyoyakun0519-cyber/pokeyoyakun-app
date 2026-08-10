@@ -9,7 +9,7 @@ from PyInstaller.archive.readers import CArchiveReader
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-EXE_PATH = PROJECT_ROOT / "release" / "user_dist_rc3" / "ポケヨヤ君.exe"
+EXE_PATH = PROJECT_ROOT / "release" / "user_dist_rc5" / "ポケヨヤ君.exe"
 
 
 def archive_has_certifi_ca(exe_path: Path) -> bool:
@@ -36,7 +36,7 @@ def run_frozen_ca_self_test(exe_path: Path) -> None:
 
 def main() -> None:
     if not EXE_PATH.is_file():
-        raise SystemExit(f"RC3 EXEが見つかりません: {EXE_PATH}")
+        raise SystemExit(f"RC5 EXEが見つかりません: {EXE_PATH}")
     if not archive_has_certifi_ca(EXE_PATH):
         raise SystemExit("PyInstaller内部にcertifi/cacert.pemがありません。")
     print("PYINSTALLER_CERTIFI_CA_OK")

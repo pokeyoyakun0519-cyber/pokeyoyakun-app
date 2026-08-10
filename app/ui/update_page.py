@@ -24,6 +24,8 @@ class UpdatePage(QFrame):
         self.current_release = None
         self.thread = None
         self.worker = None
+        self.shutting_down = False
+        self.quit_callback = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 26, 28, 26)
@@ -92,7 +94,14 @@ class UpdatePage(QFrame):
         elif self.check_on_startup.isChecked():
             # 起動直後の画面生成や短時間スモーク終了と競合しないよう、
             # UIが安定してから一度だけバックグラウンド確認を開始する。
-            QTimer.singleShot(5000, lambda: self.check_update(background=True))
+            QTimer.singleShot(5000, self._check_update_on_startup)
+
+    def set_quit_callback(self, callback) -> None:
+        self.quit_callback = callback
+
+    def _check_update_on_startup(self) -> None:
+        if not self.shutting_down:
+            self.check_update(background=True)
 
     def save_config(self):
         self.config_manager.save({
@@ -101,6 +110,8 @@ class UpdatePage(QFrame):
         })
 
     def check_update(self, checked=False, *, background=False):
+        if self.shutting_down:
+            return
         if not self.update_manager.updates_enabled:
             self.status.setText(self.update_manager.disabled_reason)
             return
@@ -116,10 +127,14 @@ class UpdatePage(QFrame):
         self.worker.failed.connect(self._operation_failed)
         self.worker.completed.connect(self.thread.quit)
         self.worker.failed.connect(self.thread.quit)
+        self.worker.completed.connect(self.worker.deleteLater)
+        self.worker.failed.connect(self.worker.deleteLater)
         self.thread.finished.connect(self._cleanup)
         self.thread.start()
 
     def _check_completed(self, result: dict):
+        if self.shutting_down:
+            return
         self.current_release = result if result.get("available") else None
         self.status.setText(str(result.get("reason", "更新確認が完了しました。")))
         self.update_button.setEnabled(self.current_release is not None)
@@ -134,6 +149,8 @@ class UpdatePage(QFrame):
         self.check_button.setEnabled(True)
 
     def start_update(self):
+        if self.shutting_down:
+            return
         if not self.current_release or self.thread is not None:
             return
         if QMessageBox.question(
@@ -154,6 +171,8 @@ class UpdatePage(QFrame):
         self.worker.failed.connect(self._operation_failed)
         self.worker.completed.connect(self.thread.quit)
         self.worker.failed.connect(self.thread.quit)
+        self.worker.completed.connect(self.worker.deleteLater)
+        self.worker.failed.connect(self.worker.deleteLater)
         self.thread.finished.connect(self._cleanup)
         self.thread.start()
 
@@ -163,6 +182,8 @@ class UpdatePage(QFrame):
             self.status.setText("キャンセルしています…")
 
     def _download_completed(self, value: str):
+        if self.shutting_down:
+            return
         try:
             command, _status = self.update_manager.create_apply_command(Path(value))
             self.update_manager.launch_apply_command(command)
@@ -171,22 +192,42 @@ class UpdatePage(QFrame):
             return
         self.progress.setValue(100)
         QMessageBox.information(self, "更新開始", "アプリを終了し、更新後に自動再起動します。")
-        QApplication.quit()
+        if self.quit_callback is not None:
+            self.quit_callback()
+        else:
+            QApplication.quit()
 
     def _operation_failed(self, message: str):
+        if self.shutting_down:
+            return
         self.status.setText(f"更新に失敗しました：{message}")
         self.check_button.setEnabled(True)
         self.update_button.setEnabled(self.current_release is not None)
         self.cancel_button.setEnabled(False)
 
     def _cleanup(self):
-        if self.worker:
-            self.worker.deleteLater()
         if self.thread:
             self.thread.deleteLater()
         self.worker = None
         self.thread = None
         self.cancel_button.setEnabled(False)
+
+    def request_shutdown(self) -> None:
+        self.shutting_down = True
+        if isinstance(self.worker, UpdateDownloadWorker):
+            self.worker.cancel()
+        if self.thread is not None and self.thread.isRunning():
+            self.thread.requestInterruption()
+            self.thread.quit()
+
+    def wait_for_shutdown(self, timeout_ms: int) -> bool:
+        thread = self.thread
+        if thread is None or not thread.isRunning():
+            return True
+        return bool(thread.wait(max(0, min(int(timeout_ms), 10_000))))
+
+    def is_shutdown_complete(self) -> bool:
+        return self.thread is None or not self.thread.isRunning()
 
     def show_last_result(self):
         result = self.update_manager.read_last_result()

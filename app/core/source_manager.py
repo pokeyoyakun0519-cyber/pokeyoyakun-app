@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from html import unescape
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 from core.official_diff_tracker import OfficialDiffTracker
@@ -14,10 +14,23 @@ from core.pokemon_official_extractor import PokemonOfficialExtractor
 from core.yugioh_official_extractor import YugiohOfficialExtractor
 from core.onepiece_official_extractor import OnePieceOfficialExtractor
 from core.gundam_official_extractor import GundamOfficialExtractor
+from core.additional_official_extractors import (
+    DuelMastersOfficialExtractor,
+    MtgOfficialExtractor,
+    WeissOfficialExtractor,
+)
 from core.candidate_manager import CandidateManager
 from core.runtime_paths import app_root
 from core.secure_https import build_https_opener
 from core.tcg_categories import display_name, normalize_key, normalize_record
+from core.json_file_state import (
+    CORRUPT,
+    SOURCE_LIST_FIELDS,
+    JsonFileResult,
+    ensure_json_writable,
+    inspect_json_file,
+    restore_json_backup,
+)
 from core.source_product_extractor import SourceProductExtractor
 
 
@@ -43,6 +56,21 @@ class SourceManager:
             "url": "https://www.gundam-gcg.com/jp/products/",
             "tcg_key": "gundam",
         },
+        {
+            "name": "デュエル・マスターズ公式 商品情報",
+            "url": "https://dm.takaratomy.co.jp/product/",
+            "tcg_key": "duelmasters",
+        },
+        {
+            "name": "ヴァイスシュヴァルツ公式 商品情報",
+            "url": "https://ws-tcg.com/products/",
+            "tcg_key": "weiss",
+        },
+        {
+            "name": "マジック：ザ・ギャザリング日本公式 製品情報",
+            "url": "https://mtg-jp.com/products/index.php",
+            "tcg_key": "mtg",
+        },
     )
     YUGIOH_OFFICIAL_PRODUCTS_URL = (
         "https://www.yugioh-card.com/japan/products/"
@@ -60,27 +88,36 @@ class SourceManager:
         self.yugioh_extractor = YugiohOfficialExtractor()
         self.onepiece_extractor = OnePieceOfficialExtractor()
         self.gundam_extractor = GundamOfficialExtractor()
+        self.duelmasters_extractor = DuelMastersOfficialExtractor()
+        self.weiss_extractor = WeissOfficialExtractor()
+        self.mtg_extractor = MtgOfficialExtractor()
         self.diff_tracker = OfficialDiffTracker()
         self.candidate_manager = CandidateManager()
 
     def load_sources(self) -> list[dict[str, Any]]:
-        if self.sources_path.exists():
-            try:
-                with self.sources_path.open("r", encoding="utf-8") as file:
-                    data = json.load(file)
-            except (OSError, json.JSONDecodeError):
-                # 壊れた既存ファイルを初期値で上書きしない。
-                return []
-            if not isinstance(data, list):
-                return []
-            sources = [normalize_record(item)[0] for item in data]
-        else:
-            sources = []
+        result = self.inspect_sources_file()
+        if result.state == CORRUPT:
+            return []
+        sources = [normalize_record(item)[0] for item in (result.data or [])]
 
         merged, changed = self._merge_default_sources(sources)
         if changed:
             self.save_sources(merged)
         return merged
+
+    def inspect_sources_file(self) -> JsonFileResult:
+        return inspect_json_file(
+            self.sources_path,
+            list,
+            nullable_list_fields=SOURCE_LIST_FIELDS,
+        )
+
+    def restore_sources_backup(self) -> bool:
+        return restore_json_backup(
+            self.sources_path,
+            list,
+            nullable_list_fields=SOURCE_LIST_FIELDS,
+        )
 
     def _merge_default_sources(
         self,
@@ -153,6 +190,11 @@ class SourceManager:
         }
 
     def save_sources(self, sources: list[dict[str, Any]]) -> None:
+        ensure_json_writable(
+            self.sources_path,
+            list,
+            nullable_list_fields=SOURCE_LIST_FIELDS,
+        )
         self.sources_path.parent.mkdir(parents=True, exist_ok=True)
         with self.sources_path.open("w", encoding="utf-8") as file:
             json.dump(sources, file, ensure_ascii=False, indent=2)
@@ -234,11 +276,14 @@ class SourceManager:
 
     def check_all(
         self,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         sources = self.load_sources()
         changed_sources = []
 
         for source in sources:
+            if cancel_requested is not None and cancel_requested():
+                break
             if not source.get("enabled", True):
                 source["last_status"] = "無効"
                 source["check_state"] = "unchecked"
@@ -246,6 +291,8 @@ class SourceManager:
                 continue
             if self._check_source_record(source):
                 changed_sources.append(source.copy())
+            if cancel_requested is not None and cancel_requested():
+                break
 
         self.save_sources(sources)
         return sources, changed_sources
@@ -289,6 +336,7 @@ class SourceManager:
         source["last_error_reason"] = ""
         source["detected_products"] = []
         source["official_changes"] = []
+        source["last_candidate_diagnostics"] = {}
 
         try:
             checked = self._fetch_page(source.get("url", ""))
@@ -331,6 +379,38 @@ class SourceManager:
                 )
                 source["last_detail_pages"] = detail_pages
                 source["last_duplicate_count"] = duplicate_count
+            elif self._is_duelmasters_official(source_url):
+                discovered, detail_pages, duplicate_count = (
+                    self._extract_catalog_official_products(
+                        self.duelmasters_extractor,
+                        checked["html"],
+                        checked.get("url", source_url),
+                        source_name,
+                    )
+                )
+                source["last_detail_pages"] = detail_pages
+                source["last_duplicate_count"] = duplicate_count
+            elif self._is_weiss_official(source_url):
+                discovered, detail_pages, duplicate_count = (
+                    self._extract_catalog_official_products(
+                        self.weiss_extractor,
+                        checked["html"],
+                        checked.get("url", source_url),
+                        source_name,
+                    )
+                )
+                source["last_detail_pages"] = detail_pages
+                source["last_duplicate_count"] = duplicate_count
+            elif self._is_mtg_official(source_url):
+                discovered, detail_pages, duplicate_count = (
+                    self._extract_mtg_official_products(
+                        checked["html"],
+                        checked.get("url", source_url),
+                        source_name,
+                    )
+                )
+                source["last_detail_pages"] = detail_pages
+                source["last_duplicate_count"] = duplicate_count
             else:
                 discovered = self.extractor.extract(
                     checked["html"], source_url, source_name
@@ -355,6 +435,9 @@ class SourceManager:
                 source_name=source_name,
                 source_url=source_url,
             )
+            source["last_candidate_diagnostics"] = dict(
+                self.candidate_manager.last_merge_diagnostics
+            )
             source["last_detected_count"] = len(discovered)
             source["last_added_count"] = added_count
             source["last_duplicate_count"] += max(
@@ -364,11 +447,18 @@ class SourceManager:
                 {
                     "name": item.get("name", ""),
                     "release_date": item.get("release_date", ""),
+                    "product_kind": item.get("product_kind", "その他"),
+                    "product_code": item.get("product_code", ""),
+                    "msrp": item.get("msrp"),
+                    "msrp_includes_tax": item.get("msrp_includes_tax", True),
+                    "reference_price": item.get("reference_price"),
                     "url": (
                         item.get("sites", [{}])[0].get("url", "")
                         if item.get("sites")
                         else ""
                     ),
+                    "source_name": source_name,
+                    "candidate_added_at": datetime.now().isoformat(timespec="seconds"),
                 }
                 for item in discovered[:12]
             ]
@@ -377,6 +467,9 @@ class SourceManager:
                 self._is_yugioh_official(source_url),
                 self._is_onepiece_official(source_url),
                 self._is_gundam_official(source_url),
+                self._is_duelmasters_official(source_url),
+                self._is_weiss_official(source_url),
+                self._is_mtg_official(source_url),
             ))
             detail_text = (
                 f"商品ページ{source['last_detail_pages']}件解析・" if detailed else ""
@@ -433,6 +526,9 @@ class SourceManager:
                 checked["html"], checked.get("url", product["official_url"])
             )
             product["release_date"] = supplement.get("release_date", "")
+            if supplement.get("msrp"):
+                product["msrp"] = supplement["msrp"]
+                product["reference_price"] = supplement["msrp"]
             time.sleep(0.25)
         return [item for item in products if item.get("release_date")], detail_pages, duplicates
 
@@ -471,6 +567,53 @@ class SourceManager:
                 checked["html"], checked.get("url", product["official_url"])
             )
             product["release_date"] = supplement.get("release_date", "")
+            if supplement.get("msrp"):
+                product["msrp"] = supplement["msrp"]
+                product["reference_price"] = supplement["msrp"]
+            time.sleep(0.25)
+        return [item for item in products if item.get("release_date")], detail_pages, duplicates
+
+    def _extract_catalog_official_products(
+        self,
+        extractor: Any,
+        top_html: str,
+        source_url: str,
+        source_name: str,
+    ) -> tuple[list[dict], int, int]:
+        extractor.validate_japanese_page(top_html, source_url)
+        products = extractor.extract_list_products(top_html, source_url, source_name)
+        deduplicated, duplicates = self._deduplicate_products(products)
+        return (
+            [item for item in deduplicated if item.get("release_date")],
+            1,
+            duplicates,
+        )
+
+    def _extract_mtg_official_products(
+        self,
+        top_html: str,
+        source_url: str,
+        source_name: str,
+    ) -> tuple[list[dict], int, int]:
+        self.mtg_extractor.validate_japanese_page(top_html, source_url)
+        products = self.mtg_extractor.extract_list_products(
+            top_html, source_url, source_name
+        )
+        products, duplicates = self._deduplicate_products(products)
+        detail_pages = 1
+        for product in products[: self.mtg_extractor.MAX_DETAIL_PAGES]:
+            checked = self._fetch_page(product["official_url"])
+            if not checked["ok"]:
+                continue
+            detail_pages += 1
+            supplement = self.mtg_extractor.supplement_from_detail(
+                checked["html"], checked.get("url", product["official_url"])
+            )
+            product["release_date"] = str(supplement.get("release_date", ""))
+            product["image_url"] = str(supplement.get("image_url", ""))
+            if supplement.get("msrp"):
+                product["msrp"] = supplement["msrp"]
+                product["reference_price"] = supplement["msrp"]
             time.sleep(0.25)
         return [item for item in products if item.get("release_date")], detail_pages, duplicates
 
@@ -681,6 +824,18 @@ class SourceManager:
     @staticmethod
     def _is_gundam_official(url: str) -> bool:
         return (urlparse(url).hostname or "").casefold() == "www.gundam-gcg.com"
+
+    @staticmethod
+    def _is_duelmasters_official(url: str) -> bool:
+        return (urlparse(url).hostname or "").casefold() == "dm.takaratomy.co.jp"
+
+    @staticmethod
+    def _is_weiss_official(url: str) -> bool:
+        return (urlparse(url).hostname or "").casefold() == "ws-tcg.com"
+
+    @staticmethod
+    def _is_mtg_official(url: str) -> bool:
+        return (urlparse(url).hostname or "").casefold() == "mtg-jp.com"
 
     @staticmethod
     def _normalize_name(name: str) -> str:

@@ -3,7 +3,7 @@ import sys
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from core.app_setup import configure_application
+from core.app_setup import configure_application, configure_high_dpi
 from core.behavior_config import BehaviorConfig
 from core.crash_handler import install_crash_handler
 from core.release_integrity import verify_runtime_integrity
@@ -14,6 +14,7 @@ from core.whats_new_manager import WhatsNewManager
 
 
 def main():
+    configure_high_dpi()
     if "--tls-ca-self-test" in sys.argv:
         try:
             create_tls_context()
@@ -68,7 +69,7 @@ def main():
             window.show()
             app.processEvents()
             diagnostics.write("Owner Editionスモークテスト: メイン画面生成成功")
-            QTimer.singleShot(1200, app.quit)
+            QTimer.singleShot(1200, window.request_application_quit)
         elif start_minimized:
             window.hide()
         else:

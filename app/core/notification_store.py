@@ -7,8 +7,8 @@ from core.runtime_paths import app_root
 
 
 class NotificationStore:
-    def __init__(self):
-        self.path = app_root() / "config" / "notifications.json"
+    def __init__(self, root: Path | None = None):
+        self.path = (Path(root) if root is not None else app_root()) / "config" / "notifications.json"
 
     def load(self) -> list[dict]:
         if not self.path.exists():
@@ -25,6 +25,10 @@ class NotificationStore:
         title: str,
         message: str,
         category: str = "情報",
+        *,
+        action_url: str = "",
+        action_label: str = "",
+        metadata: dict | None = None,
     ) -> None:
         items = self.load()
         items.insert(
@@ -35,6 +39,9 @@ class NotificationStore:
                 "category": category,
                 "created_at": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
                 "read": False,
+                "action_url": str(action_url),
+                "action_label": str(action_label),
+                "metadata": dict(metadata or {}),
             },
         )
         self._save(items[:500])

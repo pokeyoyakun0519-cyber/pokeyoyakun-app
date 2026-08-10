@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import base64
+import importlib
 import json
 import re
 from datetime import datetime, timedelta
 from email.header import decode_header
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from core.email_account_manager import EmailAccountManager
 from core.gmail_result_history import GmailResultHistory
@@ -19,6 +20,21 @@ from core.tcg_categories import display_name, normalize_key
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
 ]
+
+GMAIL_DEPENDENCIES = (
+    ("google-auth", "google.auth.transport.requests"),
+    ("google-auth", "google.oauth2.credentials"),
+    ("google-auth-oauthlib", "google_auth_oauthlib.flow"),
+    ("google-api-python-client", "googleapiclient.discovery"),
+)
+
+
+class GmailDependencyError(RuntimeError):
+    pass
+
+
+class GmailOAuthConfigurationError(RuntimeError):
+    pass
 
 WIN_KEYWORDS = (
     "ご当選",
@@ -120,35 +136,73 @@ class GmailResultService:
         self.history = GmailResultHistory()
 
     @staticmethod
-    def dependencies_available() -> bool:
-        try:
-            import google.auth.transport.requests  # noqa: F401
-            import google.oauth2.credentials  # noqa: F401
-            import google_auth_oauthlib.flow  # noqa: F401
-            import googleapiclient.discovery  # noqa: F401
-        except ImportError:
-            return False
-        return True
+    def missing_dependencies() -> list[str]:
+        missing = []
+        for package_name, module_name in GMAIL_DEPENDENCIES:
+            try:
+                importlib.import_module(module_name)
+            except ImportError:
+                if package_name not in missing:
+                    missing.append(package_name)
+        return missing
+
+    @classmethod
+    def dependencies_available(cls) -> bool:
+        return not cls.missing_dependencies()
+
+    @classmethod
+    def require_dependencies(cls) -> None:
+        missing = cls.missing_dependencies()
+        if missing:
+            raise GmailDependencyError(
+                "Gmail連携ライブラリが不足しています: "
+                + ", ".join(missing)
+                + "。最新版のアプリを再インストールしてください。"
+            )
 
     def client_secret_exists(self) -> bool:
         return self.client_secret_path.exists()
+
+    def validate_client_secret(self) -> dict[str, Any]:
+        if not self.client_secret_exists():
+            raise GmailOAuthConfigurationError(
+                "OAuth設定ファイルが未配置です。"
+                "デスクトップアプリ用のgoogle_client_secret.jsonを"
+                f"次の場所へ配置してください: {self.client_secret_path}"
+            )
+        try:
+            document = json.loads(
+                self.client_secret_path.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise GmailOAuthConfigurationError(
+                "OAuth設定エラー: google_client_secret.jsonを読み込めません。"
+                "Google CloudからJSONを再取得してください。"
+            ) from error
+        installed = document.get("installed")
+        required = {
+            "client_id",
+            "client_secret",
+            "auth_uri",
+            "token_uri",
+            "redirect_uris",
+        }
+        if (
+            not isinstance(installed, dict)
+            or any(not installed.get(key) for key in required)
+        ):
+            raise GmailOAuthConfigurationError(
+                "OAuth設定エラー: デスクトップアプリ用OAuthクライアントの"
+                "JSONではないか、必須項目が不足しています。"
+            )
+        return document
 
     def connect_account(
         self,
         account_id: str,
     ) -> dict[str, Any]:
-        if not self.dependencies_available():
-            raise RuntimeError(
-                "Gmail連携に必要なコンポーネントを読み込めません。"
-                "最新版のアプリを再インストールしてから、もう一度お試しください。"
-            )
-
-        if not self.client_secret_exists():
-            raise RuntimeError(
-                "google_client_secret.jsonがありません。"
-                "Google Cloudでデスクトップアプリ用OAuthクライアントを作成し、"
-                "設定ファイルを指定場所へ配置してください。"
-            )
+        self.require_dependencies()
+        self.validate_client_secret()
 
         account = self._find_account(account_id)
         if account is None:
@@ -158,21 +212,27 @@ class GmailResultService:
 
         from google_auth_oauthlib.flow import InstalledAppFlow
 
-        flow = InstalledAppFlow.from_client_secrets_file(
-            str(self.client_secret_path),
-            GMAIL_SCOPES,
-        )
-        credentials = flow.run_local_server(
-            port=0,
-            open_browser=True,
-            authorization_prompt_message=(
-                "ブラウザーでGmail読取を許可してください。"
-            ),
-            success_message=(
-                "Gmail連携が完了しました。"
-                "この画面を閉じてポケヨヤ君へ戻ってください。"
-            ),
-        )
+        try:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(self.client_secret_path),
+                GMAIL_SCOPES,
+            )
+            credentials = flow.run_local_server(
+                port=0,
+                open_browser=True,
+                authorization_prompt_message=(
+                    "ブラウザーでGmail読取を許可してください。"
+                ),
+                success_message=(
+                    "Gmail連携が完了しました。"
+                    "この画面を閉じてポケヨヤ君へ戻ってください。"
+                ),
+            )
+        except (OSError, ValueError) as error:
+            raise GmailOAuthConfigurationError(
+                "OAuth設定エラー: Google認証を開始できません。"
+                "OAuthクライアント設定とリダイレクトURIを確認してください。"
+            ) from error
 
         self.token_dir.mkdir(
             parents=True,
@@ -297,10 +357,13 @@ class GmailResultService:
 
     def scan_all_enabled(
         self,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> list[dict[str, Any]]:
         all_results: list[dict[str, Any]] = []
 
         for account in self.account_manager.load_accounts():
+            if cancel_requested is not None and cancel_requested():
+                break
             if not account.get("enabled", True):
                 continue
             if account.get("connection_status") != "連携済み":
@@ -325,6 +388,8 @@ class GmailResultService:
                         ),
                     }
                 )
+            if cancel_requested is not None and cancel_requested():
+                break
 
         return self._deduplicate(all_results)
 
@@ -332,10 +397,7 @@ class GmailResultService:
         self,
         account_id: str,
     ):
-        if not self.dependencies_available():
-            raise RuntimeError(
-                "Gmail連携に必要なコンポーネントを読み込めません。"
-            )
+        self.require_dependencies()
 
         token_path = self._token_path(account_id)
         if not token_path.exists():

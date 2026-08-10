@@ -101,9 +101,9 @@ class OwnerEditionSeparationTest(unittest.TestCase):
     def test_owner_outputs_are_separate_and_never_public_assets(self):
         builder = _source("tools/build_owner_edition.py")
         installer = _source("installer/PokeyoyaKun_Owner_Setup.iss")
-        public_assets = _source("tools/prepare_github_assets_125_rc3.py")
-        self.assertIn('"owner_dist_rc3"', builder)
-        self.assertIn("owner_installer_rc3", installer)
+        public_assets = _source("tools/prepare_github_assets_125_rc5.py")
+        self.assertIn('"owner_dist_rc5"', builder)
+        self.assertIn("owner_installer_rc5", installer)
         self.assertIn("PokeyoyaKun_OwnerEdition.exe", installer)
         self.assertNotIn("Owner", public_assets)
         self.assertNotIn("owner_", public_assets.lower())
@@ -127,7 +127,7 @@ class OwnerEditionSeparationTest(unittest.TestCase):
     def test_owner_metadata_and_readme_are_explicit(self):
         version = _source("installer/owner_version_info.txt")
         readme = _source("OWNER_EDITION_README.txt")
-        self.assertIn("1.25.0 RC3 Owner", version)
+        self.assertIn("1.25.0 RC5 Owner", version)
         self.assertIn("PokeyoyaKun_OwnerEdition.exe", version)
         self.assertIn("開発者専用・配布禁止", readme)
         self.assertIn("GitHub Releases", readme)
@@ -138,7 +138,7 @@ class OwnerEditionSeparationTest(unittest.TestCase):
         for relative in (
             "installer/PokeyoyaKun_User_Setup.iss",
             "tools/build_user_installer.py",
-            "tools/prepare_github_assets_125_rc3.py",
+            "tools/prepare_github_assets_125_rc5.py",
         ):
             text = _source(relative)
             self.assertNotIn("Owner Edition", text)

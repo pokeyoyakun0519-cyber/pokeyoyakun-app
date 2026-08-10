@@ -1,0 +1,7 @@
+{
+  "schema_version": 3,
+  "enabled": false,
+  "server_url": "https://license.example.invalid",
+  "timeout_seconds": 10,
+  "offline_grace_hours": 0
+}
