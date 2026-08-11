@@ -11,6 +11,7 @@ DEFAULT_CONFIG = {
     "check_lotteries": True,
     "check_candidate_retail": True,
     "check_gmail_results": True,
+    "check_x_recent": False,
     "candidate_retail_interval_minutes": 30,
     "last_run": "",
 }

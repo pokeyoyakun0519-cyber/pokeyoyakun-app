@@ -16,6 +16,7 @@ class CandidateAutoSearch:
         candidate_ids: set[str] | None = None,
         progress_callback: Callable[[dict[str, Any], int], None] | None = None,
         cancel_requested: Callable[[], bool] | None = None,
+        enabled_tcg_keys: set[str] | None = None,
     ) -> dict[str, Any]:
         items = self.candidates.load_candidates()
         searched = 0
@@ -31,6 +32,13 @@ class CandidateAutoSearch:
                 and str(candidate.get("id", "")) not in candidate_ids
             ):
                 continue
+            if enabled_tcg_keys is not None:
+                from core.tcg_categories import normalize_key
+                candidate_tcg = normalize_key(
+                    candidate.get("tcg_key"), candidate.get("tcg")
+                )[0]
+                if candidate_tcg not in enabled_tcg_keys:
+                    continue
             if not self._is_due(
                 str(candidate.get("last_searched", "")),
                 interval_minutes,
@@ -53,6 +61,8 @@ class CandidateAutoSearch:
                 str(candidate.get("id", "")),
                 hits=hits,
                 messages=messages,
+                candidates=items,
+                save=False,
             )
             searched += 1
             if progress_callback is not None:
@@ -77,6 +87,9 @@ class CandidateAutoSearch:
                         "new_hits": new_hits,
                     }
                 )
+
+        if searched:
+            self.candidates.save_candidates(items)
 
         return {
             "searched_count": searched,

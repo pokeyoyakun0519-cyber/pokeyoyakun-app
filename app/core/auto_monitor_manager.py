@@ -11,6 +11,7 @@ from core.config_manager import ConfigManager
 from core.product_master import ProductMasterManager
 from core.product_store import ProductStore
 from core.tcg_categories import display_name, normalize_key
+from core.monitoring_scope import enabled_tcg_keys
 
 
 class AutoMonitorManager:
@@ -33,6 +34,7 @@ class AutoMonitorManager:
         self, candidates: list[dict[str, Any]], *, today: date | None = None
     ) -> dict[str, Any]:
         config = self.config_manager.load()
+        enabled_games = enabled_tcg_keys(config)
         general = config.get("general", {})
         if not bool(general.get("auto_monitor_new_releases", True)):
             return {"added": 0, "skipped": len(candidates), "products": []}
@@ -52,6 +54,9 @@ class AutoMonitorManager:
         for candidate in candidates:
             tcg = normalize_key(candidate.get("tcg_key"), candidate.get("tcg"))[0]
             reasons = reasons_by_tcg.setdefault(tcg, Counter())
+            if tcg not in enabled_games:
+                reasons["disabled_tcg"] += 1
+                continue
             item, reason = self.classify_candidate(candidate, current, days)
             if not item:
                 reasons[reason] += 1
@@ -145,7 +150,11 @@ class AutoMonitorManager:
         until = (release - current).days
         if until < 0:
             return None, "already_released"
-        if until > days:
+        has_application = bool(
+            str(candidate.get("application_url", "")).strip()
+            and str(candidate.get("application_end_at", "")).strip()
+        )
+        if until > days and not has_application:
             return None, "beyond_monitor_window"
         tcg = normalize_key(candidate.get("tcg_key"), candidate.get("tcg"))[0]
         url = str(candidate.get("official_url") or candidate.get("source_url") or "").strip()
@@ -156,6 +165,19 @@ class AutoMonitorManager:
         if any(word in kind.casefold() for word in cls.EXCLUDED_WORDS):
             return None, "excluded_product_kind"
         digest = hashlib.sha256(cls.product_key(candidate).encode("utf-8")).hexdigest()[:20]
+        sites = []
+        if has_application:
+            sites.append({
+                "site_key": "pokemon_official_application",
+                "name": "ポケモンセンターオンライン",
+                "status": str(candidate.get("application_status", "抽選受付")),
+                "url": str(candidate.get("application_url", "")),
+                "application_url": str(candidate.get("application_url", "")),
+                "application_start_at": str(candidate.get("application_start_at", "")),
+                "application_end_at": str(candidate.get("application_end_at", "")),
+                "application_method": str(candidate.get("application_method", "Web抽選")),
+                "application_status": str(candidate.get("application_status", "抽選受付")),
+            })
         return {
             "id": f"auto_{digest}",
             "tcg_key": tcg,
@@ -184,5 +206,5 @@ class AutoMonitorManager:
             "auto_monitored": True,
             "auto_added_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "status": "自動監視中",
-            "sites": [],
+            "sites": sites,
         }, "eligible"

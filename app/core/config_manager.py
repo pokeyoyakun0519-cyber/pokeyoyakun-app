@@ -19,6 +19,8 @@ DEFAULT_CONFIG = {
         "auto_monitor_days_before": 30,
         "show_ended_applications": False,
         "notify_new_monitoring_sites": True,
+        "priority_monitoring_only": False,
+        "startup_retail_search": False,
     },
     "profile": {
         "name": "",

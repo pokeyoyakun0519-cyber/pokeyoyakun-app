@@ -6,10 +6,11 @@ from typing import Any, Callable
 from core.candidate_manager import CandidateManager
 from core.candidate_auto_search import CandidateAutoSearch
 from core.auto_monitor_manager import AutoMonitorManager
-from core.config_manager import ConfigManager
 from core.product_store import ProductStore
 from core.product_master import ProductMasterManager
 from core.source_manager import SourceManager
+from core.config_manager import ConfigManager
+from core.monitoring_scope import enabled_tcg_keys
 from core.tcg_categories import normalize_key
 from core.json_file_state import CORRUPT
 
@@ -75,11 +76,28 @@ class InitialDataBootstrap:
             return {"started": True, "cancelled": True, "phase": "cancelled"}
 
         if cancel_requested is None:
-            sources, changed = self.source_manager.check_all()
+            enabled_games = enabled_tcg_keys(self.config_manager.load())
+            try:
+                sources, changed = self.source_manager.check_all(
+                    enabled_tcg_keys=enabled_games
+                )
+            except TypeError as error:
+                if "enabled_tcg_keys" not in str(error):
+                    raise
+                sources, changed = self.source_manager.check_all()
         else:
-            sources, changed = self.source_manager.check_all(
-                cancel_requested=cancel_requested
-            )
+            enabled_games = enabled_tcg_keys(self.config_manager.load())
+            try:
+                sources, changed = self.source_manager.check_all(
+                    cancel_requested=cancel_requested,
+                    enabled_tcg_keys=enabled_games,
+                )
+            except TypeError as error:
+                if "enabled_tcg_keys" not in str(error):
+                    raise
+                sources, changed = self.source_manager.check_all(
+                    cancel_requested=cancel_requested
+                )
         candidates = self.candidate_manager.load_candidates()
         monitored_keys = {
             AutoMonitorManager.product_key(item)
@@ -110,6 +128,11 @@ class InitialDataBootstrap:
             official_result["phase"] = "cancelled"
             return official_result
 
+        run_startup_retail = bool(
+            self.config_manager.load().get("general", {}).get(
+                "startup_retail_search", False
+            )
+        )
         retail_result = (
             self.candidate_auto_search.run_due(
                 candidate_ids=candidate_ids,
@@ -124,8 +147,9 @@ class InitialDataBootstrap:
                     else None
                 ),
                 cancel_requested=cancel_requested,
+                enabled_tcg_keys=enabled_games,
             )
-            if candidate_ids
+            if candidate_ids and run_startup_retail
             else {"searched_count": 0, "new_hit_candidates": []}
         )
         products = self.product_store.load_products()
@@ -142,6 +166,7 @@ class InitialDataBootstrap:
             or (cancel_requested is not None and cancel_requested())
         )
         result["phase"] = "cancelled" if result["cancelled"] else "completed"
+        result["retail_deferred"] = bool(candidate_ids and not run_startup_retail)
         return result
 
     @staticmethod

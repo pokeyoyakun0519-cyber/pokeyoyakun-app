@@ -184,6 +184,10 @@ class SettingsPage(QFrame):
             self.game_checks[category.key] = checkbox
             games_grid.addWidget(checkbox, index // 2, index % 2)
         games_card.layout().addLayout(games_grid)
+        self.priority_monitoring_only = QCheckBox(
+            "ポケモンカード／ONE PIECEを優先監視（他TCGの自動巡回を停止）"
+        )
+        games_card.layout().addWidget(self.priority_monitoring_only)
         self._register_card("監視", "監視するTCG", games_card, "ポケモン ワンピース 遊戯王 ガンダム")
 
         monitor_card = self._make_card("新商品の自動監視")
@@ -340,6 +344,9 @@ class SettingsPage(QFrame):
         self.ui_mode.setCurrentIndex(max(0, self.ui_mode.findData(general.get("ui_mode", "simple"))))
         for key, checkbox in self.game_checks.items():
             checkbox.setChecked(bool(config["games"].get(key, True)))
+        self.priority_monitoring_only.setChecked(bool(
+            general.get("priority_monitoring_only", False)
+        ))
         for site_id, checkbox in self.site_checks.items():
             checkbox.setChecked(bool(config["sites"].get(site_id, False)))
         self.auto_input.setChecked(general["auto_input_enabled"])
@@ -372,6 +379,7 @@ class SettingsPage(QFrame):
         return [
             self.ui_mode, self.auto_input, self.new_product_fetch,
             self.show_ended_applications, self.group_applications_by_product,
+            self.priority_monitoring_only,
             *self.game_checks.values(), self.auto_monitor_new_releases,
             self.auto_monitor_days, self.notify_new_sites, self.sound_enabled,
             self.popup_enabled, self.notify_important_application_changes,
@@ -461,6 +469,7 @@ class SettingsPage(QFrame):
             "auto_monitor_days_before": int(self.auto_monitor_days.currentData()),
             "show_ended_applications": self.show_ended_applications.isChecked(),
             "notify_new_monitoring_sites": self.notify_new_sites.isChecked(),
+            "priority_monitoring_only": self.priority_monitoring_only.isChecked(),
         })
         config.update({
             "general": general,

@@ -119,7 +119,7 @@ class ProductMasterManager:
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
         """同じ内部IDを持つ外部識別子衝突だけを、安定IDへ分離する。"""
         repaired: list[dict[str, Any]] = []
-        by_id: dict[str, list[dict[str, Any]]] = {}
+        by_id: dict[str, dict[str, Any]] = {}
         warnings: list[dict[str, str]] = []
         used_ids = {
             str(item.get("product_id") or item.get("id") or "").strip()
@@ -131,19 +131,28 @@ class ProductMasterManager:
             original_id = str(
                 item.get("product_id") or item.get("id") or ""
             ).strip()
-            prior = by_id.get(original_id, []) if original_id else []
-            if prior and any(
-                cls.has_identifier_conflict(value, item)
-                or normalize_key(value.get("tcg_key"), value.get("tcg"))[0]
-                != normalize_key(item.get("tcg_key"), item.get("tcg"))[0]
-                or cls._has_kind_conflict(value, item)
-                or cls._has_brand_conflict(value, item)
-                for value in prior
-            ):
-                new_id = cls.deterministic_product_id(item)
+            summary = by_id.get(original_id) if original_id else None
+            tcg = normalize_key(item.get("tcg_key"), item.get("tcg"))[0]
+            identifiers = dict(cls.identifiers(item))
+            kind = cls.normalize_product_kind(item.get("product_kind"))
+            brand = cls._brand(item)
+            has_conflict = bool(summary and (
+                any(value != tcg for value in summary["tcgs"])
+                or any(
+                    value != identifiers[field]
+                    for field, values in summary["identifiers"].items()
+                    if field in identifiers
+                    for value in values
+                )
+                or bool(kind and any(value != kind for value in summary["kinds"]))
+                or bool(brand and any(value != brand for value in summary["brands"]))
+            ))
+            if has_conflict:
+                stable_id = cls.deterministic_product_id(item)
+                new_id = stable_id
                 counter = 1
                 while new_id in used_ids:
-                    seed = f"{cls.deterministic_product_id(item)}|{counter}"
+                    seed = f"{stable_id}|{counter}"
                     new_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
                     counter += 1
                 item["product_id"] = new_id
@@ -158,7 +167,16 @@ class ProductMasterManager:
                     "reason": "product_identity_conflict",
                 })
             elif original_id:
-                by_id.setdefault(original_id, []).append(item)
+                summary = by_id.setdefault(original_id, {
+                    "tcgs": set(), "identifiers": {}, "kinds": set(), "brands": set(),
+                })
+                summary["tcgs"].add(tcg)
+                for field, value in identifiers.items():
+                    summary["identifiers"].setdefault(field, set()).add(value)
+                if kind:
+                    summary["kinds"].add(kind)
+                if brand:
+                    summary["brands"].add(brand)
             repaired.append(item)
         return repaired, warnings
 
@@ -427,6 +445,7 @@ class ProductMasterManager:
         for warning in (*record_id_warnings, *product_id_warnings):
             self.last_conflicts.append(dict(warning))
         resolved: list[dict[str, Any]] = []
+        match_cache: dict[tuple[Any, ...], int] = {}
 
         for raw in products:
             product = dict(raw)
@@ -443,7 +462,16 @@ class ProductMasterManager:
             ]
             alias = str(product.get("name", "商品名未設定")).strip()
             identity = self.identity_key(product)
-            match_index, _match_method = self.find_match(records, product)
+            match_signature = (
+                tcg_key,
+                tuple(self.identifiers(product)),
+                self.normalize_name(product.get("canonical_name") or alias),
+                self.normalize_product_kind(product.get("product_kind")),
+                self._brand(product),
+            )
+            match_index = match_cache.get(match_signature)
+            if match_index is None:
+                match_index, _match_method = self.find_match(records, product)
             record = records[match_index] if match_index is not None else None
             if record is None:
                 original_id = str(product.get("product_id") or product.get("id") or "").strip()
@@ -494,11 +522,15 @@ class ProductMasterManager:
                     if product.get(key):
                         record[key] = product[key]
                 records.append(record)
+                match_index = len(records) - 1
                 self.last_new_records.append(dict(record))
             else:
                 merged_record, _changes = self.reconcile_product(record, product)
                 record.clear()
                 record.update(merged_record)
+
+            if match_index is not None:
+                match_cache[match_signature] = match_index
 
             for key, source_key in (
                 ("official_url", "official_url"),
@@ -722,19 +754,21 @@ class ProductMasterManager:
     @staticmethod
     def _merge_products(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
         merged: dict[str, dict[str, Any]] = {}
+        known_sites: dict[str, set[tuple[str, str]]] = {}
         order: list[str] = []
         for product in products:
             product_id = str(product.get("product_id", product.get("id", "")))
             if product_id not in merged:
                 merged[product_id] = product
                 merged[product_id]["sites"] = list(product.get("sites", []))
+                known_sites[product_id] = {
+                    (str(site.get("site_key", "")), str(site.get("url", "")))
+                    for site in product.get("sites", [])
+                }
                 order.append(product_id)
                 continue
             target = merged[product_id]
-            known = {
-                (str(site.get("site_key", "")), str(site.get("url", "")))
-                for site in target.get("sites", [])
-            }
+            known = known_sites[product_id]
             for site in product.get("sites", []):
                 key = (str(site.get("site_key", "")), str(site.get("url", "")))
                 if key not in known:

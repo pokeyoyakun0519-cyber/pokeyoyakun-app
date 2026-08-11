@@ -53,6 +53,10 @@ class OnePieceOfficialExtractor:
             name = self._clean_text(title.group("value"))
             if not name:
                 continue
+            if any(term in name for term in (
+                "カードケース", "プレイマット", "スリーブ", "ラバーマット",
+            )):
+                continue
             date_match = re.search(
                 r'<time[^>]+datetime=["\'](?P<date>20\d{2}-\d{2}-\d{2})["\']',
                 body,
@@ -105,7 +109,11 @@ class OnePieceOfficialExtractor:
         parsed = urlparse(url)
         return (
             (parsed.hostname or "").casefold() == "www.onepiece-cardgame.com"
-            and bool(re.fullmatch(r"/products/[a-z0-9_-]+\.html", parsed.path, re.IGNORECASE))
+            and bool(re.fullmatch(
+                r"/products/(?:[a-z0-9_-]+\.html|(?:boosters|decks|other)/[a-z0-9_-]+/)",
+                parsed.path,
+                re.IGNORECASE,
+            ))
         )
 
     def _product(
@@ -138,6 +146,8 @@ class OnePieceOfficialExtractor:
             "favorite": False,
             "reserved": False,
             "source_type": "onepiece_official",
+            "manufacturer_official": True,
+            "information_type": "PRODUCT",
             "candidate_confidence": 1.0,
             "candidate_reasons": ["ワンピースカード日本公式商品一覧"],
             "sites": [{
@@ -162,7 +172,7 @@ class OnePieceOfficialExtractor:
         if match:
             value = match.group(0).upper()
             return value if "-" in value else re.sub(r"([A-Z]+)(\d+)", r"\1-\2", value)
-        slug = urlparse(detail_url).path.rsplit("/", 1)[-1].split(".", 1)[0].upper()
+        slug = urlparse(detail_url).path.rstrip("/").rsplit("/", 1)[-1].split(".", 1)[0].upper()
         return slug if re.fullmatch(r"(?:OP|EB|ST|PRB)\d+", slug) else ""
 
     @staticmethod

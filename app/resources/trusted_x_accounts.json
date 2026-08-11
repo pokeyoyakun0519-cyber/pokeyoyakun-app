@@ -1,0 +1,20 @@
+[
+  {
+    "username": "pokemon_cojp",
+    "display_name": "ポケモン公式",
+    "category": "manufacturer_official",
+    "store_name": "株式会社ポケモン",
+    "tcg": "pokemon",
+    "trust_score": 100,
+    "enabled": true
+  },
+  {
+    "username": "ONEPIECE_tcg",
+    "display_name": "ONE PIECEカードゲーム公式",
+    "category": "manufacturer_official",
+    "store_name": "バンダイ",
+    "tcg": "onepiece",
+    "trust_score": 100,
+    "enabled": true
+  }
+]

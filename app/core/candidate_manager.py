@@ -19,6 +19,7 @@ from core.json_file_state import (
 from core.product_master import ProductMasterManager
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
+from core.information_classifier import PRODUCT, classify_information
 
 
 class CandidateManager:
@@ -103,6 +104,9 @@ class CandidateManager:
             if not self._is_new_release_candidate(product, tcg_key):
                 diagnostic_reasons["not_new_release_product"] += 1
                 continue
+            if classify_information(product) != PRODUCT:
+                diagnostic_reasons["not_product_information"] += 1
+                continue
 
             official_url = str(product.get("official_url", "")) or source_url
             sites = product.get("sites", [])
@@ -183,6 +187,11 @@ class CandidateManager:
                     "msrp": product.get("msrp"),
                     "msrp_includes_tax": bool(product.get("msrp_includes_tax", True)),
                     "reference_price": product.get("reference_price"),
+                    "application_start_at": str(product.get("application_start_at", "")),
+                    "application_end_at": str(product.get("application_end_at", "")),
+                    "application_url": str(product.get("application_url", "")),
+                    "application_method": str(product.get("application_method", "")),
+                    "application_status": str(product.get("application_status", "")),
                     "status": "販売・抽選情報を検索待ち",
                     "candidate_confidence": confidence,
                     "candidate_reasons": reasons,
@@ -266,6 +275,11 @@ class CandidateManager:
                         "msrp": item.get("msrp"),
                         "msrp_includes_tax": item.get("msrp_includes_tax", True),
                         "reference_price": item.get("reference_price"),
+                        "application_start_at": item.get("application_start_at", ""),
+                        "application_end_at": item.get("application_end_at", ""),
+                        "application_url": item.get("application_url", ""),
+                        "application_method": item.get("application_method", ""),
+                        "application_status": item.get("application_status", ""),
                         "tcg_key": normalize_key(
                             source.get("tcg_key"), source.get("tcg")
                         )[0],
@@ -366,8 +380,10 @@ class CandidateManager:
         *,
         hits: list[dict[str, Any]],
         messages: list[str],
+        candidates: list[dict[str, Any]] | None = None,
+        save: bool = True,
     ) -> dict[str, Any] | None:
-        candidates = self.load_candidates()
+        candidates = candidates if candidates is not None else self.load_candidates()
         updated = None
 
         for candidate in candidates:
@@ -404,7 +420,8 @@ class CandidateManager:
             updated = candidate
             break
 
-        self.save_candidates(candidates)
+        if save:
+            self.save_candidates(candidates)
         return updated
 
     def approve_candidate(

@@ -163,6 +163,7 @@ class Rc5UiRegressionTest(unittest.TestCase):
             values = config.load()
             values["general"]["setup_completed"] = True
             values["general"]["new_product_auto_fetch"] = True
+            values["general"]["startup_retail_search"] = True
             config.save(values)
             store = ProductStore(root)
             candidates = CandidateManager(root)
