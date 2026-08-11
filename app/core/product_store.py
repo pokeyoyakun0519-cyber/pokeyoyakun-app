@@ -59,16 +59,18 @@ class ProductStore:
         master = ProductMasterManager(self.root)
         products = master.synchronize(products)
         timeline = ActivityTimeline(self.root)
+        timeline_events = []
         for record in master.last_new_records:
-            timeline.add(
-                "新商品",
-                f'{record.get("canonical_name", "商品")}追加',
-                product_id=str(record.get("product_id", "")),
-                occurred_at=str(record.get("created_at", "")),
-            )
+            timeline_events.append({
+                "event_type": "新商品",
+                "title": f'{record.get("canonical_name", "商品")}追加',
+                "product_id": str(record.get("product_id", "")),
+                "occurred_at": str(record.get("created_at", "")),
+            })
         from core.store_history import StoreHistoryManager
 
         store_history = StoreHistoryManager(self.root)
+        store_events = []
         for product in products:
             product_id = str(product.get("product_id", product.get("id", "")))
             for site in product.get("sites", []):
@@ -79,8 +81,18 @@ class ProductStore:
                 action = "抽選追加" if "抽選" in status else "予約追加" if "予約" in status else "商品追加"
                 store_id = str(site.get("site_key", site.get("id", "")))
                 detail = str(product.get("canonical_name", product.get("name", "商品")))
-                store_history.record(store_id, action, detail, occurred_at=occurred)
-                timeline.add(action, f'{site.get("name", "店舗")} {action}', product_id=product_id, store_id=store_id, occurred_at=occurred)
+                store_events.append({
+                    "store_id": store_id, "action": action,
+                    "detail": detail, "occurred_at": occurred,
+                })
+                timeline_events.append({
+                    "event_type": action,
+                    "title": f'{site.get("name", "店舗")} {action}',
+                    "product_id": product_id, "store_id": store_id,
+                    "occurred_at": occurred,
+                })
+        store_history.record_many(store_events)
+        timeline.add_many(timeline_events)
         from core.product_image_cache import ProductImageCache
 
         ProductImageCache(self.root).cleanup(

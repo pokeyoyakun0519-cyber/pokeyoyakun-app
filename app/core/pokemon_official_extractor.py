@@ -1,4 +1,5 @@
 import hashlib
+import json
 import re
 from datetime import date, timedelta
 from html import unescape
@@ -98,6 +99,47 @@ class PokemonOfficialExtractor:
     def __init__(self):
         self.validator = ProductCandidateValidator()
 
+    def extract_catalog_products(
+        self,
+        payload: str | bytes | dict,
+        source_name: str,
+        base_url: str = "https://www.pokemon-card.com/",
+    ) -> list[dict]:
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8")
+        data = json.loads(payload) if isinstance(payload, str) else payload
+        if not isinstance(data, dict) or not isinstance(data.get("products"), list):
+            raise ValueError("ポケモン公式商品APIの形式が不正です。")
+        products = []
+        for raw in data["products"]:
+            if not isinstance(raw, dict):
+                continue
+            product_type = str(raw.get("productType", "")).strip()
+            if product_type == "周辺グッズ":
+                continue
+            name = str(raw.get("productTitle", "")).strip()
+            release_date = self._extract_release_date(str(raw.get("releaseDate", "")))
+            detail = str(raw.get("link_detailPage", "")).strip()
+            official_url = urljoin(base_url, detail or "/products/")
+            if not name or not release_date or not detail:
+                continue
+            product = self._make_product(name, release_date, official_url, source_name)
+            product.update({
+                "product_kind": product_type or "その他",
+                "official_product_id": self._official_id(official_url),
+                "image_url": urljoin(base_url, str(raw.get("tumbsImg", ""))),
+                "msrp": self._price(str(raw.get("priceTxt", ""))),
+                "reference_price": self._price(str(raw.get("priceTxt", ""))),
+                "official_url": official_url,
+                "manufacturer_official": True,
+                "information_type": "PRODUCT",
+                "source_type": "pokemon_official_catalog",
+                "candidate_confidence": 1.0,
+                "candidate_reasons": ["ポケモンカード公式商品API"],
+            })
+            products.append(product)
+        return products
+
     def collect_candidate_links(
         self,
         html: str,
@@ -155,6 +197,13 @@ class PokemonOfficialExtractor:
         if not release_date:
             return []
 
+        special_official = (urlparse(detail_url).hostname or "").endswith(
+            "30th.pokemon-card.com"
+        )
+        if special_official:
+            return self._extract_special_products(
+                html, text, detail_url, source_name, release_date
+            )
         names = self._extract_names(text, link_text)
         products = []
         seen = set()
@@ -187,6 +236,15 @@ class PokemonOfficialExtractor:
                 detail_url=detail_url,
                 source_name=source_name,
             )
+            product["product_kind"] = next(
+                (kind for kind in PRODUCT_KINDS if kind in name), "その他"
+            )
+            product["image_url"] = urljoin(
+                detail_url, self._meta_content(html, "og:image")
+            )
+            product["msrp"] = self._price(text)
+            product["reference_price"] = product["msrp"]
+            product["official_product_id"] = self._official_id(detail_url)
             product["candidate_confidence"] = (
                 validation["confidence"]
             )
@@ -196,6 +254,89 @@ class PokemonOfficialExtractor:
             products.append(product)
 
         return products
+
+    def _extract_special_products(
+        self, html: str, text: str, detail_url: str, source_name: str,
+        fallback_date: str,
+    ) -> list[dict]:
+        block = re.compile(
+            r"商品名\s+(?P<name>.*?)\s+希望小売価格\s+"
+            r"(?P<price>\d[\d,]*)円.*?発売日\s+"
+            r"(?P<year>20\d{2})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日",
+            re.DOTALL,
+        )
+        matches = list(block.finditer(text))
+        if not matches:
+            title = re.split(r"[｜|]", self._meta_content(html, "og:title"), maxsplit=1)[0]
+            matches_data = [(title, None, fallback_date)] if title and fallback_date else []
+        else:
+            matches_data = []
+            for match in matches:
+                try:
+                    release = (
+                        f"{int(match.group('year')):04d}-"
+                        f"{int(match.group('month')):02d}-"
+                        f"{int(match.group('day')):02d}"
+                    )
+                except ValueError:
+                    continue
+                matches_data.append((match.group("name"), int(match.group("price").replace(",", "")), release))
+        image_url = urljoin(detail_url, self._meta_content(html, "og:image"))
+        application = self._special_application(html, text, detail_url)
+        products = []
+        for raw_name, price, release_date in matches_data:
+            name = re.sub(r"\s+", " ", raw_name).strip()
+            name = re.sub(r"^ポケモンカードゲーム\s+MEGA\s*", "", name)
+            name = re.sub(r"\s+([「『])", r"\1", name)
+            if name.startswith(("「", "『")) and name.endswith(("」", "』")):
+                name = name[1:-1].strip()
+            if not name:
+                continue
+            product = self._make_product(name, release_date, detail_url, source_name)
+            official_id = self._official_id(detail_url)
+            if len(matches_data) > 1:
+                suffix = hashlib.sha256(self._normalize_name(name).encode("utf-8")).hexdigest()[:8]
+                official_id = f"{official_id}-{suffix}"
+            product.update({
+                "product_kind": next((kind for kind in PRODUCT_KINDS if kind in name), "カード入り商品"),
+                "image_url": image_url,
+                "msrp": price,
+                "reference_price": price,
+                "official_product_id": official_id,
+                "candidate_confidence": 1.0,
+                "candidate_reasons": ["ポケモンカード30周年公式の商品情報欄"],
+            })
+            product.update(application)
+            products.append(product)
+        return products
+
+    @staticmethod
+    def _special_application(html: str, text: str, detail_url: str) -> dict:
+        match = re.search(
+            r"抽選応募受け付け期間\s+(20\d{2})年(\d{1,2})月(\d{1,2})日.*?"
+            r"(\d{1,2}):(\d{2}).*?[～〜]\s*(20\d{2})年(\d{1,2})月(\d{1,2})日.*?"
+            r"(\d{1,2}):(\d{2})",
+            text,
+            re.DOTALL,
+        )
+        if not match:
+            return {}
+        values = [int(value) for value in match.groups()]
+        start = f"{values[0]:04d}-{values[1]:02d}-{values[2]:02d}T{values[3]:02d}:{values[4]:02d}:00+09:00"
+        end = f"{values[5]:04d}-{values[6]:02d}-{values[7]:02d}T{values[8]:02d}:{values[9]:02d}:00+09:00"
+        application_url = ""
+        for href in re.findall(r'href=["\']([^"\']+)["\']', html, re.IGNORECASE):
+            candidate = urljoin(detail_url, unescape(href))
+            if (urlparse(candidate).hostname or "").endswith("pokemoncenter-online.com"):
+                application_url = candidate
+                break
+        return {
+            "application_start_at": start,
+            "application_end_at": end,
+            "application_url": application_url,
+            "application_method": "Web抽選",
+            "application_status": "抽選受付",
+        }
 
     def _looks_like_product_link(
         self,
@@ -213,12 +354,17 @@ class PokemonOfficialExtractor:
             or DATE_PATTERN.search(text) is not None
         )
 
-        path = urlparse(url).path.lower()
+        parsed = urlparse(url)
+        path = parsed.path.lower()
         looks_like_special_page = (
             path.startswith("/ex/")
             or "/products/" in path
+            or "/product/" in path
             or "/info/" in path
         )
+
+        if parsed.netloc.endswith("30th.pokemon-card.com") and "/product/" in path:
+            return has_release_word
 
         if "/info/" in path and not has_product_word:
             return False
@@ -443,6 +589,9 @@ class PokemonOfficialExtractor:
             "favorite": False,
             "reserved": False,
             "source_type": "pokemon_official_detail",
+            "official_url": detail_url,
+            "manufacturer_official": True,
+            "information_type": "PRODUCT",
             "sites": [
                 {
                     "site_key": "pokemon_official",
@@ -456,6 +605,29 @@ class PokemonOfficialExtractor:
                 }
             ],
         }
+
+    @staticmethod
+    def _official_id(url: str) -> str:
+        parsed = urlparse(url)
+        parts = [part for part in parsed.path.split("/") if part]
+        value = parts[-1].casefold() if parts else ""
+        return f"{value}-{parsed.fragment.casefold()}" if parsed.fragment else value
+
+    @staticmethod
+    def _price(value: str) -> int | None:
+        match = re.search(r"(\d[\d,]*)\s*円", value)
+        return int(match.group(1).replace(",", "")) if match else None
+
+    @staticmethod
+    def _meta_content(html: str, property_name: str) -> str:
+        for pattern in (
+            rf'<meta[^>]+property=["\']{re.escape(property_name)}["\'][^>]+content=["\']([^"\']+)',
+            rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']{re.escape(property_name)}["\']',
+        ):
+            match = re.search(pattern, html, re.IGNORECASE)
+            if match:
+                return unescape(match.group(1)).strip()
+        return ""
 
     @staticmethod
     def _html_to_text(html: str) -> str:

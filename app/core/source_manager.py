@@ -7,7 +7,7 @@ import urllib.request
 from datetime import datetime
 from html import unescape
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from core.official_diff_tracker import OfficialDiffTracker
 from core.pokemon_official_extractor import PokemonOfficialExtractor
@@ -35,6 +35,9 @@ from core.source_product_extractor import SourceProductExtractor
 
 
 class SourceManager:
+    POKEMON_PRODUCT_API = "https://www.pokemon-card.com/products/topList.php"
+    CACHE_TTL_SECONDS = 600
+    _response_cache: dict[str, tuple[float, dict[str, Any]]] = {}
     DEFAULT_SOURCES = (
         {
             "name": "ポケモンカードゲーム トレーナーズウェブサイト",
@@ -277,6 +280,7 @@ class SourceManager:
     def check_all(
         self,
         cancel_requested: Callable[[], bool] | None = None,
+        enabled_tcg_keys: set[str] | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         sources = self.load_sources()
         changed_sources = []
@@ -286,6 +290,12 @@ class SourceManager:
                 break
             if not source.get("enabled", True):
                 source["last_status"] = "無効"
+                source["check_state"] = "unchecked"
+                source["changed"] = False
+                continue
+            source_tcg = normalize_key(source.get("tcg_key"), source.get("tcg"))[0]
+            if enabled_tcg_keys is not None and source_tcg not in enabled_tcg_keys:
+                source["last_status"] = "監視対象外"
                 source["check_state"] = "unchecked"
                 source["changed"] = False
                 continue
@@ -640,16 +650,27 @@ class SourceManager:
         source_url: str,
         source_name: str,
     ) -> tuple[list[dict], int]:
+        catalog = self._fetch_page(self.POKEMON_PRODUCT_API)
+        products = []
+        if catalog["ok"]:
+            products = self.pokemon_extractor.extract_catalog_products(
+                catalog["html"], source_name
+            )
+
         candidates = self.pokemon_extractor.collect_candidate_links(
             top_html,
             source_url,
         )
-
-        products = []
         detail_pages = 0
-        seen = set()
+        seen = {
+            (self._normalize_name(str(item.get("name", ""))), str(item.get("release_date", "")))
+            for item in products
+        }
 
+        special_queue = []
         for candidate in candidates:
+            if "30th.pokemon-card.com/product/" not in candidate["url"]:
+                continue
             checked = self._fetch_page(candidate["url"])
 
             if not checked["ok"]:
@@ -662,6 +683,14 @@ class SourceManager:
                 source_name,
                 candidate.get("text", ""),
             )
+            if "30th.pokemon-card.com/product/" in candidate["url"]:
+                for href in re.findall(r'href=["\']([^"\']+)["\']', checked["html"], re.IGNORECASE):
+                    extra = urljoin(candidate["url"], unescape(href))
+                    if re.fullmatch(
+                        r"https://www\.30th\.pokemon-card\.com/product/(?:furbox|cardset)",
+                        extra.rstrip("/"),
+                    ):
+                        special_queue.append(extra.rstrip("/"))
 
             for product in found:
                 key = (
@@ -679,7 +708,21 @@ class SourceManager:
             # 公式サイトへ負荷をかけすぎない。
             time.sleep(0.25)
 
-        # 商品詳細リンクが取れなかった場合だけトップHTML解析へ戻る。
+        for detail_url in dict.fromkeys(special_queue):
+            checked = self._fetch_page(detail_url)
+            if not checked["ok"]:
+                continue
+            detail_pages += 1
+            for product in self.pokemon_extractor.extract_detail_products(
+                checked["html"], detail_url, source_name
+            ):
+                key = (self._normalize_name(str(product.get("name", ""))), str(product.get("release_date", "")))
+                if key not in seen:
+                    seen.add(key)
+                    products.append(product)
+            time.sleep(0.25)
+
+        # API停止時だけ旧HTML解析へ戻る。
         if not products:
             products = self.extractor.extract(
                 top_html,
@@ -735,6 +778,19 @@ class SourceManager:
                 "html": "",
                 "status": "URLが正しくありません",
             }
+
+        now = time.monotonic()
+        expired = [
+            key for key, (stored_at, _value) in self._response_cache.items()
+            if now - stored_at >= self.CACHE_TTL_SECONDS
+        ]
+        for key in expired:
+            self._response_cache.pop(key, None)
+        cached = self._response_cache.get(url)
+        if cached and now - cached[0] < self.CACHE_TTL_SECONDS:
+            value = dict(cached[1])
+            value["cache_hit"] = True
+            return value
 
         request = urllib.request.Request(
             url,
@@ -797,13 +853,15 @@ class SourceManager:
                 unescape(match.group(1)),
             ).strip()
 
-        return {
+        result = {
             "ok": True,
             "title": title or "タイトル未取得",
             "html": html,
             "status": "確認成功",
             "url": response.geturl(),
         }
+        self._response_cache[url] = (now, dict(result))
+        return result
 
     @staticmethod
     def _is_pokemon_official(url: str) -> bool:

@@ -17,19 +17,32 @@ class StoreHistoryManager:
         self.path = self.root / "data" / "store_history.json"
 
     def record(self, store_id: str, action: str, detail: str = "", *, occurred_at: str = "") -> None:
+        self.record_many([{
+            "store_id": store_id, "action": action, "detail": detail,
+            "occurred_at": occurred_at,
+        }])
+
+    def record_many(self, entries: list[dict[str, Any]]) -> int:
         data = self.load_all()
-        history = data.setdefault(str(store_id), [])
-        entry = {
-            "action": str(action), "detail": str(detail),
-            "occurred_at": occurred_at or datetime.now().isoformat(timespec="seconds"),
-        }
-        identity = f'{store_id}|{entry["action"]}|{entry["detail"]}|{entry["occurred_at"][:10]}'
-        entry["id"] = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
-        if any(item.get("id") == entry["id"] for item in history):
-            return
-        history.insert(0, entry)
-        data[str(store_id)] = history[: self.MAX_PER_STORE]
-        self._save(data)
+        added = 0
+        for raw in entries:
+            store_id = str(raw.get("store_id", ""))
+            history = data.setdefault(store_id, [])
+            entry = {
+                "action": str(raw.get("action", "")),
+                "detail": str(raw.get("detail", "")),
+                "occurred_at": str(raw.get("occurred_at", "")) or datetime.now().isoformat(timespec="seconds"),
+            }
+            identity = f'{store_id}|{entry["action"]}|{entry["detail"]}|{entry["occurred_at"][:10]}'
+            entry["id"] = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+            if any(item.get("id") == entry["id"] for item in history):
+                continue
+            history.insert(0, entry)
+            data[store_id] = history[: self.MAX_PER_STORE]
+            added += 1
+        if added:
+            self._save(data)
+        return added
 
     def history(self, store_id: object) -> list[dict[str, Any]]:
         return list(self.load_all().get(str(store_id), []))

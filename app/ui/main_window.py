@@ -110,6 +110,7 @@ class MainWindow(QMainWindow):
         self._shutdown_started = False
         self._shutdown_complete = False
         self._deferred_quit_requested = False
+        self._pending_monitor_refresh = set()
         self.p2_startup_result = P2StartupCoordinator().run()
         self._build_ui()
         self.monitor_scheduler.run_completed.connect(
@@ -119,6 +120,12 @@ class MainWindow(QMainWindow):
             self._continue_startup_after_monitor
         )
         self._setup_application_assistant()
+        self.monitor_refresh_timer = QTimer(self)
+        self.monitor_refresh_timer.setSingleShot(True)
+        self.monitor_refresh_timer.setInterval(500)
+        self.monitor_refresh_timer.timeout.connect(
+            self._flush_monitor_refresh
+        )
         self.ui_mode_timer = QTimer(self)
         self.ui_mode_timer.setInterval(1500)
         self.ui_mode_timer.timeout.connect(self._reload_ui_mode)
@@ -398,10 +405,40 @@ class MainWindow(QMainWindow):
     def _refresh_data_pages_after_monitor(self, _result):
         if self._shutdown_started:
             return
-        self.product_page.reload_saved_products()
-        self.application_dashboard_page.reload()
-        self.candidates_page.reload_candidates()
-        self.sources_page.reload_sources()
+        result = _result if isinstance(_result, dict) else {}
+        if not result:
+            self._pending_monitor_refresh.update(
+                {"products", "applications", "candidates", "sources"}
+            )
+            self._flush_monitor_refresh()
+            return
+        if result.get("source_count"):
+            self._pending_monitor_refresh.add("sources")
+        if result.get("changed_sources"):
+            self._pending_monitor_refresh.update({"products", "candidates"})
+        candidate = result.get("candidate_search", {})
+        if candidate.get("new_hit_candidates"):
+            self._pending_monitor_refresh.update({"products", "applications", "candidates"})
+        if result.get("newly_won") or result.get("gmail_results"):
+            self._pending_monitor_refresh.add("applications")
+        if not self._pending_monitor_refresh:
+            return
+        self.monitor_refresh_timer.start()
+
+    def _flush_monitor_refresh(self):
+        if self._shutdown_started:
+            self._pending_monitor_refresh.clear()
+            return
+        pending = set(self._pending_monitor_refresh)
+        self._pending_monitor_refresh.clear()
+        if "products" in pending:
+            self.product_page.reload_saved_products()
+        if "applications" in pending:
+            self.application_dashboard_page.reload()
+        if "candidates" in pending:
+            self.candidates_page.reload_candidates()
+        if "sources" in pending:
+            self.sources_page.reload_sources()
 
     def _navigation_labels(self):
         return [

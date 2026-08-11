@@ -17,6 +17,9 @@ from core.product_store import ProductStore
 from core.product_master import ProductMasterManager
 from core.scheduler_config import SchedulerConfig
 from core.source_manager import SourceManager
+from core.config_manager import ConfigManager
+from core.monitoring_scope import enabled_tcg_keys
+from core.x_recent_search import XRecentSearch
 
 
 class MonitorWorker(QObject):
@@ -30,6 +33,7 @@ class MonitorWorker(QObject):
         check_candidate_retail: bool,
         candidate_interval_minutes: int,
         check_gmail_results: bool,
+        check_x_recent: bool = False,
     ):
         super().__init__()
         self.check_sources = check_sources
@@ -37,6 +41,7 @@ class MonitorWorker(QObject):
         self.check_candidate_retail = check_candidate_retail
         self.candidate_interval_minutes = candidate_interval_minutes
         self.check_gmail_results = check_gmail_results
+        self.check_x_recent = check_x_recent
         self._cancel_requested = threading.Event()
 
     def cancel(self) -> None:
@@ -51,6 +56,7 @@ class MonitorWorker(QObject):
     @Slot()
     def run(self):
         try:
+            enabled_games = enabled_tcg_keys(ConfigManager().load())
             result = {
                 "source_count": 0,
                 "changed_sources": [],
@@ -62,6 +68,7 @@ class MonitorWorker(QObject):
                 },
                 "due_results": [],
                 "gmail_results": [],
+                "x_recent": {},
                 "cancelled": False,
             }
 
@@ -72,7 +79,8 @@ class MonitorWorker(QObject):
 
             if self.check_sources:
                 sources, changed = SourceManager().check_all(
-                    cancel_requested=self.is_cancel_requested
+                    cancel_requested=self.is_cancel_requested,
+                    enabled_tcg_keys=enabled_games,
                 )
                 result["source_count"] = len(sources)
                 result["changed_sources"] = changed
@@ -99,6 +107,7 @@ class MonitorWorker(QObject):
                     CandidateAutoSearch().run_due(
                         self.candidate_interval_minutes,
                         cancel_requested=self.is_cancel_requested,
+                        enabled_tcg_keys=enabled_games,
                     )
                 )
 
@@ -113,6 +122,11 @@ class MonitorWorker(QObject):
                     .scan_all_enabled(
                         cancel_requested=self.is_cancel_requested
                     )
+                )
+
+            if self.check_x_recent and not self.is_cancel_requested():
+                result["x_recent"] = XRecentSearch().search_and_store(
+                    enabled_games
                 )
 
             if self.is_cancel_requested():
@@ -269,12 +283,14 @@ class MonitorScheduler(QObject):
                 True,
             )
         )
+        check_x_recent = bool(config.get("check_x_recent", False))
 
         if (
             not check_sources
             and not check_lotteries
             and not check_candidate_retail
             and not check_gmail_results
+            and not check_x_recent
         ):
             self.status_changed.emit("監視対象が選択されていません")
             return
@@ -289,6 +305,7 @@ class MonitorScheduler(QObject):
             check_candidate_retail,
             candidate_interval_minutes,
             check_gmail_results,
+            check_x_recent,
         )
         self.worker.moveToThread(self.thread)
 
