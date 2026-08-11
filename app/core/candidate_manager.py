@@ -70,6 +70,11 @@ class CandidateManager:
         products = self._load_list(self.products_path)
         identity = ProductMasterManager(self.root)
         products_changed = False
+        candidate_indexes_by_id = {
+            str(item.get("id", "")): index
+            for index, item in enumerate(candidates)
+            if str(item.get("id", ""))
+        }
 
         added = 0
         diagnostic_reasons = Counter()
@@ -122,6 +127,14 @@ class CandidateManager:
             observed["source_name"] = source_name
             observed.setdefault("source_type", "official_source")
 
+            digest = hashlib.sha256(
+                (
+                    f"{source_id}|{name}|"
+                    f"{release_date}|{official_url}"
+                ).encode("utf-8")
+            ).hexdigest()[:20]
+            candidate_id = f"official_{digest}"
+
             product_index, product_match = identity.find_match(
                 products, observed
             )
@@ -139,9 +152,15 @@ class CandidateManager:
             if product_match.startswith("ambiguous_"):
                 diagnostic_reasons["ambiguous_product"] += 1
 
-            candidate_index, candidate_match = identity.find_match(
-                candidates, observed
-            )
+            exact_candidate_index = candidate_indexes_by_id.get(candidate_id)
+            if exact_candidate_index is not None:
+                candidate_index, candidate_match = (
+                    exact_candidate_index, "candidate_id"
+                )
+            else:
+                candidate_index, candidate_match = identity.find_match(
+                    candidates, observed
+                )
             if candidate_index is not None:
                 merged, changes = identity.reconcile_product(
                     candidates[candidate_index], observed
@@ -161,16 +180,9 @@ class CandidateManager:
             if candidate_match.startswith("ambiguous_"):
                 diagnostic_reasons["ambiguous_candidate"] += 1
 
-            digest = hashlib.sha256(
-                (
-                    f"{source_id}|{name}|"
-                    f"{release_date}|{official_url}"
-                ).encode("utf-8")
-            ).hexdigest()[:20]
-
             candidates.append(
                 {
-                    "id": f"official_{digest}",
+                    "id": candidate_id,
                     "source_id": source_id,
                     "source_name": source_name,
                     "source_url": source_url,
@@ -184,6 +196,14 @@ class CandidateManager:
                     "release_date": release_date,
                     "product_kind": str(product.get("product_kind", "その他")),
                     "product_code": str(product.get("product_code", "")),
+                    "official_product_id": str(
+                        product.get("official_product_id")
+                        or product.get("official_id")
+                        or ""
+                    ),
+                    "jan_code": str(
+                        product.get("jan_code") or product.get("jan") or ""
+                    ),
                     "msrp": product.get("msrp"),
                     "msrp_includes_tax": bool(product.get("msrp_includes_tax", True)),
                     "reference_price": product.get("reference_price"),
@@ -205,6 +225,7 @@ class CandidateManager:
                     ),
                 }
             )
+            candidate_indexes_by_id[candidate_id] = len(candidates) - 1
             added += 1
             diagnostic_reasons["added"] += 1
 
@@ -223,7 +244,9 @@ class CandidateManager:
 
         self.save_candidates(candidates)
         if products_changed:
-            self._save_list(self.products_path, products)
+            from core.product_store import ProductStore
+
+            ProductStore(self.root)._save_product_file(products)
         identity.log_conflicts()
         self.last_merge_diagnostics = {
             "detected": len(discovered),
@@ -497,9 +520,6 @@ class CandidateManager:
         if not hits:
             return
 
-        products = self._load_list(
-            self.products_path
-        )
         product_id = (
             f"retail_{candidate.get('id', '')}"
         )
@@ -530,32 +550,17 @@ class CandidateManager:
             ),
             "product_kind": candidate.get("product_kind", "その他"),
             "product_code": candidate.get("product_code", ""),
+            "official_product_id": candidate.get("official_product_id", ""),
+            "jan_code": candidate.get("jan_code", ""),
             "msrp": candidate.get("msrp"),
             "msrp_includes_tax": candidate.get("msrp_includes_tax", True),
             "reference_price": candidate.get("reference_price"),
             "sites": hits,
         }
 
-        replaced = False
-        for index, current in enumerate(products):
-            if current.get("id") == product_id:
-                product["reserved"] = bool(
-                    current.get("reserved", False)
-                )
-                product["favorite"] = bool(
-                    current.get("favorite", False)
-                )
-                products[index] = product
-                replaced = True
-                break
+        from core.product_store import ProductStore
 
-        if not replaced:
-            products.append(product)
-
-        self._save_list(
-            self.products_path,
-            products,
-        )
+        ProductStore(self.root).merge_discovered_products([product])
 
     @staticmethod
     def _combined_status(
