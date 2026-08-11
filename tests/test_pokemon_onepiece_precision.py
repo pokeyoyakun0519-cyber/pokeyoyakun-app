@@ -269,6 +269,13 @@ class XRecentSearchTests(unittest.TestCase):
         self.assertEqual(1, len(merged))
         self.assertEqual(["https://x.com/store/status/1"], merged[0]["source_urls"])
 
+    def test_web_and_realistic_x_item_merge_by_application_url(self):
+        web = [{"tcg_key": "onepiece", "product_name": "OP-17", "application_url": "https://shop.example/apply"}]
+        x = [{"tcg_key": "onepiece", "text": "抽選受付", "application_url": "https://shop.example/apply/?utm_source=x", "source_url": "https://x.com/store/status/2"}]
+        merged = XRecentSearch.deduplicate(web, x)
+        self.assertEqual(1, len(merged))
+        self.assertEqual(["https://x.com/store/status/2"], merged[0]["source_urls"])
+
     def test_search_and_store_is_atomic_and_keeps_candidates(self):
         opener = Mock()
         opener.open.return_value = _Response(self._payload())
@@ -276,6 +283,13 @@ class XRecentSearchTests(unittest.TestCase):
         self.assertEqual(1, result["candidate_count"])
         self.assertTrue((self.root / "data" / "information_candidates.json").exists())
         self.assertFalse((self.root / "data" / "information_candidates.json.tmp").exists())
+        path = self.root / "data" / "information_candidates.json"
+        path.write_text("{broken", encoding="utf-8")
+        calls = opener.open.call_count
+        blocked = XRecentSearch(self.root, opener=opener).search_and_store({"pokemon"}, "token")
+        self.assertEqual("corrupt", blocked["status"])
+        self.assertEqual("{broken", path.read_text(encoding="utf-8"))
+        self.assertEqual(calls, opener.open.call_count)
 
 
 if __name__ == "__main__":

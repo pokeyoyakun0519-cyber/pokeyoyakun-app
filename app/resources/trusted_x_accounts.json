@@ -16,5 +16,41 @@
     "tcg": "onepiece",
     "trust_score": 100,
     "enabled": true
+  },
+  {
+    "username": "HBSTsendai",
+    "display_name": "ホビーステーション仙台駅前店",
+    "category": "store_official",
+    "store_name": "ホビーステーション仙台駅前店",
+    "tcg": "pokemon",
+    "trust_score": 90,
+    "enabled": true
+  },
+  {
+    "username": "HBSTsendai",
+    "display_name": "ホビーステーション仙台駅前店",
+    "category": "store_official",
+    "store_name": "ホビーステーション仙台駅前店",
+    "tcg": "onepiece",
+    "trust_score": 90,
+    "enabled": true
+  },
+  {
+    "username": "ikebukuro_labo",
+    "display_name": "カードラボ池袋店",
+    "category": "store_official",
+    "store_name": "カードラボ池袋店",
+    "tcg": "pokemon",
+    "trust_score": 90,
+    "enabled": true
+  },
+  {
+    "username": "ikebukuro_labo",
+    "display_name": "カードラボ池袋店",
+    "category": "store_official",
+    "store_name": "カードラボ池袋店",
+    "tcg": "onepiece",
+    "trust_score": 90,
+    "enabled": true
   }
 ]

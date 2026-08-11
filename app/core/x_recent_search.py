@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from core.json_file_state import CORRUPT, inspect_json_file
 from core.runtime_paths import app_root, bundled_root
 from core.secure_https import build_https_opener
 
@@ -150,11 +151,16 @@ class XRecentSearch:
         self, enabled_tcg_keys: set[str], bearer_token: str | None = None
     ) -> dict[str, Any]:
         path = self.root / "data" / "information_candidates.json"
-        try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-            existing = loaded if isinstance(loaded, list) else []
-        except (OSError, json.JSONDecodeError):
-            existing = []
+        file_result = inspect_json_file(path, list)
+        if file_result.state == CORRUPT:
+            return {
+                "status": "corrupt",
+                "error": file_result.error,
+                "results": {},
+                "candidate_count": 0,
+                "confirmed_count": 0,
+            }
+        existing = file_result.data or []
         by_id = {
             (str(item.get("tcg_key", "")), str(item.get("id", ""))): dict(item)
             for item in existing if isinstance(item, dict)
@@ -182,23 +188,57 @@ class XRecentSearch:
     @staticmethod
     def deduplicate(web_items: list[dict], x_items: list[dict]) -> list[dict]:
         output = [dict(item) for item in web_items]
-        keys = {XRecentSearch._case_key(item) for item in output}
         for item in x_items:
-            key = XRecentSearch._case_key(item)
-            if key in keys:
-                for existing in output:
-                    if XRecentSearch._case_key(existing) == key:
-                        existing.setdefault("source_urls", []).append(item.get("source_url", ""))
-                        break
+            existing = next(
+                (value for value in output if XRecentSearch._same_case(value, item)),
+                None,
+            )
+            if existing is not None:
+                existing.setdefault("source_urls", []).append(item.get("source_url", ""))
                 continue
-            keys.add(key)
             output.append(dict(item))
         return output
 
     @staticmethod
+    def _same_case(left: dict, right: dict) -> bool:
+        left_url = XRecentSearch._normalized_url(left.get("application_url", ""))
+        right_url = XRecentSearch._normalized_url(right.get("application_url", ""))
+        if left_url and left_url == right_url:
+            return str(left.get("tcg_key", "")).casefold() == str(
+                right.get("tcg_key", "")
+            ).casefold()
+        return XRecentSearch._case_key(left) == XRecentSearch._case_key(right)
+
+    @staticmethod
+    def _normalized_url(value: Any) -> str:
+        try:
+            parsed = urllib.parse.urlsplit(str(value).strip())
+        except ValueError:
+            return ""
+        if parsed.scheme.casefold() not in {"http", "https"} or not parsed.hostname:
+            return ""
+        query = urllib.parse.urlencode([
+            (key, item)
+            for key, item in urllib.parse.parse_qsl(
+                parsed.query, keep_blank_values=True
+            )
+            if key.casefold() not in {
+                "fbclid", "gclid", "ref_src", "ref_url", "twclid", "xclid",
+            }
+            and not key.casefold().startswith("utm_")
+        ])
+        return urllib.parse.urlunsplit((
+            parsed.scheme.casefold(),
+            parsed.netloc.casefold(),
+            parsed.path.rstrip("/"),
+            query,
+            "",
+        ))
+
+    @staticmethod
     def _case_key(item: dict) -> tuple[str, ...]:
         norm = lambda value: re.sub(r"[\s　「」『』・_-]", "", str(value)).casefold()
-        url = str(item.get("application_url", "")).split("#", 1)[0].rstrip("/").casefold()
+        url = XRecentSearch._normalized_url(item.get("application_url", ""))
         return (
             norm(item.get("tcg_key", "")), norm(item.get("product_name", item.get("name", ""))),
             norm(item.get("store_name", "")), url, str(item.get("application_end_at", "")),
