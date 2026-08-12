@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import threading
@@ -263,6 +264,31 @@ class ProductDuplicateBlockingTests(unittest.TestCase):
             {"set-a", "set-b"},
             {item["official_product_id"] for item in candidates},
         )
+
+    def test_legacy_candidate_without_identifier_is_enriched_not_duplicated(self):
+        manager = CandidateManager(self.root)
+        value = candidate()
+        digest = hashlib.sha256(
+            (
+                "pokemon|拡張パック「30th CELEBRATION」|"
+                "2026-09-16|https://www.30th.pokemon-card.com/product/m6a"
+            ).encode("utf-8")
+        ).hexdigest()[:20]
+        legacy = dict(value)
+        legacy["id"] = f"official_{digest}"
+        legacy["official_product_id"] = ""
+        manager.save_candidates([legacy])
+
+        manager.merge_official_candidates(
+            [value],
+            source_id="pokemon",
+            source_name="公式",
+            source_url="https://www.pokemon-card.com/",
+        )
+
+        candidates = manager.load_candidates()
+        self.assertEqual(1, len(candidates))
+        self.assertEqual("m6a", candidates[0]["official_product_id"])
 
     def test_retail_update_merges_into_existing_official_product(self):
         self._run_monitor([candidate()])

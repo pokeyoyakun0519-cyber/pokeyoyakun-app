@@ -137,6 +137,13 @@ class CandidateManager:
                 ).encode("utf-8")
             ).hexdigest()[:20]
             candidate_id = f"official_{digest}"
+            legacy_digest = hashlib.sha256(
+                (
+                    f"{source_id}|{name}|"
+                    f"{release_date}|{official_url}"
+                ).encode("utf-8")
+            ).hexdigest()[:20]
+            legacy_candidate_id = f"official_{legacy_digest}"
 
             product_index, product_match = identity.find_match(
                 products, observed
@@ -161,9 +168,22 @@ class CandidateManager:
                     exact_candidate_index, "candidate_id"
                 )
             else:
-                candidate_index, candidate_match = identity.find_match(
-                    candidates, observed
+                legacy_index = candidate_indexes_by_id.get(
+                    legacy_candidate_id
                 )
+                if (
+                    legacy_index is not None
+                    and not identity.has_identifier_conflict(
+                        candidates[legacy_index], observed
+                    )
+                ):
+                    candidate_index, candidate_match = (
+                        legacy_index, "legacy_candidate_id"
+                    )
+                else:
+                    candidate_index, candidate_match = identity.find_match(
+                        candidates, observed
+                    )
             if candidate_index is not None:
                 merged, changes = identity.reconcile_product(
                     candidates[candidate_index], observed
