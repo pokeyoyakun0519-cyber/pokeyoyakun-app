@@ -318,7 +318,8 @@ class PackagingAndGmailTest(unittest.TestCase):
     def test_installers_preserve_data_and_are_edition_specific(self):
         user = (PROJECT_ROOT / "installer" / "PokeyoyaKun_User_Setup.iss").read_text(encoding="utf-8")
         owner = (PROJECT_ROOT / "installer" / "PokeyoyaKun_Owner_Setup.iss").read_text(encoding="utf-8")
-        self.assertIn("PokeyoyaKunUpdater.exe", user)
+        self.assertIn("PokeyoyaKunUpdaterV2.exe", user)
+        self.assertIn('Name: "{app}\\PokeyoyaKunUpdater.exe"', user)
         self.assertNotIn("OwnerUpdater", user)
         self.assertIn("PokeyoyaKunOwnerUpdater.exe", owner)
         for text in (user, owner):

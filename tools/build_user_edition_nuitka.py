@@ -22,7 +22,7 @@ BUILD_ROOT = Path(tempfile.gettempdir()) / "PokeyoyaKun_Nuitka_Ver1.25.0_RC5"
 ICON_PATH = ASSETS_DIR / "pokeyoya_icon.ico"
 
 TARGETS = (
-    ("PokeyoyaKunUpdater", PROJECT_ROOT / "tools" / "user_updater_main.py"),
+    ("PokeyoyaKunUpdaterV2", PROJECT_ROOT / "tools" / "user_updater_main.py"),
     ("ポケヨヤ君", APP_DIR / "monitor_main.py"),
     ("ポケヨヤ君_設定", APP_DIR / "settings_main.py"),
 )
