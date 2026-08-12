@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -57,7 +58,14 @@ class BaseUpdateManager:
             updater = self.install_root / self.PROFILE.updater_name
             if not updater.is_file():
                 raise UpdateError("更新プログラムが見つかりません。アプリを再インストールしてください。")
-            command = [str(updater)]
+            staged_updater = self.temp_dir / (
+                f"{updater.stem}_{self._current_pid()}{updater.suffix}"
+            )
+            try:
+                shutil.copy2(updater, staged_updater)
+            except OSError as error:
+                raise UpdateError("更新プログラムを準備できませんでした。") from error
+            command = [str(staged_updater)]
             launch = [str(self.install_root / self.PROFILE.application_name)]
         else:
             wrapper = "owner_updater_main.py" if self.edition_id == "owner" else "user_updater_main.py"
@@ -74,7 +82,7 @@ class BaseUpdateManager:
         return command, status_file
 
     def launch_apply_command(self, command: list[str]) -> None:
-        subprocess.Popen(command, cwd=str(self.install_root), close_fds=True)
+        subprocess.Popen(command, cwd=str(self.temp_dir), close_fds=True)
 
     def read_last_result(self) -> dict | None:
         path = self.temp_dir / "update_result.json"

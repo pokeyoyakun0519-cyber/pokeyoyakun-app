@@ -46,7 +46,7 @@ Name: "desktopicon"; Description: "デスクトップにショートカットを
 [Files]
 Source: "..\release\user_dist_rc5\ポケヨヤ君.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist_rc5\ポケヨヤ君_設定.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\release\user_dist_rc5\PokeyoyaKunUpdater.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\user_dist_rc5\PokeyoyaKunUpdaterV2.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist_rc5\release-integrity.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist_rc5\README.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\release\user_dist_rc5\使用方法.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
@@ -63,3 +63,4 @@ Filename: "{app}\ポケヨヤ君.exe"; Description: "ポケヨヤ君を起動"; 
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\temp"
+Type: files; Name: "{app}\PokeyoyaKunUpdater.exe"
