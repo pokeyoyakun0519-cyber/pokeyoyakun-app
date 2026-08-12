@@ -12,8 +12,14 @@ from pathlib import Path
 
 
 EDITION_RULES = {
-    "user": re.compile(r"^PokeyoyaKun_User_Setup_Ver\d+\.\d+\.\d+(?:_RC\d+)?\.exe$"),
-    "owner": re.compile(r"^PokeyoyaKun_Owner_Setup_Ver\d+\.\d+\.\d+(?:_RC\d+)?\.exe$"),
+    "user": re.compile(
+        r"^PokeyoyaKun_User_Setup_Ver\d+\.\d+\.\d+"
+        r"(?:_RC\d+(?:\.\d+)?)?\.exe$"
+    ),
+    "owner": re.compile(
+        r"^PokeyoyaKun_Owner_Setup_Ver\d+\.\d+\.\d+"
+        r"(?:_RC\d+(?:\.\d+)?)?\.exe$"
+    ),
 }
 
 
