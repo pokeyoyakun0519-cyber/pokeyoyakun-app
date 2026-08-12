@@ -96,7 +96,7 @@ class Release125Rc5Test(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("1.25.0.100", version_info)
         self.assertIn("ProductVersion', '1.25.0'", version_info)
-        self.assertIn("1.25.0 User Edition", installer)
+        self.assertIn('#define MyAppVersion "1.25.0"', installer)
         self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0", installer)
         self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0.exe", build_installer)
         self.assertIn("user_dist_rc5", installer)

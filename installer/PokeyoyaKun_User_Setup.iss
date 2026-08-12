@@ -1,5 +1,5 @@
 #define MyAppName "ポケヨヤ君"
-#define MyAppVersion "1.25.0 User Edition"
+#define MyAppVersion "1.25.0"
 #define MyAppPublisher "PokeyoyaKun Project"
 #define MyAppExeName "ポケヨヤ君.exe"
 #ifndef BuildAppId
