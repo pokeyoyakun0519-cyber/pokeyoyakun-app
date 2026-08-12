@@ -22,6 +22,10 @@ from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
 
 
+class DuplicateProductIdError(ValueError):
+    """安全に統合できない同一商品IDの保存を拒否する。"""
+
+
 class ProductStore:
     """商品データ、プラグイン更新、予約状態を管理する。"""
 
@@ -43,6 +47,7 @@ class ProductStore:
         self.last_product_file_result: JsonFileResult | None = None
         self.last_user_state_file_result: JsonFileResult | None = None
         self.last_product_id_warnings: list[dict[str, str]] = []
+        self.last_duplicate_report: dict[str, Any] = {}
         self._legacy_product_ids: dict[str, str] = {}
 
     def load_products(self) -> list[dict[str, Any]]:
@@ -390,7 +395,56 @@ class ProductStore:
                     f'{warning["new_product_id"]}',
                     level="WARNING",
                 )
+        master = ProductMasterManager(self.root)
+        repaired, duplicate_report = master.consolidate_duplicate_product_ids(
+            repaired
+        )
+        self.last_duplicate_report = duplicate_report
+        if duplicate_report["duplicate_group_count"]:
+            from core.log_manager import LogManager
+
+            logger = LogManager(self.root)
+            if duplicate_report["unsafe_ids"]:
+                logger.write(
+                    "安全に統合できない商品ID重複を検出: "
+                    + ", ".join(duplicate_report["unsafe_ids"]),
+                    level="ERROR",
+                )
         return repaired
+
+    def repair_duplicate_product_ids(
+        self,
+        *,
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        """既存products.jsonの同一ID重複を明示的に検査・修復する。"""
+        result = self.inspect_product_file()
+        self.last_product_file_result = result
+        if result.state == CORRUPT:
+            raise CorruptJsonError(
+                f"破損products.jsonの修復を拒否しました: {self.products_path}"
+            )
+        prepared = self._repair_product_ids(result.data or [])
+        report = dict(self.last_duplicate_report)
+        report.update({
+            "dry_run": dry_run,
+            "repairable": not bool(report.get("unsafe_ids")),
+            "backup_path": "",
+            "saved": False,
+        })
+        if dry_run or not report["duplicate_record_count"]:
+            return report
+        if report["unsafe_ids"]:
+            raise DuplicateProductIdError(
+                "安全に統合できない商品ID重複があるため修復を中止しました: "
+                + ", ".join(report["unsafe_ids"])
+            )
+        self._save_product_file(prepared)
+        report["backup_path"] = str(
+            self.products_path.with_suffix(".json.bak")
+        )
+        report["saved"] = True
+        return report
 
     def inspect_product_file(self) -> JsonFileResult:
         return inspect_json_file(
@@ -415,6 +469,23 @@ class ProductStore:
             list,
             nullable_list_fields=PRODUCT_LIST_FIELDS,
         )
+        prepared = self._repair_product_ids(products)
+        unsafe_ids = self.last_duplicate_report.get("unsafe_ids", [])
+        if unsafe_ids:
+            raise DuplicateProductIdError(
+                "安全に統合できない商品ID重複の保存を拒否しました: "
+                + ", ".join(unsafe_ids)
+            )
+        duplicate_count = int(
+            self.last_duplicate_report.get("duplicate_record_count", 0)
+        )
+        if duplicate_count:
+            from core.log_manager import LogManager
+
+            LogManager(self.root).write(
+                f"保存前に同一商品ID重複を安全統合: {duplicate_count}件",
+                level="WARNING",
+            )
         self.products_path.parent.mkdir(
             parents=True,
             exist_ok=True,
@@ -428,7 +499,7 @@ class ProductStore:
             encoding="utf-8",
         ) as file:
             json.dump(
-                products,
+                prepared,
                 file,
                 ensure_ascii=False,
                 indent=2,

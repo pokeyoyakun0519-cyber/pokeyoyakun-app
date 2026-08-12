@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,8 @@ from core.json_file_state import (
 
 class ProductMasterManager:
     """表記揺れを吸収し、商品を安定したproduct_idへ統合する。"""
+
+    _synchronize_lock = threading.RLock()
 
     _BOX_SUFFIX = re.compile(
         r"(?:\s|　)*(?:BOX|ＢＯＸ|ボックス|1BOX|１ＢＯＸ)(?:\s|　)*$",
@@ -179,6 +182,189 @@ class ProductMasterManager:
                     summary["brands"].add(brand)
             repaired.append(item)
         return repaired, warnings
+
+    def consolidate_duplicate_product_ids(
+        self,
+        products: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """安全に同一商品と確認できる同一ID行だけをO(n)で統合する。"""
+        output: list[dict[str, Any]] = []
+        by_id: dict[str, int] = {}
+        duplicate_ids: set[str] = set()
+        unsafe_ids: set[str] = set()
+        removed = 0
+
+        for raw in products:
+            item = dict(raw)
+            product_id = str(
+                item.get("product_id") or item.get("id") or ""
+            ).strip()
+            if not product_id or product_id not in by_id:
+                if product_id:
+                    by_id[product_id] = len(output)
+                output.append(item)
+                continue
+
+            duplicate_ids.add(product_id)
+            target_index = by_id[product_id]
+            target = output[target_index]
+            if not self._safe_same_id_merge(target, item):
+                unsafe_ids.add(product_id)
+                output.append(item)
+                continue
+
+            output[target_index] = self.merge_same_id_product(target, item)
+            removed += 1
+
+        return output, {
+            "duplicate_group_count": len(duplicate_ids),
+            "duplicate_record_count": removed,
+            "merged_ids": sorted(duplicate_ids - unsafe_ids),
+            "unsafe_ids": sorted(unsafe_ids),
+            "input_count": len(products),
+            "output_count": len(output),
+        }
+
+    @classmethod
+    def _safe_same_id_merge(
+        cls,
+        left: dict[str, Any],
+        right: dict[str, Any],
+    ) -> bool:
+        if cls.has_identifier_conflict(left, right):
+            return False
+        if cls._has_kind_conflict(left, right) or cls._has_brand_conflict(left, right):
+            return False
+        left_tcg = normalize_key(left.get("tcg_key"), left.get("tcg"))[0]
+        right_tcg = normalize_key(right.get("tcg_key"), right.get("tcg"))[0]
+        if left_tcg != right_tcg:
+            return False
+
+        left_name = cls.normalize_name(
+            left.get("canonical_name") or left.get("name")
+        )
+        right_name = cls.normalize_name(
+            right.get("canonical_name") or right.get("name")
+        )
+        if left_name and right_name and left_name == right_name:
+            return True
+
+        left_ids = dict(cls.identifiers(left))
+        right_ids = dict(cls.identifiers(right))
+        if any(
+            left_ids[field] == right_ids[field]
+            for field in left_ids.keys() & right_ids.keys()
+        ):
+            return True
+
+        if left_name and right_name:
+            return False
+
+        left_url = str(left.get("official_url") or "").strip().casefold().rstrip("/")
+        right_url = str(right.get("official_url") or "").strip().casefold().rstrip("/")
+        return bool(left_url and left_url == right_url)
+
+    def merge_same_id_product(
+        self,
+        current: dict[str, Any],
+        incoming: dict[str, Any],
+    ) -> dict[str, Any]:
+        target, _changes = self.reconcile_product(current, incoming)
+        manual_fields = {
+            str(value) for value in (current.get("manual_fields") or [])
+        }
+        preserve_manual = bool(
+            current.get("manual_edited") or current.get("manually_edited")
+        )
+        update_fields = (
+            "name", "canonical_name", "release_date", "msrp",
+            "reference_price", "price", "image_url", "product_image_url",
+            "official_url", "product_code", "official_product_id",
+            "official_id", "jan", "jan_code", "source_name", "source_type",
+            "msrp_includes_tax",
+        )
+        if not preserve_manual:
+            incoming_priority = self._source_priority(incoming)
+            current_priority = self._source_priority(current)
+            for field in update_fields:
+                value = incoming.get(field)
+                if field in manual_fields or value in (None, "", [], {}):
+                    continue
+                if not target.get(field) or incoming_priority >= current_priority:
+                    target[field] = value
+
+        for field in (
+            "aliases", "source_urls", "release_date_history",
+            "application_history", "notification_history",
+        ):
+            values: list[Any] = []
+            seen: set[str] = set()
+            for value in (
+                *(current.get(field) or []), *(incoming.get(field) or [])
+            ):
+                signature = json.dumps(
+                    value, ensure_ascii=False, sort_keys=True, default=str
+                )
+                if signature in seen:
+                    continue
+                seen.add(signature)
+                values.append(value)
+            if values:
+                target[field] = values
+
+        for field in ("favorite", "reserved", "auto_monitored"):
+            if field in current or field in incoming:
+                target[field] = bool(current.get(field) or incoming.get(field))
+
+        site_indexes = {
+            (
+                str(site.get("site_key", "")),
+                str(
+                    site.get("url")
+                    or site.get("application_url")
+                    or site.get("product_url")
+                    or ""
+                ),
+            ): index
+            for index, site in enumerate(target.get("sites", []))
+            if isinstance(site, dict)
+        }
+        for raw_site in incoming.get("sites") or []:
+            if not isinstance(raw_site, dict):
+                continue
+            key = (
+                str(raw_site.get("site_key", "")),
+                str(
+                    raw_site.get("url")
+                    or raw_site.get("application_url")
+                    or raw_site.get("product_url")
+                    or ""
+                ),
+            )
+            if key not in site_indexes:
+                continue
+            site = target["sites"][site_indexes[key]]
+            for field, value in raw_site.items():
+                if field not in site or site[field] in (None, "", [], {}):
+                    site[field] = value
+                elif isinstance(site[field], bool) and isinstance(value, bool):
+                    site[field] = site[field] or value
+
+        for field, value in incoming.items():
+            if field in manual_fields or (
+                preserve_manual and field in update_fields
+            ):
+                continue
+            if field not in target or target[field] in (None, "", [], {}):
+                target[field] = value
+        target["id"] = str(current.get("id") or current.get("product_id") or "")
+        if current.get("product_id"):
+            target["product_id"] = str(current["product_id"])
+        if target != current and target.get("updated_at") == current.get("updated_at"):
+            target["updated_at"] = datetime.now(timezone.utc).astimezone().isoformat(
+                timespec="seconds"
+            )
+        return target
 
     @classmethod
     def identifiers(cls, product: dict[str, Any]) -> list[tuple[str, str]]:
@@ -428,6 +614,14 @@ class ProductMasterManager:
             )
 
     def synchronize(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # UI再読込と初回取得が重なっても、同じmasterを並行更新しない。
+        with self._synchronize_lock:
+            return self._synchronize_locked(products)
+
+    def _synchronize_locked(
+        self,
+        products: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         result = self.inspect_file()
         if result.state == CORRUPT:
             return products
