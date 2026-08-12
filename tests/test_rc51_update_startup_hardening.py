@@ -34,8 +34,8 @@ class FrozenUpdaterFilenameTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIsNone(EDITION_RULES["user"].fullmatch(name))
 
-    def test_current_application_tag_is_rc51(self):
-        self.assertEqual("v1.25.0-rc5.1", current_tag())
+    def test_current_application_tag_is_stable(self):
+        self.assertEqual("v1.25.0", current_tag())
 
 
 class StartupCorruptUserStateTest(unittest.TestCase):

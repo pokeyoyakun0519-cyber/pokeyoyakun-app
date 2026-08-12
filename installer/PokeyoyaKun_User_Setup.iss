@@ -1,5 +1,5 @@
 #define MyAppName "ポケヨヤ君"
-#define MyAppVersion "1.25.0 RC5.1 User Edition"
+#define MyAppVersion "1.25.0 User Edition"
 #define MyAppPublisher "PokeyoyaKun Project"
 #define MyAppExeName "ポケヨヤ君.exe"
 #ifndef BuildAppId
@@ -12,14 +12,14 @@
   #define BuildOutputDir "..\release\user_installer_rc5"
 #endif
 #ifndef BuildOutputBaseFilename
-  #define BuildOutputBaseFilename "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1"
+  #define BuildOutputBaseFilename "PokeyoyaKun_User_Setup_Ver1.25.0"
 #endif
 
 [Setup]
 AppId={#BuildAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-VersionInfoVersion=1.25.0.51
+VersionInfoVersion=1.25.0.100
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\PokeyoyaKun
 DefaultGroupName={#BuildDefaultGroupName}

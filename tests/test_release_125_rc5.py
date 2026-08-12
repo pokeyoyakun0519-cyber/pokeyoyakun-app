@@ -30,10 +30,10 @@ PUBLIC_CONTENT_API_ORIGIN = "https://pokeyoyakun.duckdns.org"
 
 
 class Release125Rc5Test(unittest.TestCase):
-    def test_application_version_is_rc51(self):
+    def test_application_version_is_stable(self):
         self.assertEqual(APP_VERSION, "1.25.0")
-        self.assertEqual(APP_CHANNEL, "rc5.1")
-        self.assertEqual(CURRENT_RELEASE, "1.25.0-rc5.1")
+        self.assertEqual(APP_CHANNEL, "stable")
+        self.assertEqual(CURRENT_RELEASE, "1.25.0-stable")
 
     def test_public_apis_use_their_fixed_production_https_origins(self):
         endpoint = json.loads((
@@ -84,7 +84,7 @@ class Release125Rc5Test(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 verify_public_license_endpoint(root)
 
-    def test_executable_installer_and_build_versions_are_rc5(self):
+    def test_executable_installer_and_build_versions_are_stable(self):
         version_info = (
             PROJECT_ROOT / "installer" / "version_info.txt"
         ).read_text(encoding="utf-8")
@@ -94,11 +94,11 @@ class Release125Rc5Test(unittest.TestCase):
         build_installer = (
             PROJECT_ROOT / "tools" / "build_user_installer.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("1.25.0.51", version_info)
-        self.assertIn("1.25.0 RC5.1", version_info)
-        self.assertIn("1.25.0 RC5.1 User Edition", installer)
-        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1", installer)
-        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC5", build_installer)
+        self.assertIn("1.25.0.100", version_info)
+        self.assertIn("ProductVersion', '1.25.0'", version_info)
+        self.assertIn("1.25.0 User Edition", installer)
+        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0", installer)
+        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0.exe", build_installer)
         self.assertIn("user_dist_rc5", installer)
         self.assertIn("user_installer_rc5", installer)
 

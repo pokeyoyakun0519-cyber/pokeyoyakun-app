@@ -1,0 +1,38 @@
+ポケヨヤ君 User Edition Ver.1.25.0
+
+Ver.1.25.0の主な改善
+- ポケモンカード公式商品とONE PIECEカードゲーム公式商品の取得精度を改善
+- NEWS、サプライ、イベント等の商品誤認防止を強化
+- 商品一覧と応募ダッシュボードの表示性能を改善
+- 監視処理のHTTP通信とJSON I/Oを削減
+- 同一商品が監視サイクルごとに重複する問題を修正
+- 商品マスターの並行保存競合とWinError 32への対策を追加
+- 商品識別子の衝突による誤統合を防止
+- products、candidates、user_state等のJSON破損保護を強化
+- user_state破損時も警告を表示してUIを起動し、監視と状態更新を安全に停止
+- UTF-8 BOM付き旧JSONとの互換性を追加
+- RC表記を正しく比較できるUpdaterへ更新
+- Stable版とテスター向けPre-releaseの更新経路を分離
+- InstallerのSHA-256検証とUser／Owner asset分離を強化
+- Gmail連携、オンラインライセンス、certifi TLS検証を同梱
+
+動作確認
+- ポケモンカード公式商品 17/17取得
+- ONE PIECEカードゲーム公式商品 12/12取得
+- 商品誤認率 0%を確認
+
+本番接続先
+- ライセンスAPI: https://api.pokeyoyakun.com
+- Feedback / Roadmap: https://pokeyoyakun.duckdns.org
+
+既知事項
+- 本版の実行ファイルとインストーラーにはAuthenticodeコード署名がありません。
+- Windows SmartScreen / Smart App Controlで警告または実行ブロックが表示される可能性があります。
+- Windowsのセキュリティ機能を回避・無効化することは推奨しません。
+- コード署名は今後のリリースで対応予定です。
+- X Recent SearchはBearer Token未設定時に無効です。X Webスクレイピングは行いません。
+- 既存データに残る誤認商品は自動削除しません。
+
+不具合報告
+- アプリの「ご意見・ご要望」から報告してください。
+- 個人情報、ライセンスキー、認証トークン、端末コードを本文へ記載しないでください。
