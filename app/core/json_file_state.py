@@ -153,7 +153,7 @@ def _read_json(
     if not path.exists():
         return JsonFileResult(path, MISSING)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         return JsonFileResult(path, CORRUPT, error=str(error))
     if not isinstance(data, expected_type):

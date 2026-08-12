@@ -13,7 +13,7 @@ USER_PROFILE = UpdateProfile(
     }),
     asset_pattern=re.compile(
         r"^PokeyoyaKun_User_Setup_Ver(?P<version>\d+\.\d+\.\d+)"
-        r"(?:_RC(?P<rc>\d+))?\.exe$"
+        r"(?:_RC(?P<rc>\d+)(?:\.(?P<rc_revision>\d+))?)?\.exe$"
     ),
     updater_name="PokeyoyaKunUpdater.exe",
     application_name="ポケヨヤ君.exe",

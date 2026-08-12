@@ -15,7 +15,10 @@ from urllib.parse import urlsplit
 from core.secure_https import build_https_opener
 
 
-TAG_PATTERN = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)(?:-rc(?P<rc>\d+))?$")
+TAG_PATTERN = re.compile(
+    r"^v(?P<version>\d+\.\d+\.\d+)"
+    r"(?:-rc(?P<rc>\d+)(?:\.(?P<rc_revision>\d+))?)?$"
+)
 
 
 class UpdateError(RuntimeError):
@@ -29,6 +32,7 @@ class ReleaseVersion:
     patch: int
     stability: int
     rc: int
+    rc_revision: int
 
     @classmethod
     def parse(cls, value: str) -> "ReleaseVersion":
@@ -37,7 +41,14 @@ class ReleaseVersion:
             raise UpdateError("Releaseタグの形式が正しくありません。")
         major, minor, patch = (int(item) for item in match.group("version").split("."))
         rc = match.group("rc")
-        return cls(major, minor, patch, 1 if rc is None else 0, int(rc or 0))
+        return cls(
+            major,
+            minor,
+            patch,
+            1 if rc is None else 0,
+            int(rc or 0),
+            int(match.group("rc_revision") or 0),
+        )
 
     @property
     def prerelease(self) -> bool:
@@ -119,9 +130,10 @@ class ReleaseUpdateClient:
         if not isinstance(releases, list):
             raise UpdateError("更新情報の形式が正しくありません。")
         candidates = []
+        effective_allow_prerelease = allow_prerelease or self.current.prerelease
         for release in releases:
             try:
-                candidate = self._candidate(release, allow_prerelease)
+                candidate = self._candidate(release, effective_allow_prerelease)
             except UpdateError:
                 continue
             if candidate and candidate["version"] > self.current:
@@ -149,7 +161,11 @@ class ReleaseUpdateClient:
         if setup is None or sums is None:
             return None
         match = self.profile.asset_pattern.fullmatch(str(setup["name"]))
-        asset_tag = f"v{match.group('version')}" + (f"-rc{match.group('rc')}" if match.group("rc") else "")
+        asset_tag = f"v{match.group('version')}"
+        if match.group("rc"):
+            asset_tag += f"-rc{match.group('rc')}"
+            if match.group("rc_revision"):
+                asset_tag += f".{match.group('rc_revision')}"
         if asset_tag.lower() != tag.lower():
             raise UpdateError("Releaseタグと成果物名のバージョンが一致しません。")
         for asset in (setup, sums):

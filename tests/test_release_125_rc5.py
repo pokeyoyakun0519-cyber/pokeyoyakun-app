@@ -30,10 +30,10 @@ PUBLIC_CONTENT_API_ORIGIN = "https://pokeyoyakun.duckdns.org"
 
 
 class Release125Rc5Test(unittest.TestCase):
-    def test_application_version_is_rc5(self):
+    def test_application_version_is_rc51(self):
         self.assertEqual(APP_VERSION, "1.25.0")
-        self.assertEqual(APP_CHANNEL, "rc5")
-        self.assertEqual(CURRENT_RELEASE, "1.25.0-rc5")
+        self.assertEqual(APP_CHANNEL, "rc5.1")
+        self.assertEqual(CURRENT_RELEASE, "1.25.0-rc5.1")
 
     def test_public_apis_use_their_fixed_production_https_origins(self):
         endpoint = json.loads((
