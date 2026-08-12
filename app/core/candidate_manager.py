@@ -130,7 +130,10 @@ class CandidateManager:
             digest = hashlib.sha256(
                 (
                     f"{source_id}|{name}|"
-                    f"{release_date}|{official_url}"
+                    f"{release_date}|{official_url}|"
+                    f"{product.get('official_product_id') or product.get('official_id') or ''}|"
+                    f"{product.get('product_code') or ''}|"
+                    f"{product.get('jan_code') or product.get('jan') or ''}"
                 ).encode("utf-8")
             ).hexdigest()[:20]
             candidate_id = f"official_{digest}"

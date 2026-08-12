@@ -1,6 +1,8 @@
 import json
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
@@ -243,6 +245,25 @@ class ProductDuplicateBlockingTests(unittest.TestCase):
         self.assertEqual(1, len(candidates))
         self.assertEqual("m6a", candidates[0]["official_product_id"])
 
+    def test_candidate_same_name_distinct_identifiers_stay_separate(self):
+        manager = CandidateManager(self.root)
+        values = [
+            candidate("同名限定セット", official_id="set-a", official_url="https://example.com/shared"),
+            candidate("同名限定セット", official_id="set-b", official_url="https://example.com/shared"),
+        ]
+        manager.merge_official_candidates(
+            values,
+            source_id="pokemon",
+            source_name="公式",
+            source_url="https://example.com/",
+        )
+        candidates = manager.load_candidates()
+        self.assertEqual(2, len(candidates))
+        self.assertEqual(
+            {"set-a", "set-b"},
+            {item["official_product_id"] for item in candidates},
+        )
+
     def test_retail_update_merges_into_existing_official_product(self):
         self._run_monitor([candidate()])
         manager = CandidateManager(self.root)
@@ -258,6 +279,26 @@ class ProductDuplicateBlockingTests(unittest.TestCase):
         products = self._raw_products()
         self.assertEqual(1, len(products))
         self.assertEqual(1, len(products[0]["sites"]))
+
+    def test_concurrent_product_master_sync_is_serialized(self):
+        barrier = threading.Barrier(8)
+
+        def synchronize(index):
+            barrier.wait()
+            ProductMasterManager(self.root).synchronize([{
+                "id": f"parallel-{index}",
+                "tcg_key": "pokemon",
+                "name": f"並行商品{index}",
+                "product_kind": "拡張パック",
+                "official_product_id": f"official-{index}",
+            }])
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(synchronize, range(8)))
+
+        records = ProductMasterManager(self.root).load()
+        self.assertEqual(8, len(records))
+        self.assertEqual(8, len({item["product_id"] for item in records}))
 
 
 if __name__ == "__main__":

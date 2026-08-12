@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,8 @@ from core.json_file_state import (
 
 class ProductMasterManager:
     """表記揺れを吸収し、商品を安定したproduct_idへ統合する。"""
+
+    _synchronize_lock = threading.RLock()
 
     _BOX_SUFFIX = re.compile(
         r"(?:\s|　)*(?:BOX|ＢＯＸ|ボックス|1BOX|１ＢＯＸ)(?:\s|　)*$",
@@ -611,6 +614,14 @@ class ProductMasterManager:
             )
 
     def synchronize(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # UI再読込と初回取得が重なっても、同じmasterを並行更新しない。
+        with self._synchronize_lock:
+            return self._synchronize_locked(products)
+
+    def _synchronize_locked(
+        self,
+        products: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         result = self.inspect_file()
         if result.state == CORRUPT:
             return products
