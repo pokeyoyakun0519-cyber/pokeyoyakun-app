@@ -104,7 +104,6 @@ class Release125Rc5Test(unittest.TestCase):
 
     def test_tester_documents_mark_rc5_as_non_final(self):
         for name in (
-            "USER_EDITION_README.txt",
             "RELEASE_NOTES_Ver1.25.0_RC5.txt",
             "TESTER_README_Ver1.25.0_RC5.txt",
         ):
@@ -113,6 +112,20 @@ class Release125Rc5Test(unittest.TestCase):
                 self.assertIn("RC5", text)
                 self.assertIn("正式版ではありません", text)
                 self.assertIn("3か月無料ライセンス", text)
+
+    def test_stable_user_documents_match_production_features(self):
+        readme = (PROJECT_ROOT / "USER_EDITION_README.txt").read_text(encoding="utf-8")
+        usage = (PROJECT_ROOT / "使用方法.txt").read_text(encoding="utf-8")
+        notes = (PROJECT_ROOT / "RELEASE_NOTES_Ver1.25.0.txt").read_text(encoding="utf-8")
+        for text in (readme, usage):
+            self.assertIn("Ver.1.25.0", text)
+            self.assertNotIn("Ver.1.25.0 RC5", text)
+            self.assertNotIn("admin_cli.py", text)
+            self.assertNotIn("127.0.0.1:8765", text)
+        self.assertIn("https://api.pokeyoyakun.com", readme)
+        self.assertIn("Gmail OAuth", usage)
+        self.assertIn("RC5 / RC5.1からStable版", notes)
+        self.assertIn("Installer exit 5", notes)
 
     def test_rc5_documents_include_tls_and_yugioh_scope(self):
         for name in (

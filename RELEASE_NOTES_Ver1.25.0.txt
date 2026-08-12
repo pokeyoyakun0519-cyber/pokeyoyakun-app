@@ -12,6 +12,9 @@ Ver.1.25.0の主な改善
 - user_state破損時も警告を表示してUIを起動し、監視と状態更新を安全に停止
 - UTF-8 BOM付き旧JSONとの互換性を追加
 - RC表記を正しく比較できるUpdaterへ更新
+- RC5 / RC5.1からStable版へ更新できるBridge経路を追加
+- 更新中のUpdater自己ロックによるInstaller exit 5を修正
+- Stable以降のUpdaterをPokeyoyaKunUpdaterV2へ移行
 - Stable版とテスター向けPre-releaseの更新経路を分離
 - InstallerのSHA-256検証とUser／Owner asset分離を強化
 - Gmail連携、オンラインライセンス、certifi TLS検証を同梱
