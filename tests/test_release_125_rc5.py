@@ -94,10 +94,10 @@ class Release125Rc5Test(unittest.TestCase):
         build_installer = (
             PROJECT_ROOT / "tools" / "build_user_installer.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("1.25.0.5", version_info)
-        self.assertIn("1.25.0 RC5", version_info)
-        self.assertIn("1.25.0 RC5 User Edition", installer)
-        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC5", installer)
+        self.assertIn("1.25.0.51", version_info)
+        self.assertIn("1.25.0 RC5.1", version_info)
+        self.assertIn("1.25.0 RC5.1 User Edition", installer)
+        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1", installer)
         self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC5", build_installer)
         self.assertIn("user_dist_rc5", installer)
         self.assertIn("user_installer_rc5", installer)

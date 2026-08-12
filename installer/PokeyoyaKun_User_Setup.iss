@@ -1,21 +1,28 @@
 #define MyAppName "ポケヨヤ君"
-#define MyAppVersion "1.25.0 RC5 User Edition"
+#define MyAppVersion "1.25.0 RC5.1 User Edition"
 #define MyAppPublisher "PokeyoyaKun Project"
 #define MyAppExeName "ポケヨヤ君.exe"
+#ifndef BuildAppId
+  #define BuildAppId "{{6B791901-293B-4D40-A6D1-F1A5AD1A6BB3}"
+#endif
+#ifndef BuildDefaultGroupName
+  #define BuildDefaultGroupName MyAppName
+#endif
 #ifndef BuildOutputDir
   #define BuildOutputDir "..\release\user_installer_rc5"
 #endif
 #ifndef BuildOutputBaseFilename
-  #define BuildOutputBaseFilename "PokeyoyaKun_User_Setup_Ver1.25.0_RC5"
+  #define BuildOutputBaseFilename "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1"
 #endif
 
 [Setup]
-AppId={{6B791901-293B-4D40-A6D1-F1A5AD1A6BB3}
+AppId={#BuildAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+VersionInfoVersion=1.25.0.51
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\PokeyoyaKun
-DefaultGroupName={#MyAppName}
+DefaultGroupName={#BuildDefaultGroupName}
 DisableProgramGroupPage=yes
 OutputDir={#BuildOutputDir}
 OutputBaseFilename={#BuildOutputBaseFilename}
