@@ -53,7 +53,7 @@ class YugiohClientCoreTest(unittest.TestCase):
             [item.key for item in categories()],
             [
                 "pokemon", "onepiece", "yugioh", "gundam",
-                "duelmasters", "weiss", "mtg", "other",
+                "union_arena", "duelmasters", "weiss", "mtg", "other",
             ],
         )
         self.assertEqual(display_name("yugioh"), "遊戯王OCG")

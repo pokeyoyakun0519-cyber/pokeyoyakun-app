@@ -6,7 +6,7 @@ from core.tcg_categories import normalize_key
 
 
 PRIORITY_TCG_KEYS = frozenset({"pokemon", "onepiece"})
-OTHER_TCG_KEYS = frozenset({"duelmasters", "weiss", "mtg", "other"})
+OTHER_TCG_KEYS = frozenset({"union_arena", "duelmasters", "weiss", "mtg", "other"})
 
 
 def enabled_tcg_keys(config: dict[str, Any]) -> set[str]:

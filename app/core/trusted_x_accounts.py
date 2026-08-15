@@ -171,7 +171,7 @@ class TrustedXAccountRegistry:
         username = str(raw.get("username", "")).strip().lstrip("@")
         tcg = str(raw.get("tcg", "")).strip().casefold()
         if not re.fullmatch(r"[A-Za-z0-9_]{1,15}", username) or tcg not in {
-            "pokemon", "onepiece"
+            "pokemon", "onepiece", "union_arena"
         }:
             return None
         source_type = str(raw.get("source_type", "")).strip().upper()

@@ -65,6 +65,11 @@ TCG_PATTERNS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("ガンダムカードゲーム", "gundam card game"),
     ),
     (
+        "union_arena",
+        "",
+        ("union arena", "ユニオンアリーナ", "ユニアリ"),
+    ),
+    (
         "duelmasters",
         "",
         ("デュエル・マスターズ", "デュエルマスターズ", "デュエマ"),
@@ -1045,6 +1050,7 @@ class CardLaboParser:
             ("pokemon", "", ("ポケモン",)),
             ("onepiece", "", ("ワンピース", "onepiece")),
             ("gundam", "", ("ガンダム",)),
+            ("union_arena", "", ("union arena", "ユニオンアリーナ", "ユニアリ")),
             ("duelmasters", "", ("デュエマ",)),
             ("weiss", "", ("ヴァイス",)),
             ("mtg", "", ("mtg", "マジックザギャザリング")),

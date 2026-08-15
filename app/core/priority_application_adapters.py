@@ -106,11 +106,16 @@ class _OfficialApplicationAdapter:
     @staticmethod
     def product_code(*values: Any) -> str:
         match = re.search(
-            r"\b(OP|EB|ST|PRB)\s*[-‐‑‒–—ー]?\s*(\d{2,3})\b",
+            r"\b(?:(OP|EB|ST|PRB)\s*[-‐‑‒–—ー]?\s*(\d{2,3})|"
+            r"((?:UA|EX)\d{2}(?:BT|ST|DC)))\b",
             " ".join(str(value or "") for value in values),
             re.IGNORECASE,
         )
-        return f"{match.group(1).upper()}-{match.group(2)}" if match else ""
+        if not match:
+            return ""
+        if match.group(3):
+            return match.group(3).upper()
+        return f"{match.group(1).upper()}-{match.group(2)}"
 
     @classmethod
     def matches_candidate(cls, candidate: dict[str, Any], text: str) -> bool:
@@ -260,14 +265,20 @@ class MagiApplicationAdapter(_OfficialApplicationAdapter):
 
 class PremiumBandaiApplicationAdapter(_OfficialApplicationAdapter):
     INDEX_URL = "https://p-bandai.jp/carddas/a0018/list-pa20-n0/"
+    UNION_ARENA_INDEX_URL = "https://p-bandai.jp/carddas/a0015/list-da20-n2/"
 
     def search_candidate(
         self, candidate: dict[str, Any]
     ) -> tuple[list[dict[str, Any]], str]:
-        if str(candidate.get("tcg_key", "")) != "onepiece":
+        tcg_key = str(candidate.get("tcg_key", ""))
+        index_url = {
+            "onepiece": self.INDEX_URL,
+            "union_arena": self.UNION_ARENA_INDEX_URL,
+        }.get(tcg_key)
+        if not index_url:
             return [], "プレミアムバンダイ公式: 対象外"
         try:
-            links = self.parse_links(self.fetch(self.INDEX_URL), self.INDEX_URL)
+            links = self.parse_links(self.fetch(index_url), index_url)
         except (OSError, ValueError, urllib.error.URLError) as error:
             return [], f"プレミアムバンダイ公式: 取得失敗 ({error})"
         hits = []
@@ -276,7 +287,14 @@ class PremiumBandaiApplicationAdapter(_OfficialApplicationAdapter):
             text = str(link.get("text", ""))
             if not re.fullmatch(r"https://p-bandai\.jp/item/item-\d+/", url):
                 continue
-            if "ONE PIECEカードゲーム" not in text and "ONEPIECEカードゲーム" not in text:
+            if tcg_key == "onepiece" and (
+                "ONE PIECEカードゲーム" not in text
+                and "ONEPIECEカードゲーム" not in text
+            ):
+                continue
+            if tcg_key == "union_arena" and not re.search(
+                r"UNION\s*ARENA|ユニオンアリーナ|ユニアリ", text, re.I
+            ):
                 continue
             if not re.search(r"抽選販売|予約|受注", text):
                 continue
@@ -305,7 +323,7 @@ class PremiumBandaiApplicationAdapter(_OfficialApplicationAdapter):
                 "source_type": "OFFICIAL_STORE",
                 "source_evidence": [{
                     "source_type": "OFFICIAL_STORE",
-                    "source_url": self.INDEX_URL,
+                    "source_url": index_url,
                 }],
                 "checked_at": datetime.now().isoformat(timespec="seconds"),
             }, product=candidate))

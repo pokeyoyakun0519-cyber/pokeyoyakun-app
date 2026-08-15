@@ -53,6 +53,10 @@ TCG_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
+        "union_arena",
+        ("union arena", "ユニオンアリーナ", "ユニアリ"),
+    ),
+    (
         "yugioh",
         (
             "遊戯王ocg",

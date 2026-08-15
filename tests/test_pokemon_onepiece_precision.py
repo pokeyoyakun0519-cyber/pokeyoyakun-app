@@ -218,8 +218,8 @@ class XRecentSearchTests(unittest.TestCase):
             "meta": {"newest_id": newest},
         })
 
-    def test_queries_are_limited_to_two_tcg_and_exclude_retweets(self):
-        self.assertEqual({"pokemon", "onepiece"}, set(QUERIES))
+    def test_queries_are_limited_to_supported_tcg_and_exclude_retweets(self):
+        self.assertEqual({"pokemon", "onepiece", "union_arena"}, set(QUERIES))
         self.assertTrue(all("-is:retweet" in value for value in QUERIES.values()))
 
     def test_general_user_is_candidate_not_confirmed(self):

@@ -35,7 +35,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             manager = self._manager(directory)
             sources = manager.load_sources()
-            self.assertEqual(len(sources), 7)
+            self.assertEqual(len(sources), 8)
             self.assertEqual(
                 [item["url"] for item in sources],
                 [item["url"] for item in SourceManager.DEFAULT_SOURCES],
@@ -44,7 +44,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
                 {item["tcg_key"] for item in sources},
                 {
                     "pokemon", "onepiece", "yugioh", "gundam",
-                    "duelmasters", "weiss", "mtg",
+                    "union_arena", "duelmasters", "weiss", "mtg",
                 },
             )
             self.assertTrue(all(item["check_state"] == "unchecked" for item in sources))
@@ -76,7 +76,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
                 json.dumps(existing, ensure_ascii=False), encoding="utf-8"
             )
             sources = manager.load_sources()
-            self.assertEqual(len(sources), 8)
+            self.assertEqual(len(sources), 9)
             custom = next(item for item in sources if item["id"] == "custom")
             pokemon = next(item for item in sources if item["id"] == "pokemon-existing")
             self.assertFalse(custom["enabled"])
@@ -121,6 +121,11 @@ class OfficialSourceManagerTest(unittest.TestCase):
                     manager,
                     "_extract_gundam_official_products",
                     return_value=([_product("ガンダム商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_union_arena_official_products",
+                    return_value=([_product("UNION ARENA商品")], 1, 0),
                 ),
                 patch.object(
                     manager,
@@ -185,6 +190,11 @@ class OfficialSourceManagerTest(unittest.TestCase):
                     manager,
                     "_extract_gundam_official_products",
                     return_value=([_product("ガンダム商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_union_arena_official_products",
+                    return_value=([_product("UNION ARENA商品")], 1, 0),
                 ),
                 patch.object(
                     manager,
@@ -291,8 +301,14 @@ class OfficialSourceUiTest(unittest.TestCase):
             if not page._checking:
                 break
         self.assertFalse(page._checking)
-        self.assertEqual(checked_order, ["0", "1", "2", "3", "4", "5", "6"])
-        self.assertIn("7件の確認が完了", page.result_label.text())
+        self.assertEqual(
+            checked_order,
+            [str(index) for index in range(len(SourceManager.DEFAULT_SOURCES))],
+        )
+        self.assertIn(
+            f"{len(SourceManager.DEFAULT_SOURCES)}件の確認が完了",
+            page.result_label.text(),
+        )
         self.assertTrue(page.check_all_button.isEnabled())
 
 
