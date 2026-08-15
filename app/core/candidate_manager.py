@@ -4,7 +4,7 @@ import re
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from core.application_period import ApplicationPeriodParser
 from core.application_site import normalize_application_site
@@ -449,14 +449,23 @@ class CandidateManager:
                 hits, messages
             )
 
-            if hits:
+            confirmed_hits = [
+                hit for hit in hits
+                if str(hit.get("verification_status", "confirmed")) != "candidate"
+            ]
+            if confirmed_hits:
                 candidate["status"] = (
-                    f"販売・抽選情報 {len(hits)}件"
+                    f"販売・抽選情報 {len(confirmed_hits)}件"
                 )
                 candidate["approved"] = True
+                approved_candidate = dict(candidate)
+                approved_candidate["retail_hits"] = confirmed_hits
                 self._upsert_product_from_candidate(
-                    candidate
+                    approved_candidate
                 )
+            elif hits:
+                candidate["status"] = f"販売・抽選候補 {len(hits)}件（確認待ち）"
+                candidate["approved"] = False
             else:
                 candidate["status"] = (
                     "販売・抽選情報は未検出"
@@ -469,6 +478,87 @@ class CandidateManager:
         if save:
             self.save_candidates(candidates)
         return updated
+
+    def merge_application_discoveries(
+        self,
+        discoveries: list[dict[str, Any]],
+        *,
+        matcher: Callable[[dict[str, Any], dict[str, Any]], bool],
+    ) -> dict[str, int]:
+        """Merge strong dedicated-adapter discoveries without per-item writes."""
+        candidates = self.load_candidates()
+        created = 0
+        updated = 0
+        ambiguous = 0
+        promoted: dict[str, dict[str, Any]] = {}
+        for discovery in discoveries:
+            record = discovery.get("record")
+            hit = discovery.get("hit")
+            if not isinstance(record, dict) or not isinstance(hit, dict):
+                continue
+            matches = [item for item in candidates if matcher(item, record)]
+            if len(matches) > 1:
+                ambiguous += 1
+                continue
+            if matches:
+                candidate = matches[0]
+            else:
+                name = str(record.get("product_name", "")).strip()
+                tcg_key = normalize_key(record.get("tcg_key"), record.get("tcg"))[0]
+                if not name or tcg_key not in {"pokemon", "onepiece"}:
+                    continue
+                signature = re.sub(r"[^a-z0-9ぁ-んァ-ヶ一-龠]", "", name.casefold())
+                digest = hashlib.sha256(
+                    f"card_labo|{tcg_key}|{signature}".encode("utf-8")
+                ).hexdigest()[:16]
+                candidate = {
+                    "id": f"application_{digest}",
+                    "source_id": "card_labo_application",
+                    "source_name": "カードラボ公式応募記事",
+                    "source_url": str(record.get("article_url", "")),
+                    "official_url": str(record.get("article_url", "")),
+                    "name": name,
+                    "tcg_key": tcg_key,
+                    "tcg": display_name(tcg_key, record.get("tcg")),
+                    "release_date": str(record.get("release_date", "")),
+                    "product_kind": "その他",
+                    "product_code": str(record.get("product_code", "")),
+                    "status": "販売・抽選情報を検出",
+                    "approved": False,
+                    "last_searched": "",
+                    "retail_hits": [],
+                    "search_message": "専用Adapterが公式応募記事を検出",
+                    "search_diagnostics": {},
+                    "created_at": datetime.now().isoformat(timespec="seconds"),
+                }
+                candidates.append(candidate)
+                created += 1
+            key = (str(hit.get("site_key", "")), str(hit.get("url", "")))
+            existing_hits = [
+                dict(value) for value in candidate.get("retail_hits", [])
+                if isinstance(value, dict)
+            ]
+            if key not in {
+                (str(value.get("site_key", "")), str(value.get("url", "")))
+                for value in existing_hits
+            }:
+                existing_hits.append(dict(hit))
+                candidate["retail_hits"] = existing_hits
+                updated += 1
+            if str(hit.get("verification_status", "")) == "confirmed":
+                candidate["approved"] = True
+                candidate["status"] = f"販売・抽選情報 {len(existing_hits)}件"
+                approved = dict(candidate)
+                approved["retail_hits"] = [
+                    value for value in existing_hits
+                    if str(value.get("verification_status", "confirmed")) != "candidate"
+                ]
+                promoted[str(candidate.get("id", ""))] = approved
+        if created or updated:
+            self.save_candidates(candidates)
+            for candidate in promoted.values():
+                self._upsert_product_from_candidate(candidate)
+        return {"created": created, "updated": updated, "ambiguous": ambiguous}
 
     def approve_candidate(
         self,
@@ -653,7 +743,7 @@ class CandidateManager:
         allowed = {
             "onepiece": {
                 "ブースターパック", "エクストラブースター", "スタートデッキ",
-                "プレミアムカードコレクション", "プレミアム商品",
+                "プレミアムカードコレクション", "プレミアム商品", "その他",
             },
             "gundam": {
                 "ブースターパック", "スタートデッキ", "プレミアムバンダイ", "その他",
@@ -671,15 +761,22 @@ class CandidateManager:
                 return False
             if not re.search(r"カード|セット|コレクション|card|set|collection", lowered_name, re.IGNORECASE):
                 return False
-        try:
-            release = datetime.strptime(
-                str(product.get("release_date", "")), "%Y-%m-%d"
-            ).date()
-        except ValueError:
-            return False
-        age_days = (date.today() - release).days
-        if age_days > 45 or age_days < -730:
-            return False
+        release_text = str(product.get("release_date", "")).strip()
+        if not release_text:
+            # Some current ONE PIECE official catalogue entries expose no date
+            # in the list/detail HTML.  Preserve those official card products as
+            # candidates; AutoMonitorManager will keep them out of monitoring
+            # until a reliable release date is available.
+            if tcg_key != "onepiece" or not product.get("manufacturer_official"):
+                return False
+        if release_text:
+            try:
+                release = datetime.strptime(release_text, "%Y-%m-%d").date()
+            except ValueError:
+                return False
+            age_days = (date.today() - release).days
+            if age_days > 45 or age_days < -730:
+                return False
         url = str(product.get("official_url", ""))
         if not url:
             sites = product.get("sites", [])

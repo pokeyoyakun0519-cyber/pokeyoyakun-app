@@ -2,55 +2,67 @@
   {
     "username": "pokemon_cojp",
     "display_name": "ポケモン公式",
-    "category": "manufacturer_official",
+    "user_id": "",
+    "source_type": "OFFICIAL_MANUFACTURER",
     "store_name": "株式会社ポケモン",
     "tcg": "pokemon",
-    "trust_score": 100,
-    "enabled": true
+    "manual_trust_score": 100,
+    "enabled": true,
+    "memo": "公式性を公式サイト導線で確認。user_idはX API応答取得後に実行状態へ保存する。"
   },
   {
     "username": "ONEPIECE_tcg",
     "display_name": "ONE PIECEカードゲーム公式",
-    "category": "manufacturer_official",
+    "user_id": "",
+    "source_type": "OFFICIAL_MANUFACTURER",
     "store_name": "バンダイ",
     "tcg": "onepiece",
-    "trust_score": 100,
-    "enabled": true
+    "manual_trust_score": 100,
+    "enabled": true,
+    "memo": "公式性を公式サイト導線で確認。user_idはX API応答取得後に実行状態へ保存する。"
   },
   {
     "username": "HBSTsendai",
     "display_name": "ホビーステーション仙台駅前店",
-    "category": "store_official",
+    "user_id": "",
+    "source_type": "OFFICIAL_SHOP_BRANCH",
     "store_name": "ホビーステーション仙台駅前店",
     "tcg": "pokemon",
-    "trust_score": 90,
-    "enabled": true
+    "manual_trust_score": 90,
+    "enabled": true,
+    "memo": "店舗公式アカウント。"
   },
   {
     "username": "HBSTsendai",
     "display_name": "ホビーステーション仙台駅前店",
-    "category": "store_official",
+    "user_id": "",
+    "source_type": "OFFICIAL_SHOP_BRANCH",
     "store_name": "ホビーステーション仙台駅前店",
     "tcg": "onepiece",
-    "trust_score": 90,
-    "enabled": true
+    "manual_trust_score": 90,
+    "enabled": true,
+    "memo": "店舗公式アカウント。"
   },
   {
     "username": "ikebukuro_labo",
     "display_name": "カードラボ池袋店",
-    "category": "store_official",
+    "user_id": "",
+    "source_type": "OFFICIAL_SHOP_BRANCH",
     "store_name": "カードラボ池袋店",
     "tcg": "pokemon",
-    "trust_score": 90,
-    "enabled": true
+    "manual_trust_score": 90,
+    "enabled": true,
+    "memo": "店舗公式アカウント。"
   },
   {
     "username": "ikebukuro_labo",
     "display_name": "カードラボ池袋店",
-    "category": "store_official",
+    "user_id": "",
+    "source_type": "OFFICIAL_SHOP_BRANCH",
     "store_name": "カードラボ池袋店",
     "tcg": "onepiece",
-    "trust_score": 90,
-    "enabled": true
+    "manual_trust_score": 90,
+    "enabled": true,
+    "memo": "店舗公式アカウント。"
   }
 ]

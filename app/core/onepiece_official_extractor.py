@@ -3,13 +3,16 @@ from __future__ import annotations
 import hashlib
 import re
 from html import unescape
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunsplit
 
 
 class OnePieceOfficialExtractor:
     """ONE PIECEカードゲーム日本公式の商品一覧専用Extractor。"""
 
-    MAX_LIST_PAGES = 3
+    # The official catalogue currently spans well beyond the first three pages.
+    # Keep a finite ceiling, but cover the complete pagination advertised by the
+    # official page instead of silently truncating older/current card products.
+    MAX_LIST_PAGES = 20
     MAX_DETAIL_PAGES = 4
     _BLOCK = re.compile(
         r'<li[^>]*class="[^"]*linkListColBox[^"]*"[^>]*data-cat="(?P<cat>[^"]+)"[^>]*>'
@@ -54,7 +57,9 @@ class OnePieceOfficialExtractor:
             if not name:
                 continue
             if any(term in name for term in (
-                "カードケース", "プレイマット", "スリーブ", "ラバーマット",
+                "カードケース", "デッキケース", "プレイマット", "スリーブ",
+                "ラバーマット", "バインダー", "ストレージボックス",
+                "オフィシャルダイス",
             )):
                 continue
             date_match = re.search(
@@ -86,7 +91,25 @@ class OnePieceOfficialExtractor:
             url = urljoin(page_url, unescape(value.replace("&amp;", "&")))
             if self.is_list_url(url):
                 pages.setdefault(self._page_number(url), url)
-        return [pages[number] for number in sorted(pages)[: self.MAX_LIST_PAGES]]
+        # The paginator only renders the first few pages and the last page
+        # (for example 1, 2, 3, 15).  Expand the bounded range instead of
+        # interpreting the omitted middle links as absent catalogue pages.
+        last_page = min(max(pages), self.MAX_LIST_PAGES)
+        parsed = urlparse(page_url)
+        base_query = dict(parse_qsl(parsed.query))
+        for number in range(2, last_page + 1):
+            if number in pages:
+                continue
+            query = dict(base_query)
+            query["page"] = str(number)
+            pages[number] = urlunsplit((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(query),
+                "",
+            ))
+        return [pages[number] for number in range(1, last_page + 1)]
 
     def supplement_from_detail(self, html: str, detail_url: str) -> dict[str, str]:
         self.validate_japanese_page(html, detail_url)
@@ -110,7 +133,7 @@ class OnePieceOfficialExtractor:
         return (
             (parsed.hostname or "").casefold() == "www.onepiece-cardgame.com"
             and bool(re.fullmatch(
-                r"/products/(?:[a-z0-9_-]+\.html|(?:boosters|decks|other)/[a-z0-9_-]+/)",
+                r"/products/(?:[a-z0-9_-]+\.(?:html|php)|(?:boosters|decks|other)/(?:[a-z0-9_-]+/|[a-z0-9_-]+\.php))",
                 parsed.path,
                 re.IGNORECASE,
             ))
