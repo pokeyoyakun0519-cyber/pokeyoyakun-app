@@ -35,7 +35,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             manager = self._manager(directory)
             sources = manager.load_sources()
-            self.assertEqual(len(sources), 8)
+            self.assertEqual(len(sources), 9)
             self.assertEqual(
                 [item["url"] for item in sources],
                 [item["url"] for item in SourceManager.DEFAULT_SOURCES],
@@ -44,7 +44,8 @@ class OfficialSourceManagerTest(unittest.TestCase):
                 {item["tcg_key"] for item in sources},
                 {
                     "pokemon", "onepiece", "yugioh", "gundam",
-                    "union_arena", "duelmasters", "weiss", "mtg",
+                    "union_arena", "dragon_ball_fusion_world",
+                    "duelmasters", "weiss", "mtg",
                 },
             )
             self.assertTrue(all(item["check_state"] == "unchecked" for item in sources))
@@ -76,7 +77,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
                 json.dumps(existing, ensure_ascii=False), encoding="utf-8"
             )
             sources = manager.load_sources()
-            self.assertEqual(len(sources), 9)
+            self.assertEqual(len(sources), 10)
             custom = next(item for item in sources if item["id"] == "custom")
             pokemon = next(item for item in sources if item["id"] == "pokemon-existing")
             self.assertFalse(custom["enabled"])
@@ -126,6 +127,11 @@ class OfficialSourceManagerTest(unittest.TestCase):
                     manager,
                     "_extract_union_arena_official_products",
                     return_value=([_product("UNION ARENA商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_dragon_ball_fusion_world_official_products",
+                    return_value=([_product("DBSCG FW商品")], 1, 0),
                 ),
                 patch.object(
                     manager,
@@ -195,6 +201,11 @@ class OfficialSourceManagerTest(unittest.TestCase):
                     manager,
                     "_extract_union_arena_official_products",
                     return_value=([_product("UNION ARENA商品")], 1, 0),
+                ),
+                patch.object(
+                    manager,
+                    "_extract_dragon_ball_fusion_world_official_products",
+                    return_value=([_product("DBSCG FW商品")], 1, 0),
                 ),
                 patch.object(
                     manager,

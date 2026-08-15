@@ -16,7 +16,7 @@ CHANNELS = {"physical", "online", "chain", "manufacturer"}
 CHAIN_SUPPORT_VALUES = {"full", "partial", "unknown"}
 TCG_KEYS = (
     "pokemon", "onepiece", "yugioh", "gundam",
-    "union_arena", "duelmasters", "weiss", "mtg", "other",
+    "union_arena", "dragon_ball_fusion_world", "duelmasters", "weiss", "mtg", "other",
 )
 TCG_SUPPORT_VALUES = {"supported", "partial", "unsupported", "unknown"}
 DISCOVERY_METHODS = {

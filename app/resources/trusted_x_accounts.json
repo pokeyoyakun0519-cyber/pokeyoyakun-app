@@ -75,5 +75,16 @@
     "manual_trust_score": 100,
     "enabled": true,
     "memo": "日本公式サイトのSOCIAL MEDIA導線で公式性を確認。user_idはX API応答取得後に実行状態へ保存する。"
+  },
+  {
+    "username": "dbfw_cardgameJP",
+    "display_name": "ドラゴンボールスーパーカードゲーム フュージョンワールド公式",
+    "user_id": "",
+    "source_type": "OFFICIAL_MANUFACTURER",
+    "store_name": "バンダイ",
+    "tcg": "dragon_ball_fusion_world",
+    "manual_trust_score": 100,
+    "enabled": true,
+    "memo": "日本公式サイトの公式SNS導線で公式性を確認。user_idはX API応答取得後に実行状態へ保存する。"
   }
 ]

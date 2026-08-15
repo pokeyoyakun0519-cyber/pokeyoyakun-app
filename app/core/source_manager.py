@@ -14,6 +14,9 @@ from core.pokemon_official_extractor import PokemonOfficialExtractor
 from core.yugioh_official_extractor import YugiohOfficialExtractor
 from core.onepiece_official_extractor import OnePieceOfficialExtractor
 from core.union_arena_official_extractor import UnionArenaOfficialExtractor
+from core.dragon_ball_fusion_world_official_extractor import (
+    DragonBallFusionWorldOfficialExtractor,
+)
 from core.gundam_official_extractor import GundamOfficialExtractor
 from core.additional_official_extractors import (
     DuelMastersOfficialExtractor,
@@ -66,6 +69,11 @@ class SourceManager:
             "tcg_key": "union_arena",
         },
         {
+            "name": "DBSCG FUSION WORLD公式 商品情報",
+            "url": "https://www.dbs-cardgame.com/fw/jp/products/",
+            "tcg_key": "dragon_ball_fusion_world",
+        },
+        {
             "name": "デュエル・マスターズ公式 商品情報",
             "url": "https://dm.takaratomy.co.jp/product/",
             "tcg_key": "duelmasters",
@@ -98,6 +106,9 @@ class SourceManager:
         self.onepiece_extractor = OnePieceOfficialExtractor()
         self.gundam_extractor = GundamOfficialExtractor()
         self.union_arena_extractor = UnionArenaOfficialExtractor()
+        self.dragon_ball_fusion_world_extractor = (
+            DragonBallFusionWorldOfficialExtractor()
+        )
         self.duelmasters_extractor = DuelMastersOfficialExtractor()
         self.weiss_extractor = WeissOfficialExtractor()
         self.mtg_extractor = MtgOfficialExtractor()
@@ -404,6 +415,14 @@ class SourceManager:
                 )
                 source["last_detail_pages"] = detail_pages
                 source["last_duplicate_count"] = duplicate_count
+            elif self._is_dragon_ball_fusion_world_official(source_url):
+                discovered, detail_pages, duplicate_count = (
+                    self._extract_dragon_ball_fusion_world_official_products(
+                        checked["html"], checked.get("url", source_url), source_name
+                    )
+                )
+                source["last_detail_pages"] = detail_pages
+                source["last_duplicate_count"] = duplicate_count
             elif self._is_duelmasters_official(source_url):
                 discovered, detail_pages, duplicate_count = (
                     self._extract_catalog_official_products(
@@ -493,6 +512,7 @@ class SourceManager:
                 self._is_onepiece_official(source_url),
                 self._is_gundam_official(source_url),
                 self._is_union_arena_official(source_url),
+                self._is_dragon_ball_fusion_world_official(source_url),
                 self._is_duelmasters_official(source_url),
                 self._is_weiss_official(source_url),
                 self._is_mtg_official(source_url),
@@ -625,6 +645,27 @@ class SourceManager:
                 product["msrp"] = supplement["msrp"]
                 product["reference_price"] = supplement["msrp"]
             time.sleep(0.1)
+        return products, detail_pages, duplicates
+
+    def _extract_dragon_ball_fusion_world_official_products(
+        self, top_html: str, source_url: str, source_name: str
+    ) -> tuple[list[dict], int, int]:
+        extractor = self.dragon_ball_fusion_world_extractor
+        pages = [(top_html, source_url)]
+        detail_pages = 1
+        for page_url in extractor.list_page_urls()[1:]:
+            checked = self._fetch_page(page_url)
+            if not checked["ok"]:
+                continue
+            pages.append((checked["html"], checked.get("url", page_url)))
+            detail_pages += 1
+            time.sleep(0.1)
+        products = [
+            product
+            for html, final_url in pages
+            for product in extractor.extract_list_products(html, final_url, source_name)
+        ]
+        products, duplicates = self._deduplicate_products(products)
         return products, detail_pages, duplicates
 
     def _extract_catalog_official_products(
@@ -930,6 +971,14 @@ class SourceManager:
     @staticmethod
     def _is_union_arena_official(url: str) -> bool:
         return (urlparse(url).hostname or "").casefold() == "www.unionarena-tcg.com"
+
+    @staticmethod
+    def _is_dragon_ball_fusion_world_official(url: str) -> bool:
+        parsed = urlparse(url)
+        return (
+            (parsed.hostname or "").casefold() == "www.dbs-cardgame.com"
+            and parsed.path.startswith("/fw/jp/products/")
+        )
 
     @staticmethod
     def _is_duelmasters_official(url: str) -> bool:

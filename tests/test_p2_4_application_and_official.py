@@ -227,7 +227,8 @@ class ApplicationDashboardP24UiTest(unittest.TestCase):
                 key: 0
                 for key in (
                     "pokemon", "onepiece", "yugioh", "gundam",
-                    "union_arena", "duelmasters", "weiss", "mtg", "other",
+                    "union_arena", "dragon_ball_fusion_world",
+                    "duelmasters", "weiss", "mtg", "other",
                 )
             },
             "rows": [], "total_rows": 0,
@@ -238,7 +239,8 @@ class ApplicationDashboardP24UiTest(unittest.TestCase):
             [tabs.tabData(i) for i in range(tabs.count())],
             [
                 "all", "pokemon", "onepiece", "yugioh", "gundam",
-                "union_arena", "duelmasters", "weiss", "mtg", "other",
+                "union_arena", "dragon_ball_fusion_world",
+                "duelmasters", "weiss", "mtg", "other",
             ],
         )
 
