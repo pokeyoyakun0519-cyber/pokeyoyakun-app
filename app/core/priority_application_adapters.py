@@ -266,6 +266,9 @@ class MagiApplicationAdapter(_OfficialApplicationAdapter):
 class PremiumBandaiApplicationAdapter(_OfficialApplicationAdapter):
     INDEX_URL = "https://p-bandai.jp/carddas/a0018/list-pa20-n0/"
     UNION_ARENA_INDEX_URL = "https://p-bandai.jp/carddas/a0015/list-da20-n2/"
+    DRAGON_BALL_FUSION_WORLD_INDEX_URL = (
+        "https://p-bandai.jp/carddas/a0008/b0003/dbscgfw/list-da20-n0/"
+    )
 
     def search_candidate(
         self, candidate: dict[str, Any]
@@ -274,6 +277,7 @@ class PremiumBandaiApplicationAdapter(_OfficialApplicationAdapter):
         index_url = {
             "onepiece": self.INDEX_URL,
             "union_arena": self.UNION_ARENA_INDEX_URL,
+            "dragon_ball_fusion_world": self.DRAGON_BALL_FUSION_WORLD_INDEX_URL,
         }.get(tcg_key)
         if not index_url:
             return [], "プレミアムバンダイ公式: 対象外"
@@ -294,6 +298,11 @@ class PremiumBandaiApplicationAdapter(_OfficialApplicationAdapter):
                 continue
             if tcg_key == "union_arena" and not re.search(
                 r"UNION\s*ARENA|ユニオンアリーナ|ユニアリ", text, re.I
+            ):
+                continue
+            if tcg_key == "dragon_ball_fusion_world" and not re.search(
+                r"ドラゴンボールスーパーカードゲーム\s*(?:フュージョンワールド|FW)|"
+                r"DBSCG\s*(?:FUSION\s*WORLD|FW)", text, re.I
             ):
                 continue
             if not re.search(r"抽選販売|予約|受注", text):

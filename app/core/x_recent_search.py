@@ -30,6 +30,7 @@ QUERIES = {
     "pokemon": '("ポケモンカード" OR ポケカ) (抽選 OR 予約 OR 再販 OR 受付) -is:retweet',
     "onepiece": '("ONE PIECEカード" OR "ワンピースカード") (抽選 OR 予約 OR 再販 OR 受付) -is:retweet',
     "union_arena": '("UNION ARENA" OR ユニオンアリーナ OR ユニアリ) (抽選 OR 予約 OR 再販 OR 再入荷 OR 受付) -is:retweet',
+    "dragon_ball_fusion_world": '("ドラゴンボールスーパーカードゲーム フュージョンワールド" OR "DBSCG FUSION WORLD" OR "DBSCG FW") (抽選 OR 予約 OR 再販 OR 再入荷 OR 受付) -is:retweet',
 }
 
 
@@ -401,7 +402,8 @@ class XRecentSearch:
     def _extract_product_name(text: str) -> str:
         value = str(text)
         code = re.search(
-            r"\b(?:(?:OP|EB|ST|PRB)-?\d{2,3}|(?:UA|EX)\d{2}(?:BT|ST|DC))\b",
+            r"\b(?:(?:OP|EB|ST|PRB)-?\d{2,3}|(?:UA|EX)\d{2}(?:BT|ST|DC)|"
+            r"(?:FB|FS|SB|ST)\d{2})\b",
             value,
             re.IGNORECASE,
         )

@@ -57,6 +57,16 @@ TCG_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("union arena", "ユニオンアリーナ", "ユニアリ"),
     ),
     (
+        "dragon_ball_fusion_world",
+        (
+            "ドラゴンボールスーパーカードゲーム フュージョンワールド",
+            "ドラゴンボールカードゲーム フュージョンワールド",
+            "dragon ball super card game fusion world",
+            "dbscg fusion world",
+            "dbs fw",
+        ),
+    ),
+    (
         "yugioh",
         (
             "遊戯王ocg",
