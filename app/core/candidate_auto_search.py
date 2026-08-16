@@ -18,6 +18,15 @@ class CandidateAutoSearch:
         cancel_requested: Callable[[], bool] | None = None,
         enabled_tcg_keys: set[str] | None = None,
     ) -> dict[str, Any]:
+        discovery_result = {"created": 0, "updated": 0, "ambiguous": 0}
+        if isinstance(self.searcher, RetailSearchManager):
+            discoveries = self.searcher.discover_priority_applications(
+                enabled_tcg_keys
+            )
+            discovery_result = self.candidates.merge_application_discoveries(
+                discoveries,
+                matcher=self.searcher.card_labo._matches_candidate,
+            )
         items = self.candidates.load_candidates()
         searched = 0
         new_hit_candidates = []
@@ -95,6 +104,7 @@ class CandidateAutoSearch:
             "searched_count": searched,
             "new_hit_candidates": new_hit_candidates,
             "cancelled": cancelled,
+            "application_discovery": discovery_result,
         }
 
     @staticmethod

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import time
@@ -12,8 +13,16 @@ from pathlib import Path
 from typing import Any, Callable
 
 from core.json_file_state import CORRUPT, inspect_json_file
-from core.runtime_paths import app_root, bundled_root
+from core.runtime_paths import app_root
 from core.secure_https import build_https_opener
+from core.trusted_x_accounts import (
+    GENERAL_INFORMATION,
+    OFFICIAL_MANUFACTURER,
+    OFFICIAL_SHOP_BRANCH,
+    OFFICIAL_STORE,
+    TRUSTED_INFORMATION,
+    TrustedXAccountRegistry,
+)
 
 
 RECENT_SEARCH_URL = "https://api.x.com/2/tweets/search/recent"
@@ -36,17 +45,81 @@ class XRecentSearch:
         self.root = Path(root) if root is not None else app_root()
         self.state_path = self.root / "cache" / "x_recent_search_state.json"
         self.account_path = self.root / "config" / "trusted_x_accounts.json"
+        self.accounts = TrustedXAccountRegistry(self.root)
         self.opener = opener or build_https_opener()
         self.now = now or (lambda: datetime.now(timezone.utc))
 
     def search(self, tcg: str, bearer_token: str | None = None) -> dict[str, Any]:
         if tcg not in QUERIES:
             raise ValueError("X検索対象はpokemonまたはonepieceだけです。")
+        return self._search_query(tcg, QUERIES[tcg], tcg, bearer_token)
+
+    def search_trusted_accounts(
+        self, tcg: str, bearer_token: str | None = None
+    ) -> dict[str, Any]:
+        if tcg not in QUERIES:
+            raise ValueError("X検索対象はpokemonまたはonepieceだけです。")
+        accounts = [
+            account for account in self.load_trusted_accounts()
+            if account.get("enabled", True) and account.get("tcg") == tcg
+        ]
+        if not accounts:
+            return {"status": "disabled", "candidates": [], "request_count": 0}
+        results = []
+        for offset in range(0, len(accounts), 10):
+            batch = accounts[offset:offset + 10]
+            usernames = [str(account["username"]) for account in batch]
+            from_terms = " OR ".join(f"from:{username}" for username in usernames)
+            query = (
+                f"({from_terms}) (抽選 OR 予約 OR 受付 OR 応募 OR 再販 OR 再入荷 OR 入荷 OR 受注) "
+                "-is:retweet"
+            )
+            signature = hashlib.sha256(
+                ",".join(username.casefold() for username in usernames).encode("utf-8")
+            ).hexdigest()[:12]
+            result = self._search_query(
+                tcg,
+                query,
+                f"trusted:{tcg}:{signature}",
+                bearer_token,
+                monitored_only=True,
+                allowed_usernames={username.casefold() for username in usernames},
+            )
+            results.append(result)
+            if result.get("status") == "rate_limited":
+                break
+        candidates = [
+            item for result in results for item in result.get("candidates", [])
+        ]
+        statuses = [str(result.get("status", "")) for result in results]
+        since_values = [str(result.get("since_id", "")) for result in results]
+        return {
+            "status": "ok" if statuses and all(value == "ok" for value in statuses) else (
+                statuses[-1] if statuses else "disabled"
+            ),
+            "candidates": candidates,
+            "request_count": sum(int(result.get("request_count", 0)) for result in results),
+            "since_id": since_values[0] if len(since_values) == 1 else since_values,
+            "rate_limit_remaining": (
+                results[-1].get("rate_limit_remaining", "") if results else ""
+            ),
+        }
+
+    def _search_query(
+        self,
+        tcg: str,
+        query: str,
+        state_key: str,
+        bearer_token: str | None,
+        *,
+        monitored_only: bool = False,
+        allowed_usernames: set[str] | None = None,
+    ) -> dict[str, Any]:
         token = (bearer_token or os.environ.get("POKEYOYA_X_BEARER_TOKEN", "")).strip()
         if not token:
             return {"status": "disabled", "candidates": [], "request_count": 0}
         state = self._load_state()
-        item_state = dict(state.get(tcg, {}))
+        item_state = dict(state.get(state_key, {}))
         retry_at = float(item_state.get("retry_at", 0) or 0)
         if retry_at > time.time():
             return {
@@ -54,7 +127,7 @@ class XRecentSearch:
                 "retry_after": max(1, int(retry_at - time.time())),
             }
         params = {
-            "query": QUERIES[tcg],
+            "query": query,
             "max_results": "100",
             "tweet.fields": "created_at,author_id,entities",
             "expansions": "author_id",
@@ -82,7 +155,7 @@ class XRecentSearch:
             reset = int(error.headers.get("x-rate-limit-reset", "0") or 0)
             delay = max(60, min(3600, (2 ** attempts) * 30))
             retry_at = max(time.time() + delay, float(reset))
-            state[tcg] = {**item_state, "retry_at": retry_at, "backoff_attempts": attempts}
+            state[state_key] = {**item_state, "retry_at": retry_at, "backoff_attempts": attempts}
             self._save_state(state)
             return {
                 "status": "rate_limited", "candidates": [], "request_count": 1,
@@ -96,7 +169,12 @@ class XRecentSearch:
         accounts = {
             str(item.get("username", "")).casefold(): item
             for item in self.load_trusted_accounts()
-            if item.get("enabled", True) and str(item.get("tcg", "")) == tcg
+            if item.get("enabled", True)
+            and str(item.get("tcg", "")) == tcg
+            and (
+                allowed_usernames is None
+                or str(item.get("username", "")).casefold() in allowed_usernames
+            )
         }
         candidates = []
         for tweet in payload.get("data", []):
@@ -105,28 +183,61 @@ class XRecentSearch:
             user = users.get(str(tweet.get("author_id", "")), {})
             username = str(user.get("username", ""))
             trusted = accounts.get(username.casefold(), {})
-            score = int(trusted.get("trust_score", 30) or 30)
+            if monitored_only and not trusted:
+                continue
+            score = int(trusted.get("manual_trust_score", 30) or 30)
             text = str(tweet.get("text", ""))
             url = self._first_external_url(tweet)
-            explicit = bool(re.search(r"抽選|予約|応募|受付", text))
+            classification = self._classify_post(text)
+            if classification == "IRRELEVANT":
+                continue
+            source_type = str(trusted.get("source_type", GENERAL_INFORMATION))
+            official = source_type in {
+                OFFICIAL_MANUFACTURER, OFFICIAL_STORE, OFFICIAL_SHOP_BRANCH,
+            }
+            explicit = classification in {"LOTTERY", "RESERVATION", "RESTOCK"}
+            confirmed = bool(official and explicit and url)
+            product_name = self._extract_product_name(text)
+            date_fields = self._extract_date_fields(text, str(tweet.get("created_at", "")))
+            source_url = f"https://x.com/{username}/status/{tweet.get('id', '')}"
             candidates.append({
                 "id": str(tweet.get("id", "")),
                 "tcg_key": tcg,
-                "information_type": "RESTOCK" if re.search(r"再販|再入荷", text) else "APPLICATION",
+                "information_type": "RESTOCK" if classification == "RESTOCK" else (
+                    "APPLICATION" if classification in {"LOTTERY", "RESERVATION"} else "NEWS"
+                ),
+                "application_type": classification,
                 "text": text,
+                "product_name": product_name,
                 "username": username,
                 "display_name": str(user.get("name", "")),
                 "store_name": str(trusted.get("store_name", "")),
+                "source_type": source_type,
+                "manual_trust_score": score,
                 "trust_score": score,
-                "confirmed": bool(score >= 85 and explicit and url),
+                "confirmed": confirmed,
+                "verification_status": "confirmed" if confirmed else "candidate",
                 "application_url": url,
-                "source_url": f"https://x.com/{username}/status/{tweet.get('id', '')}",
+                "source_url": source_url,
+                "evidence": [{
+                    "source_type": source_type,
+                    "source_url": source_url,
+                    "account_username": username,
+                    "tweet_id": str(tweet.get("id", "")),
+                    "observed_at": self.now().isoformat(),
+                }],
                 "created_at": str(tweet.get("created_at", "")),
+                **date_fields,
             })
+        candidates = self._corroborate_with_web(candidates)
         newest = str(payload.get("meta", {}).get("newest_id", "")).strip()
         if newest:
-            state[tcg] = {"since_id": newest, "retry_at": 0, "backoff_attempts": 0}
+            state[state_key] = {"since_id": newest, "retry_at": 0, "backoff_attempts": 0}
             self._save_state(state)
+        if monitored_only:
+            self._record_account_observations(
+                accounts, candidates, users, payload.get("data", [])
+            )
         return {
             "status": "ok", "candidates": candidates, "request_count": 1,
             "since_id": newest or since_id,
@@ -134,18 +245,7 @@ class XRecentSearch:
         }
 
     def load_trusted_accounts(self) -> list[dict[str, Any]]:
-        if self.account_path.exists():
-            path = self.account_path
-        else:
-            packaged = bundled_root() / "resources" / "trusted_x_accounts.json"
-            source = bundled_root() / "app" / "resources" / "trusted_x_accounts.json"
-            path = packaged if packaged.exists() else source
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return []
-        required = {"username", "display_name", "category", "store_name", "tcg", "trust_score", "enabled"}
-        return [item for item in value if isinstance(item, dict) and required <= set(item)] if isinstance(value, list) else []
+        return self.accounts.load()
 
     def search_and_store(
         self, enabled_tcg_keys: set[str], bearer_token: str | None = None
@@ -171,6 +271,14 @@ class XRecentSearch:
             results[tcg] = result
             for item in result.get("candidates", []):
                 by_id[(tcg, str(item.get("id", "")))] = item
+            trusted_result = self.search_trusted_accounts(tcg, bearer_token)
+            results[f"trusted:{tcg}"] = trusted_result
+            for item in trusted_result.get("candidates", []):
+                key = (tcg, str(item.get("id", "")))
+                previous = by_id.get(key)
+                if previous:
+                    item = self.deduplicate([previous], [item])[0]
+                by_id[key] = item
         if any(result.get("candidates") for result in results.values()):
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_suffix(".json.tmp")
@@ -194,7 +302,18 @@ class XRecentSearch:
                 None,
             )
             if existing is not None:
-                existing.setdefault("source_urls", []).append(item.get("source_url", ""))
+                source_url = str(item.get("source_url", ""))
+                source_urls = existing.setdefault("source_urls", [])
+                if source_url and source_url not in source_urls:
+                    source_urls.append(source_url)
+                evidence = existing.setdefault("evidence", [])
+                for value in item.get("evidence", []):
+                    if isinstance(value, dict) and value not in evidence:
+                        evidence.append(dict(value))
+                existing["confidence"] = max(
+                    float(existing.get("confidence", 0) or 0),
+                    float(item.get("confidence", 0) or 0),
+                )
                 continue
             output.append(dict(item))
         return output
@@ -253,6 +372,175 @@ class XRecentSearch:
             if url.startswith("https://") and "x.com/" not in url and "twitter.com/" not in url:
                 return url
         return ""
+
+    @staticmethod
+    def _classify_post(text: str) -> str:
+        normalized = re.sub(r"\s+", " ", str(text)).casefold()
+        if re.search(
+            r"買取|デッキレシピ|大会結果|相場|プレゼント企画|個人売買|譲ります|交換希望",
+            normalized,
+        ):
+            return "IRRELEVANT"
+        if re.search(r"抽選販売|web抽選|店頭抽選|抽選受付|応募受付|購入権|当選", normalized):
+            return "LOTTERY"
+        if re.search(r"予約受付|予約開始|予約中|受注|店頭受付", normalized):
+            return "RESERVATION"
+        if re.search(r"再販|再入荷|入荷しました|入荷情報", normalized):
+            return "RESTOCK"
+        if re.search(r"販売開始|発売開始|販売中|在庫あり", normalized):
+            return "SALE"
+        if re.search(r"抽選|予約|受付開始|受付中|応募", normalized):
+            return "LOTTERY" if re.search(r"抽選|応募", normalized) else "RESERVATION"
+        return "NEWS"
+
+    @staticmethod
+    def _extract_product_name(text: str) -> str:
+        value = str(text)
+        code = re.search(r"\b(?:OP|EB|ST|PRB)-?\d{2,3}\b", value, re.IGNORECASE)
+        quoted = re.search(r"[「『](.{2,80}?)[」』]", value)
+        if quoted:
+            return quoted.group(1).strip()
+        return code.group(0).upper() if code else ""
+
+    @staticmethod
+    def _extract_date_fields(text: str, created_at: str) -> dict[str, str]:
+        try:
+            base_year = datetime.fromisoformat(created_at.replace("Z", "+00:00")).year
+        except ValueError:
+            base_year = datetime.now(timezone.utc).year
+        values: list[str] = []
+        for match in re.finditer(
+            r"(?:(20\d{2})年)?\s*(\d{1,2})月\s*(\d{1,2})日"
+            r"(?:\s*(\d{1,2})[:時](\d{2})?分?)?",
+            str(text),
+        ):
+            year, month, day, hour, minute = match.groups()
+            try:
+                parsed = datetime(
+                    int(year or base_year), int(month), int(day),
+                    int(hour or 0), int(minute or 0),
+                    tzinfo=timezone(timedelta(hours=9)),
+                )
+            except ValueError:
+                continue
+            values.append(parsed.isoformat())
+        result: dict[str, str] = {}
+        if values:
+            result["application_start_at"] = values[0]
+        if len(values) >= 2:
+            result["application_end_at"] = values[1]
+        return result
+
+    def _record_account_observations(
+        self,
+        accounts: dict[str, dict[str, Any]],
+        candidates: list[dict[str, Any]],
+        users: dict[str, dict[str, Any]],
+        tweets: list[dict[str, Any]],
+    ) -> None:
+        runtime = self.accounts.load_runtime_state()
+        fetched_at = self.now().isoformat()
+        candidates_by_username: dict[str, list[dict[str, Any]]] = {}
+        for item in candidates:
+            candidates_by_username.setdefault(
+                str(item.get("username", "")).casefold(), []
+            ).append(item)
+        user_ids = {
+            str(user.get("username", "")).casefold(): str(user.get("id", ""))
+            for user in users.values()
+        }
+        usernames_by_user_id = {
+            str(user.get("id", "")): str(user.get("username", "")).casefold()
+            for user in users.values()
+        }
+        latest_by_username: dict[str, str] = {}
+        for tweet in tweets:
+            username = usernames_by_user_id.get(str(tweet.get("author_id", "")), "")
+            tweet_id = str(tweet.get("id", ""))
+            current_id = latest_by_username.get(username, "")
+            if tweet_id.isdigit() and (
+                not current_id.isdigit() or int(tweet_id) > int(current_id)
+            ):
+                latest_by_username[username] = tweet_id
+        for username, account in accounts.items():
+            key = f"{username}|{account.get('tcg', '')}"
+            current = dict(runtime.get(key, {}))
+            observed = candidates_by_username.get(username, [])
+            if latest_by_username.get(username):
+                current["latest_tweet_id"] = latest_by_username[username]
+            current["user_id"] = user_ids.get(username) or current.get("user_id", "")
+            current["last_fetched_at"] = fetched_at
+            current["detected_count"] = int(current.get("detected_count", 0) or 0) + len(observed)
+            current["confirmed_count"] = int(current.get("confirmed_count", 0) or 0) + sum(
+                bool(item.get("confirmed")) for item in observed
+            )
+            current.setdefault("rejected_count", 0)
+            current.setdefault("false_positive_count", 0)
+            decided = int(current["confirmed_count"]) + int(current["rejected_count"])
+            current["observed_accuracy"] = (
+                round(int(current["confirmed_count"]) / decided, 4) if decided else None
+            )
+            runtime[key] = current
+        self.accounts.save_runtime_state(runtime)
+
+    def _corroborate_with_web(
+        self, candidates: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        result = inspect_json_file(self.root / "data" / "candidates.json", list)
+        if result.state == CORRUPT:
+            return candidates
+        web_items: list[dict[str, Any]] = []
+        for product in result.data or []:
+            if not isinstance(product, dict):
+                continue
+            for hit in product.get("retail_hits", []):
+                if not isinstance(hit, dict):
+                    continue
+                status = str(hit.get("status", ""))
+                if hit.get("period_ended") or re.search(
+                    r"終了済み|受付終了|応募終了", status
+                ):
+                    continue
+                web_items.append({
+                    "tcg_key": str(product.get("tcg_key", "")),
+                    "product_name": str(product.get("name", "")),
+                    "store_name": str(hit.get("seller") or hit.get("name") or ""),
+                    "application_url": str(
+                        hit.get("application_url") or hit.get("url") or ""
+                    ),
+                    "application_end_at": str(hit.get("application_end_at", "")),
+                    "confirmed": str(
+                        hit.get("verification_status", "confirmed")
+                    ) != "candidate",
+                    "evidence": [
+                        dict(value) for value in hit.get("source_evidence", [])
+                        if isinstance(value, dict)
+                    ],
+                })
+        output: list[dict[str, Any]] = []
+        for candidate in candidates:
+            item = dict(candidate)
+            match = next(
+                (web for web in web_items if self._same_case(web, item)), None
+            )
+            if match:
+                evidence = item.setdefault("evidence", [])
+                for value in match.get("evidence", []):
+                    if value not in evidence:
+                        evidence.append(dict(value))
+                item["corroboration_status"] = (
+                    "confirmed" if match.get("confirmed") else "candidate"
+                )
+                if match.get("confirmed"):
+                    item["confirmed"] = True
+                    item["verification_status"] = "confirmed"
+                    item["confidence"] = max(
+                        float(item.get("confidence", 0) or 0), 0.95
+                    )
+            else:
+                item["corroboration_status"] = "candidate"
+            output.append(item)
+        return output
 
     def _load_state(self) -> dict[str, Any]:
         try:

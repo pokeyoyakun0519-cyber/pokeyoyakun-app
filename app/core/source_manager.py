@@ -540,7 +540,11 @@ class SourceManager:
                 product["msrp"] = supplement["msrp"]
                 product["reference_price"] = supplement["msrp"]
             time.sleep(0.25)
-        return [item for item in products if item.get("release_date")], detail_pages, duplicates
+        # An official card product without a machine-readable release date is
+        # still a valid discovery candidate.  Auto-monitoring separately
+        # requires a usable date, so preserving it here cannot start premature
+        # monitoring but prevents an official product from disappearing.
+        return products, detail_pages, duplicates
 
     def _extract_gundam_official_products(
         self, source_name: str

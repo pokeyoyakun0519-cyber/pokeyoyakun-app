@@ -14,6 +14,10 @@ from core.bushiroad_store_parser import BushiroadStoreParser
 from core.card_labo_parser import CardLaboParser
 from core.hobby_station_parser import HobbyStationParser
 from core.konami_style_parser import KonamiStyleParser
+from core.priority_application_adapters import (
+    MagiApplicationAdapter,
+    PremiumBandaiApplicationAdapter,
+)
 from urllib.parse import urljoin, urlparse
 
 from core.builtin_store_catalog import load_builtin_store_catalog, match_builtin_store
@@ -108,6 +112,8 @@ class RetailSearchManager:
         self.card_labo = CardLaboParser()
         self.hobby_station = HobbyStationParser()
         self.konami_style = KonamiStyleParser()
+        self.magi = MagiApplicationAdapter()
+        self.premium_bandai = PremiumBandaiApplicationAdapter()
         self.store_candidates = StoreCandidateManager()
         self.store_discovery = StoreDiscovery(self.store_candidates)
         self.last_diagnostics: dict[str, Any] = {}
@@ -141,6 +147,7 @@ class RetailSearchManager:
         searchers = [self._search_yodobashi]
         if tcg_key == "pokemon":
             searchers.insert(0, self._search_pokemon_center)
+            searchers.insert(1, self.magi.search_candidate)
 
         for searcher in searchers:
             searched_stores.add(getattr(searcher, "__name__", "dedicated_search"))
@@ -175,6 +182,8 @@ class RetailSearchManager:
                     found, message = self.hobby_station.search_candidate(candidate)
                 elif plugin_id == "konami_style":
                     found, message = self.konami_style.search_candidate(candidate)
+                elif plugin_id == "premium_bandai":
+                    found, message = self.premium_bandai.search_candidate(candidate)
                 else:
                     found, message = self._search_generic_plugin(
                         candidate,
@@ -277,6 +286,29 @@ class RetailSearchManager:
             + json.dumps(self.last_diagnostics, ensure_ascii=False, separators=(",", ":"))
         )
         return accepted, messages
+
+    def discover_priority_applications(
+        self, enabled_tcg_keys: set[str] | None = None
+    ) -> list[dict[str, Any]]:
+        enabled = enabled_tcg_keys or {"pokemon", "onepiece"}
+        if not any(
+            plugin.get("id") == "card_labo"
+            for tcg in enabled
+            for plugin in enabled_plugins_for_tcg(tcg)
+        ):
+            return []
+        discoveries: list[dict[str, Any]] = []
+        for record in self.card_labo.scan():
+            if str(record.get("tcg_key", "")) not in enabled:
+                continue
+            if record.get("article_type") not in self.card_labo.APPLICATION_TYPES:
+                continue
+            if not record.get("application_evidence") or record.get("status") == "終了済み":
+                continue
+            hit = self.card_labo._build_hit(record)
+            if hit:
+                discoveries.append({"record": dict(record), "hit": hit})
+        return discoveries
 
     def _search_pokemon_center(
         self,
