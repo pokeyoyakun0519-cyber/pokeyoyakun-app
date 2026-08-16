@@ -61,6 +61,12 @@ class TrustedXAccountRegistry:
             detected = int(observed.get("detected_count", 0) or 0)
             output.append({
                 **account,
+                "last_seen_tweet_id": str(
+                    observed.get("last_seen_tweet_id", observed.get("latest_tweet_id", ""))
+                ),
+                "last_checked_at": str(
+                    observed.get("last_checked_at", observed.get("last_fetched_at", ""))
+                ),
                 "latest_tweet_id": str(observed.get("latest_tweet_id", "")),
                 "last_fetched_at": str(observed.get("last_fetched_at", "")),
                 "past_candidate_count": detected,
@@ -155,8 +161,10 @@ class TrustedXAccountRegistry:
             current[field] = max(0, int(current.get(field, 0) or 0) + int(delta))
         if tweet_id:
             current["latest_tweet_id"] = tweet_id
+            current["last_seen_tweet_id"] = tweet_id
         if fetched_at:
             current["last_fetched_at"] = fetched_at
+            current["last_checked_at"] = fetched_at
         decided = current.get("confirmed_count", 0) + current.get("rejected_count", 0)
         current["observed_accuracy"] = (
             round(current.get("confirmed_count", 0) / decided, 4) if decided else None

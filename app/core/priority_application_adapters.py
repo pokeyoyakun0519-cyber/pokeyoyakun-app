@@ -265,7 +265,7 @@ class MagiApplicationAdapter(_OfficialApplicationAdapter):
 
 class PremiumBandaiApplicationAdapter(_OfficialApplicationAdapter):
     INDEX_URL = "https://p-bandai.jp/carddas/a0018/list-pa20-n0/"
-    UNION_ARENA_INDEX_URL = "https://p-bandai.jp/carddas/a0015/list-da20-n2/"
+    UNION_ARENA_INDEX_URL = "https://p-bandai.jp/carddas/a0015/list-da10-n0/"
     DRAGON_BALL_FUSION_WORLD_INDEX_URL = (
         "https://p-bandai.jp/carddas/a0008/b0003/dbscgfw/list-da20-n0/"
     )
