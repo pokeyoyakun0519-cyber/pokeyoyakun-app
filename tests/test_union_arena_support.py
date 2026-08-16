@@ -178,6 +178,10 @@ class UnionArenaSupportTest(unittest.TestCase):
         self.assertEqual("UA01DC", XRecentSearch._extract_product_name("UA01DC 予約受付"))
 
     def test_premium_bandai_union_arena_is_candidate_until_period_verified(self):
+        self.assertEqual(
+            "https://p-bandai.jp/carddas/a0015/list-da10-n0/",
+            PremiumBandaiApplicationAdapter.UNION_ARENA_INDEX_URL,
+        )
         html = '''<a href="https://p-bandai.jp/item/item-1000000001/">
         UNION ARENA ブースターパック 作品A【UA58BT】 予約</a>'''
         adapter = PremiumBandaiApplicationAdapter(fetcher=lambda _url: html)
