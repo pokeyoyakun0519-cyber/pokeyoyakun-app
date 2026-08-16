@@ -211,7 +211,7 @@ class CommonEditionAndUiTest(unittest.TestCase):
             self.assertIn(
                 [
                     "all", "pokemon", "onepiece", "yugioh", "gundam",
-                    "duelmasters", "weiss", "mtg", "other",
+                    "union_arena", "duelmasters", "weiss", "mtg", "other",
                 ],
                 tab_sets,
             )

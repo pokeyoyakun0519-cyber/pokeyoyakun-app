@@ -64,5 +64,16 @@
     "manual_trust_score": 90,
     "enabled": true,
     "memo": "店舗公式アカウント。"
+  },
+  {
+    "username": "UNION_ARENA_TCG",
+    "display_name": "UNION ARENA公式",
+    "user_id": "",
+    "source_type": "OFFICIAL_MANUFACTURER",
+    "store_name": "バンダイ",
+    "tcg": "union_arena",
+    "manual_trust_score": 100,
+    "enabled": true,
+    "memo": "日本公式サイトのSOCIAL MEDIA導線で公式性を確認。user_idはX API応答取得後に実行状態へ保存する。"
   }
 ]

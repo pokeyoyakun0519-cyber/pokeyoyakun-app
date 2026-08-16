@@ -29,6 +29,7 @@ RECENT_SEARCH_URL = "https://api.x.com/2/tweets/search/recent"
 QUERIES = {
     "pokemon": '("ポケモンカード" OR ポケカ) (抽選 OR 予約 OR 再販 OR 受付) -is:retweet',
     "onepiece": '("ONE PIECEカード" OR "ワンピースカード") (抽選 OR 予約 OR 再販 OR 受付) -is:retweet',
+    "union_arena": '("UNION ARENA" OR ユニオンアリーナ OR ユニアリ) (抽選 OR 予約 OR 再販 OR 再入荷 OR 受付) -is:retweet',
 }
 
 
@@ -51,14 +52,14 @@ class XRecentSearch:
 
     def search(self, tcg: str, bearer_token: str | None = None) -> dict[str, Any]:
         if tcg not in QUERIES:
-            raise ValueError("X検索対象はpokemonまたはonepieceだけです。")
+            raise ValueError("X検索対象TCGが未対応です。")
         return self._search_query(tcg, QUERIES[tcg], tcg, bearer_token)
 
     def search_trusted_accounts(
         self, tcg: str, bearer_token: str | None = None
     ) -> dict[str, Any]:
         if tcg not in QUERIES:
-            raise ValueError("X検索対象はpokemonまたはonepieceだけです。")
+            raise ValueError("X検索対象TCGが未対応です。")
         accounts = [
             account for account in self.load_trusted_accounts()
             if account.get("enabled", True) and account.get("tcg") == tcg
@@ -377,7 +378,10 @@ class XRecentSearch:
     def _classify_post(text: str) -> str:
         normalized = re.sub(r"\s+", " ", str(text)).casefold()
         if re.search(
-            r"買取|デッキレシピ|大会結果|相場|プレゼント企画|個人売買|譲ります|交換希望",
+            r"買取|デッキレシピ|カードリスト|大会(?:結果|情報)?|"
+            r"イベント|キャンペーン|相場|プレゼント企画|個人売買|"
+            r"譲ります|交換希望|サプライ|スリーブ|プレイマット|"
+            r"フィギュア|グッズ",
             normalized,
         ):
             return "IRRELEVANT"
@@ -396,7 +400,11 @@ class XRecentSearch:
     @staticmethod
     def _extract_product_name(text: str) -> str:
         value = str(text)
-        code = re.search(r"\b(?:OP|EB|ST|PRB)-?\d{2,3}\b", value, re.IGNORECASE)
+        code = re.search(
+            r"\b(?:(?:OP|EB|ST|PRB)-?\d{2,3}|(?:UA|EX)\d{2}(?:BT|ST|DC))\b",
+            value,
+            re.IGNORECASE,
+        )
         quoted = re.search(r"[「『](.{2,80}?)[」』]", value)
         if quoted:
             return quoted.group(1).strip()

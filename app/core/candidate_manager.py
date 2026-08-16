@@ -738,7 +738,7 @@ class CandidateManager:
 
     @staticmethod
     def _is_new_release_candidate(product: dict[str, Any], tcg_key: str) -> bool:
-        if tcg_key not in {"onepiece", "gundam"}:
+        if tcg_key not in {"onepiece", "gundam", "union_arena"}:
             return bool(str(product.get("name", "")).strip())
         allowed = {
             "onepiece": {
@@ -747,6 +747,10 @@ class CandidateManager:
             },
             "gundam": {
                 "ブースターパック", "スタートデッキ", "プレミアムバンダイ", "その他",
+            },
+            "union_arena": {
+                "ブースターパック", "スタートデッキ", "構築済みデッキ",
+                "プレミアム商品", "その他カード商品",
             },
         }
         kind = str(product.get("product_kind", "その他"))
@@ -767,7 +771,7 @@ class CandidateManager:
             # in the list/detail HTML.  Preserve those official card products as
             # candidates; AutoMonitorManager will keep them out of monitoring
             # until a reliable release date is available.
-            if tcg_key != "onepiece" or not product.get("manufacturer_official"):
+            if tcg_key not in {"onepiece", "union_arena"} or not product.get("manufacturer_official"):
                 return False
         if release_text:
             try:

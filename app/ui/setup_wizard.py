@@ -18,6 +18,7 @@ TCG_LABELS = {
     "pokemon": "ポケモンカード",
     "onepiece": "ワンピースカード",
     "gundam": "ガンダムカードゲーム",
+    "union_arena": "UNION ARENA",
     "yugioh": "遊戯王OCG",
 }
 

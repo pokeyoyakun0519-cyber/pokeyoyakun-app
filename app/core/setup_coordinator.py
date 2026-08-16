@@ -9,7 +9,9 @@ from core.scheduler_config import SchedulerConfig
 
 
 SETUP_VERSION = 1
-SUPPORTED_TCG_KEYS = ("pokemon", "onepiece", "gundam", "yugioh")
+SUPPORTED_TCG_KEYS = (
+    "pokemon", "onepiece", "gundam", "union_arena", "yugioh",
+)
 
 
 class SetupCoordinator:
