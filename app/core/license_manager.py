@@ -65,6 +65,31 @@ class LicenseManager:
             )
         return ok, message
 
+    def request_subscription_code(
+        self,
+        email: str,
+    ) -> tuple[bool, str]:
+        ok, message, _ = self.online_client.request_subscription_code(email)
+        return ok, message
+
+    def activate_subscription(
+        self,
+        email: str,
+        code: str,
+    ) -> tuple[bool, str]:
+        ok, message, data = self.online_client.activate_subscription(
+            email,
+            code,
+        )
+        if not ok:
+            return False, message
+
+        internal_key = str(data.get("license_key", "")).strip().upper()
+        if not internal_key:
+            return False, "自動認証用ライセンスを保存できませんでした。"
+        self.save_online_key(internal_key)
+        return True, message
+
     def verify_online(
         self,
     ) -> tuple[bool, str]:
