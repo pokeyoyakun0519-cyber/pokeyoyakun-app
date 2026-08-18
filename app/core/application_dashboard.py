@@ -1,11 +1,12 @@
 from collections import Counter
+from datetime import datetime, timedelta
 from typing import Any
 
 from core.application_period import ApplicationPeriodParser
 from core.application_site import has_application_evidence, normalize_application_site
 from core.application_change_tracker import ApplicationChangeTracker
 from core.application_condition_detector import ApplicationConditionDetector
-from core.application_status import evaluate_application_period
+from core.application_status import JST, evaluate_application_period
 from core.config_manager import ConfigManager
 from core.daily_task_manager import DailyTaskManager
 from core.product_store import ProductStore
@@ -28,6 +29,9 @@ class ApplicationDashboard:
         sort_mode: str = "応募締切順",
         keyword: str = "",
         tcg_filter: str = "all",
+        sales_mode_filter: str = "all",
+        prefecture_filter: str = "all",
+        period_filter: str = "all",
         show_ended: bool | None = None,
         now=None,
     ) -> dict[str, Any]:
@@ -195,17 +199,37 @@ class ApplicationDashboard:
                     "condition_warnings": ApplicationConditionDetector.detect(site),
                     "changes": recent_changes.get(item_key, {}).get("changes", {}),
                     "change_detected_at": recent_changes.get(item_key, {}).get("detected_at", ""),
+                    "sales_mode": self._sales_mode(site),
+                    "prefecture": str(site.get("prefecture", "")).strip() or "UNKNOWN",
+                    "branch": site.get("branch", site.get("branch_name", "")),
+                    "address": site.get("address", ""),
+                    "chain": site.get("chain", site.get("store_group_id", "")),
+                    "city": site.get("city", ""),
+                    "location_source": site.get("location_source", ""),
+                    "source_type": site.get("source_type", product.get("source_type", "")),
+                    "evidence": site.get("evidence", product.get("evidence", [])),
+                    "verification_status": site.get(
+                        "verification_status", product.get("verification_status", "confirmed")
+                    ),
+                    "verification_details": site.get("verification_details", ""),
                 }
+                row["is_candidate"] = str(row["verification_status"]).casefold() in {
+                    "candidate", "pending", "confirming", "確認中",
+                } or ("confirmed" in site and site.get("confirmed") is False)
                 rows.append(row)
 
         eligible_rows = []
         for row in rows:
-            if not show_ended and row["period_ended"]:
-                diagnostics["excluded_ended"] += 1
-                diagnostics_by_tcg.setdefault(
-                    row["tcg_key"], Counter()
-                )["excluded_ended"] += 1
-                continue
+            if row["period_ended"]:
+                if not self._within_ended_retention(row, now):
+                    diagnostics["excluded_ended_retention"] += 1
+                    continue
+                if not show_ended:
+                    diagnostics["excluded_ended"] += 1
+                    diagnostics_by_tcg.setdefault(
+                        row["tcg_key"], Counter()
+                    )["excluded_ended"] += 1
+                    continue
             eligible_rows.append(row)
             diagnostics_by_tcg.setdefault(
                 row["tcg_key"], Counter()
@@ -220,6 +244,16 @@ class ApplicationDashboard:
                 diagnostics_by_tcg.setdefault(
                     row["tcg_key"], Counter()
                 )["excluded_tcg_filter"] += 1
+                continue
+            if sales_mode_filter != "all" and row["sales_mode"] != sales_mode_filter:
+                diagnostics["excluded_sales_mode_filter"] += 1
+                continue
+            if prefecture_filter != "all" and row["prefecture"] != prefecture_filter:
+                diagnostics["excluded_prefecture_filter"] += 1
+                continue
+            if period_filter == "active" and row["period_ended"]:
+                continue
+            if period_filter == "ended" and not row["period_ended"]:
                 continue
             if not self._matches_state(row, state_filter):
                 diagnostics["excluded_state_filter"] += 1
@@ -267,13 +301,58 @@ class ApplicationDashboard:
             "groups": self._group_rows(visible),
             "total_rows": len(eligible_rows),
             "history_total_rows": len(rows),
-            "ended_rows": sum(bool(row["period_ended"]) for row in rows),
+            "ended_rows": sum(bool(row["period_ended"])
+                              and self._within_ended_retention(row, now) for row in rows),
             "diagnostics": dict(diagnostics),
             "diagnostics_by_tcg": {
                 item.key: dict(diagnostics_by_tcg.get(item.key, Counter()))
                 for item in categories()
             },
         }
+
+    @classmethod
+    def filter_cached(
+        cls, rows: list[dict[str, Any]], *, period_filter: str = "active",
+        state_filter: str = "すべて", keyword: str = "", tcg_filter: str = "all",
+        sales_mode_filter: str = "all", prefecture_filter: str = "all",
+        sort_mode: str = "応募締切順",
+    ) -> list[dict[str, Any]]:
+        """Filter an already loaded snapshot; this performs no storage or network I/O."""
+        visible = [row for row in rows if (
+            (period_filter != "active" or not row.get("period_ended"))
+            and (period_filter != "ended" or bool(row.get("period_ended")))
+            and (tcg_filter == "all" or row.get("tcg_key") == tcg_filter)
+            and (sales_mode_filter == "all" or row.get("sales_mode") == sales_mode_filter)
+            and (prefecture_filter == "all" or row.get("prefecture") == prefecture_filter)
+            and cls._matches_state(row, state_filter)
+            and cls._matches_keyword(row, keyword)
+        )]
+        visible.sort(key=cls._sort_key(sort_mode))
+        return visible
+
+    @staticmethod
+    def _sales_mode(site: dict[str, Any]) -> str:
+        value = str(site.get("sales_mode") or site.get("sales_method_hint")
+                    or site.get("channel") or "UNKNOWN").strip().upper()
+        aliases = {"ONLINE": "ONLINE", "STORE": "STORE", "PHYSICAL": "STORE",
+                   "HYBRID": "HYBRID", "CHAIN": "STORE", "UNKNOWN": "UNKNOWN"}
+        return aliases.get(value, "UNKNOWN")
+
+    @staticmethod
+    def _within_ended_retention(row: dict[str, Any], now) -> bool:
+        value = str(row.get("application_end_at") or row.get("application_end") or "").strip()
+        if not value:
+            return True
+        try:
+            ended_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        if ended_at.tzinfo is None:
+            ended_at = ended_at.replace(tzinfo=JST)
+        current = now or datetime.now(JST)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=JST)
+        return current.astimezone(JST) <= ended_at.astimezone(JST) + timedelta(days=14)
 
     @staticmethod
     def _matches_filter(

@@ -220,7 +220,7 @@ class ApplicationDashboardP24UiTest(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_dashboard_has_all_tcg_tabs_with_counts(self):
+    def test_dashboard_uses_two_period_tabs_and_tcg_filter(self):
         with patch.object(ApplicationDashboard, "build", return_value={
             "counts": {key: 0 for key in ("未応募", "応募済み", "抽選結果待ち", "当選", "落選", "予約完了", "注文受付", "キャンセル", "その他")},
             "tcg_counts": {
@@ -233,9 +233,13 @@ class ApplicationDashboardP24UiTest(unittest.TestCase):
             "rows": [], "total_rows": 0,
         }):
             page = ApplicationDashboardPage()
-        tabs = page.findChild(QTabBar)
+        tabs = page.period_tabs
         self.assertEqual(
             [tabs.tabData(i) for i in range(tabs.count())],
+            ["active", "ended"],
+        )
+        self.assertEqual(
+            [page.tcg_filter.itemData(i) for i in range(page.tcg_filter.count())],
             [
                 "all", "pokemon", "onepiece", "yugioh", "gundam",
                 "duelmasters", "weiss", "mtg", "other",

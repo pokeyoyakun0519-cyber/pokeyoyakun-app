@@ -35,7 +35,7 @@ class ApplicationRow(QFrame):
         self.store = store
         self.reload_callback = reload_callback
         self.applied_callback = applied_callback
-        self.setObjectName("ProductCard")
+        self.setObjectName("CandidateCard" if row.get("is_candidate") else "ProductCard")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(
@@ -57,19 +57,16 @@ class ApplicationRow(QFrame):
         title.setObjectName("ProductName")
         title.setWordWrap(True)
 
-        state = QLabel(
-            row.get(
-                "application_state",
-                "未応募",
-            )
+        display_state = (
+            "確認中" if row.get("is_candidate")
+            else "当選" if row.get("dashboard_state") == "当選"
+            else "落選" if row.get("dashboard_state") == "落選"
+            else "応募期間終了" if row.get("period_ended")
+            else row.get("application_state", "未応募")
         )
+        state = QLabel(display_state)
         state.setObjectName(
-            self._status_object_name(
-                row.get(
-                    "application_state",
-                    "",
-                )
-            )
+            self._status_object_name(display_state)
         )
 
         product_button = QPushButton("商品ページを開く")
@@ -78,8 +75,12 @@ class ApplicationRow(QFrame):
         product_button.clicked.connect(self._open_product_page)
 
         application_button = QPushButton("応募ページを開く")
-        application_button.setObjectName("SmallButton")
-        application_button.setEnabled(can_open_product_url(row.get("application_url")))
+        application_button.setObjectName("AccentButton")
+        application_button.setEnabled(
+            can_open_product_url(row.get("application_url")) and not row.get("is_candidate")
+        )
+        if row.get("is_candidate"):
+            application_button.setToolTip("公式確認が完了するまで応募操作は利用できません")
         application_button.clicked.connect(self._open_application_page)
 
         header.addWidget(title, 1)
@@ -88,14 +89,15 @@ class ApplicationRow(QFrame):
             new_label.setObjectName("StatusOpen")
             header.addWidget(new_label)
         header.addWidget(state)
-        header.addWidget(product_button)
         header.addWidget(application_button)
         layout.addLayout(header)
 
         store_info = QLabel(
-            f'TCG：{row.get("tcg", "その他")}　'
             f'店舗：{row.get("site_name", "店舗名未設定")}　'
-            f'発売日：{row.get("release_date") or "未設定"}'
+            f'締切：{row.get("application_end_at") or row.get("application_end") or "未取得"}　'
+            f'方式：{self._sales_mode_label(row.get("sales_mode"))}　'
+            f'地域：{self._prefecture_label(row.get("prefecture"))}　'
+            f'応募状態：{"確認中" if row.get("is_candidate") else row.get("application_state", "未応募")}'
         )
         store_info.setObjectName("MutedText")
         layout.addWidget(store_info)
@@ -124,6 +126,7 @@ class ApplicationRow(QFrame):
         detail_button = QPushButton("詳細を表示")
         detail_button.setObjectName("SmallButton")
         layout.addWidget(detail_button)
+        layout.addWidget(product_button)
 
         schedule = QLabel(
             f'状態：{row.get("period_status", "未確認")} '
@@ -159,6 +162,19 @@ class ApplicationRow(QFrame):
         related_url.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(related_url)
 
+        technical = QLabel(
+            f'支店：{row.get("branch") or "未登録"}　住所：{row.get("address") or "未登録"}\n'
+            f'chain：{row.get("chain") or "未登録"}　city：{row.get("city") or "未登録"}　'
+            f'location source：{row.get("location_source") or "未登録"}\n'
+            f'source type：{row.get("source_type") or "未登録"}　'
+            f'verification：{row.get("verification_status") or "未登録"}\n'
+            f'evidence：{self._evidence_text(row.get("evidence"))}　'
+            f'details：{row.get("verification_details") or "未登録"}'
+        )
+        technical.setObjectName("MutedText")
+        technical.setWordWrap(True)
+        layout.addWidget(technical)
+
         controls_widget = QWidget()
         controls = QHBoxLayout(controls_widget)
         controls.setContentsMargins(0, 0, 0, 0)
@@ -187,6 +203,8 @@ class ApplicationRow(QFrame):
         result.currentTextChanged.connect(
             self._save_result
         )
+        applied_button.setEnabled(not row.get("is_candidate"))
+        result.setEnabled(not row.get("is_candidate"))
 
         controls.addWidget(applied_button)
         controls.addWidget(QLabel("抽選結果："))
@@ -195,7 +213,8 @@ class ApplicationRow(QFrame):
 
         layout.addWidget(controls_widget)
 
-        self.detail_widgets = [product_button, schedule, history, related_url, controls_widget]
+        self.detail_widgets = [product_button, warning_label, change_label, schedule,
+                               history, related_url, technical, controls_widget]
         for widget in self.detail_widgets:
             widget.setVisible(False)
         detail_button.clicked.connect(
@@ -250,6 +269,8 @@ class ApplicationRow(QFrame):
     def _status_object_name(
         status: str,
     ) -> str:
+        if status == "確認中":
+            return "StatusLottery"
         if status in {
             "当選",
             "抽選受付完了",
@@ -259,7 +280,26 @@ class ApplicationRow(QFrame):
             return "StatusLottery"
         if status == "落選":
             return "StatusClosed"
+        if status != "応募期間終了":
+            return "StatusActive"
         return "StatusOther"
+
+    @staticmethod
+    def _sales_mode_label(value: str) -> str:
+        return {"ONLINE": "ネット販売", "STORE": "店舗販売",
+                "HYBRID": "オンライン応募・店舗受取",
+                "UNKNOWN": "販売方式不明"}.get(str(value), "販売方式不明")
+
+    @staticmethod
+    def _prefecture_label(value: str) -> str:
+        return "地域不明" if str(value or "UNKNOWN") == "UNKNOWN" else str(value)
+
+    @staticmethod
+    def _evidence_text(value) -> str:
+        if isinstance(value, list):
+            return " / ".join(str(item.get("url") or item) if isinstance(item, dict) else str(item)
+                              for item in value) or "未登録"
+        return str(value or "未登録")
 
 
 class ApplicationProductGroup(QFrame):
@@ -310,7 +350,7 @@ class ApplicationDashboardPage(QFrame):
 
         refresh = QPushButton("再読込")
         refresh.setObjectName("AccentButton")
-        refresh.clicked.connect(self.reload)
+        refresh.clicked.connect(lambda: self.reload(force=True))
 
         header.addWidget(title)
         header.addStretch()
@@ -318,7 +358,7 @@ class ApplicationDashboardPage(QFrame):
         layout.addLayout(header)
 
         self.summary = QLabel("")
-        self.summary.setObjectName("SectionTitle")
+        self.summary.setObjectName("PageText")
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
 
@@ -331,30 +371,69 @@ class ApplicationDashboardPage(QFrame):
         description.setWordWrap(True)
         layout.addWidget(description)
 
-        self.tcg_tabs = QTabBar()
-        self.tcg_tabs.setExpanding(False)
-        self.tcg_tabs.addTab("すべて 0")
-        self.tcg_tabs.setTabData(0, "all")
-        for item in categories():
-            index = self.tcg_tabs.addTab(f"{item.short_name} 0")
-            self.tcg_tabs.setTabData(index, item.key)
-        self.tcg_tabs.currentChanged.connect(self.reload)
-        layout.addWidget(self.tcg_tabs)
+        self.period_tabs = QTabBar()
+        self.period_tabs.setExpanding(False)
+        for label, value in (("受付中 0", "active"), ("応募期間終了 0", "ended")):
+            index = self.period_tabs.addTab(label)
+            self.period_tabs.setTabData(index, value)
+        self.period_tabs.currentChanged.connect(self._apply_filters)
+        layout.addWidget(self.period_tabs)
 
-        self.state_tabs = QTabBar()
-        self.state_tabs.setExpanding(False)
-        for state in (
-            "すべて", "未応募", "応募済み", "本日締切",
-            "結果待ち", "当選", "落選", "終了済み",
-        ):
-            index = self.state_tabs.addTab(f"{state} 0")
-            self.state_tabs.setTabData(index, state)
-        self.state_tabs.currentChanged.connect(self.reload)
-        layout.addWidget(self.state_tabs)
+        filter_header = QHBoxLayout()
+        self.filter_toggle = QPushButton("絞り込みを表示")
+        self.filter_toggle.setObjectName("SmallButton")
+        self.filter_toggle.clicked.connect(self._toggle_filters)
+        filter_header.addWidget(self.filter_toggle)
+        filter_header.addStretch()
+        layout.addLayout(filter_header)
+
+        self.filter_panel = QWidget()
+        filter_layout = QVBoxLayout(self.filter_panel)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        filter_layout.setSpacing(8)
 
         filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("TCG："))
+        self.tcg_filter = QComboBox()
+        self.tcg_filter.addItem("すべて", "all")
+        for item in categories():
+            self.tcg_filter.addItem(item.short_name, item.key)
+        self.tcg_filter.currentIndexChanged.connect(self._apply_filters)
+        filter_row.addWidget(self.tcg_filter)
 
-        filter_row.addWidget(QLabel("並び順："))
+        filter_row.addWidget(QLabel("販売方式："))
+        self.sales_mode_filter = QComboBox()
+        for label, value in (("すべて", "all"), ("ネット販売", "ONLINE"),
+                             ("店舗販売", "STORE"),
+                             ("オンライン応募・店舗受取", "HYBRID"),
+                             ("販売方式不明", "UNKNOWN")):
+            self.sales_mode_filter.addItem(label, value)
+        self.sales_mode_filter.currentIndexChanged.connect(self._apply_filters)
+        filter_row.addWidget(self.sales_mode_filter)
+
+        filter_row.addWidget(QLabel("都道府県："))
+        self.prefecture_filter = QComboBox()
+        self.prefecture_filter.addItem("すべて", "all")
+        self.prefecture_filter.addItem("地域不明", "UNKNOWN")
+        self.prefecture_filter.currentIndexChanged.connect(self._apply_filters)
+        filter_row.addWidget(self.prefecture_filter)
+        filter_row.addStretch()
+        filter_layout.addLayout(filter_row)
+
+        filter_row2 = QHBoxLayout()
+        filter_row2.addWidget(QLabel("応募状態："))
+        self.application_state_filter = QComboBox()
+        for state in ("すべて", "未応募", "応募済み", "結果待ち", "当選", "落選", "確認中"):
+            self.application_state_filter.addItem(state, state)
+        self.application_state_filter.currentIndexChanged.connect(self._apply_filters)
+        filter_row2.addWidget(self.application_state_filter)
+
+        self.keyword = QLineEdit()
+        self.keyword.setPlaceholderText("商品名・店舗名で検索")
+        self.keyword.textChanged.connect(self._apply_filters)
+        filter_row2.addWidget(self.keyword, 1)
+
+        filter_row2.addWidget(QLabel("並び順："))
         self.sort_mode = QComboBox()
         self.sort_mode.addItems(
             [
@@ -367,27 +446,9 @@ class ApplicationDashboardPage(QFrame):
         )
         self.sort_mode.setCurrentText("応募締切順")
         self.sort_mode.currentTextChanged.connect(
-            self.reload
+            self._apply_filters
         )
-        filter_row.addWidget(self.sort_mode)
-
-        self.keyword = QLineEdit()
-        self.keyword.setPlaceholderText(
-            "商品名・店舗名で検索"
-        )
-        self.keyword.textChanged.connect(
-            self.reload
-        )
-        filter_row.addWidget(self.keyword, 1)
-
-        self.show_ended = QCheckBox("終了済みを表示")
-        self.show_ended.setChecked(bool(
-            self.config_manager.load().get("general", {}).get(
-                "show_ended_applications", False
-            )
-        ))
-        self.show_ended.toggled.connect(self._toggle_show_ended)
-        filter_row.addWidget(self.show_ended)
+        filter_row2.addWidget(self.sort_mode)
 
         self.group_by_product = QCheckBox("商品ごとにまとめる")
         self.group_by_product.setChecked(bool(
@@ -396,19 +457,21 @@ class ApplicationDashboardPage(QFrame):
             )
         ))
         self.group_by_product.toggled.connect(self._toggle_group_by_product)
-        filter_row.addWidget(self.group_by_product)
-
-        layout.addLayout(filter_row)
+        filter_row2.addWidget(self.group_by_product)
+        filter_layout.addLayout(filter_row2)
+        self.filter_panel.setVisible(False)
+        layout.addWidget(self.filter_panel)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.NoFrame)
         layout.addWidget(self.scroll, 1)
 
-        self.reload()
+        self._snapshot = None
+        self.reload(force=True)
         self.period_timer = QTimer(self)
         self.period_timer.setInterval(60_000)
-        self.period_timer.timeout.connect(self.reload)
+        self.period_timer.timeout.connect(lambda: self.reload(force=True))
         self.period_timer.start()
 
 
@@ -443,34 +506,28 @@ class ApplicationDashboardPage(QFrame):
             str(row.get("tcg", "その他")),
         )
 
-        self.reload()
+        self.reload(force=True)
         self.open_lottery_page.emit()
 
-    def _toggle_show_ended(self, enabled: bool):
-        config = self.config_manager.load()
-        config.setdefault("general", {})["show_ended_applications"] = bool(enabled)
-        self.config_manager.save(config)
-        self.reload()
+    def _toggle_filters(self):
+        visible = not self.filter_panel.isVisible()
+        self.filter_panel.setVisible(visible)
+        self.filter_toggle.setText("絞り込みを隠す" if visible else "絞り込みを表示")
 
     def _toggle_group_by_product(self, enabled: bool):
         config = self.config_manager.load()
         config.setdefault("application_assistant", {})["group_by_product"] = bool(enabled)
         self.config_manager.save(config)
-        self.reload()
+        self._apply_filters()
 
-    def reload(self, *_args):
-        selected_state = str(
-            self.state_tabs.tabData(self.state_tabs.currentIndex()) or "未応募"
-        )
-        data = self.dashboard.build(
-            state_filter=selected_state,
-            sort_mode=self.sort_mode.currentText(),
-            keyword=self.keyword.text(),
-            tcg_filter=str(
-                self.tcg_tabs.tabData(self.tcg_tabs.currentIndex()) or "all"
-            ),
-            show_ended=self.show_ended.isChecked() or selected_state == "終了済み",
-        )
+    def reload(self, *_args, force: bool = False):
+        if force or self._snapshot is None:
+            self._snapshot = self.dashboard.build(state_filter="すべて", show_ended=True)
+            self._refresh_prefectures(self._snapshot.get("rows", []))
+            self._write_diagnostics(self._snapshot)
+        self._apply_filters()
+
+    def _write_diagnostics(self, data: dict):
         diagnostics = data.get("diagnostics", {})
         diagnostics_by_tcg = data.get("diagnostics_by_tcg", {})
         signature = (
@@ -482,10 +539,6 @@ class ApplicationDashboardPage(QFrame):
                 )
                 for item in categories()
             ),
-            selected_state,
-            str(self.tcg_tabs.tabData(self.tcg_tabs.currentIndex()) or "all"),
-            self.keyword.text(),
-            self.show_ended.isChecked(),
         )
         if signature != self._last_diagnostic_signature:
             self._last_diagnostic_signature = signature
@@ -524,32 +577,53 @@ class ApplicationDashboardPage(QFrame):
                     f'state_filter={values.get("excluded_state_filter", 0)} '
                     f'keyword={values.get("excluded_keyword", 0)}'
                 )
-        counts = data["counts"]
-        state_counts = data.get("state_counts", {})
 
-        self.state_tabs.blockSignals(True)
-        for index in range(self.state_tabs.count()):
-            state = str(self.state_tabs.tabData(index))
-            count = data["total_rows"] if state == "すべて" else state_counts.get(state, 0)
-            self.state_tabs.setTabText(index, f"{state} {count}")
-        self.state_tabs.blockSignals(False)
+    def _refresh_prefectures(self, rows: list[dict]):
+        current = self.prefecture_filter.currentData() or "all"
+        values = sorted({str(row.get("prefecture")) for row in rows
+                         if row.get("prefecture") not in {None, "", "UNKNOWN"}})
+        self.prefecture_filter.blockSignals(True)
+        self.prefecture_filter.clear()
+        self.prefecture_filter.addItem("すべて", "all")
+        for value in values:
+            self.prefecture_filter.addItem(value, value)
+        self.prefecture_filter.addItem("地域不明", "UNKNOWN")
+        index = self.prefecture_filter.findData(current)
+        self.prefecture_filter.setCurrentIndex(max(0, index))
+        self.prefecture_filter.blockSignals(False)
 
-        tcg_counts = data["tcg_counts"]
-        self.tcg_tabs.blockSignals(True)
-        self.tcg_tabs.setTabText(0, f'すべて {data["total_rows"]}')
-        for index, item in enumerate(categories(), start=1):
-            self.tcg_tabs.setTabText(
-                index, f'{item.short_name} {tcg_counts.get(item.key, 0)}'
-            )
-        self.tcg_tabs.blockSignals(False)
+    def _apply_filters(self, *_args):
+        if self._snapshot is None:
+            return
+        all_rows = self._snapshot.get("rows", [])
+        active_count = sum(not row.get("period_ended") for row in all_rows)
+        ended_count = sum(bool(row.get("period_ended")) for row in all_rows)
+        self.period_tabs.blockSignals(True)
+        self.period_tabs.setTabText(0, f"受付中 {active_count}")
+        self.period_tabs.setTabText(1, f"応募期間終了 {ended_count}")
+        self.period_tabs.blockSignals(False)
 
+        state_filter = str(self.application_state_filter.currentData() or "すべて")
+        period_filter = str(self.period_tabs.tabData(self.period_tabs.currentIndex()) or "active")
+        rows = self.dashboard.filter_cached(
+            all_rows, period_filter=period_filter,
+            state_filter="すべて" if state_filter == "確認中" else state_filter,
+            keyword=self.keyword.text(),
+            tcg_filter=str(self.tcg_filter.currentData() or "all"),
+            sales_mode_filter=str(self.sales_mode_filter.currentData() or "all"),
+            prefecture_filter=str(self.prefecture_filter.currentData() or "all"),
+            sort_mode=self.sort_mode.currentText(),
+        )
+        if state_filter == "確認中":
+            rows = [row for row in rows if row.get("is_candidate")]
+
+        state_counts = {state: sum(row.get("dashboard_state") == state for row in all_rows)
+                        for state in ("未応募", "応募済み", "当選", "落選")}
         self.summary.setText(
-            f'未応募 {state_counts.get("未応募", counts.get("未応募", 0))}件　'
-            f'応募済み {state_counts.get("応募済み", counts.get("応募済み", 0))}件　'
-            f'本日締切 {state_counts.get("本日締切", 0)}件　'
-            f'結果待ち {state_counts.get("結果待ち", counts.get("抽選結果待ち", 0))}件　'
-            f'当選 {state_counts.get("当選", counts.get("当選", 0))}件　'
-            f'落選 {state_counts.get("落選", counts.get("落選", 0))}件'
+            f'受付中 {active_count}　終了 {ended_count}　'
+            f'未応募 {state_counts["未応募"]}　応募済み {state_counts["応募済み"]}　'
+            f'当選 {state_counts["当選"]}　落選 {state_counts["落選"]}　'
+            f'表示 {len(rows)}'
         )
 
         container = QWidget()
@@ -562,13 +636,6 @@ class ApplicationDashboardPage(QFrame):
         )
         list_layout.setSpacing(12)
 
-        rows = data["rows"]
-        self.summary.setText(
-            self.summary.text()
-            + f'　表示 {len(rows)}/{data["total_rows"]}件'
-            + f'　終了済み {data.get("ended_rows", 0)}件'
-        )
-
         if not rows:
             empty = QLabel(
                 "応募管理できる販売・抽選情報がありません。"
@@ -577,10 +644,10 @@ class ApplicationDashboardPage(QFrame):
             empty.setObjectName("PageText")
             list_layout.addWidget(empty)
         elif self.group_by_product.isChecked():
-            for group in data.get("groups", []):
+            for group in self.dashboard._group_rows(rows):
                 list_layout.addWidget(
                     ApplicationProductGroup(
-                        group, self.store, self.reload, self._on_marked_applied
+                        group, self.store, lambda: self.reload(force=True), self._on_marked_applied
                     )
                 )
         else:
@@ -589,7 +656,7 @@ class ApplicationDashboardPage(QFrame):
                     ApplicationRow(
                         row,
                         self.store,
-                        self.reload,
+                        lambda: self.reload(force=True),
                         self._on_marked_applied,
                     )
                 )

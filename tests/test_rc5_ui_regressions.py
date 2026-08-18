@@ -103,8 +103,8 @@ class Rc5UiRegressionTest(unittest.TestCase):
         ):
             page = ApplicationDashboardPage()
             self.assertEqual(
-                "すべて",
-                page.state_tabs.tabData(page.state_tabs.currentIndex()),
+                "active",
+                page.period_tabs.tabData(page.period_tabs.currentIndex()),
             )
             page.close()
 
