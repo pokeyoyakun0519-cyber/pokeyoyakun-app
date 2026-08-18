@@ -18,6 +18,24 @@
     "enabled": true
   },
   {
+    "username": "UNION_ARENA_TCG",
+    "display_name": "UNION ARENA公式",
+    "category": "manufacturer_official",
+    "store_name": "バンダイ",
+    "tcg": "union_arena",
+    "trust_score": 100,
+    "enabled": true
+  },
+  {
+    "username": "dbfw_cardgameJP",
+    "display_name": "ドラゴンボールスーパーカードゲーム フュージョンワールド公式",
+    "category": "manufacturer_official",
+    "store_name": "バンダイ",
+    "tcg": "dragon_ball_fusion_world",
+    "trust_score": 100,
+    "enabled": true
+  },
+  {
     "username": "HBSTsendai",
     "display_name": "ホビーステーション仙台駅前店",
     "category": "store_official",

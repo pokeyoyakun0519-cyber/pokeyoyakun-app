@@ -218,8 +218,10 @@ class XRecentSearchTests(unittest.TestCase):
             "meta": {"newest_id": newest},
         })
 
-    def test_queries_are_limited_to_two_tcg_and_exclude_retweets(self):
-        self.assertEqual({"pokemon", "onepiece"}, set(QUERIES))
+    def test_queries_cover_required_tcg_and_exclude_retweets(self):
+        self.assertEqual({
+            "pokemon", "onepiece", "union_arena", "dragon_ball_fusion_world",
+        }, set(QUERIES))
         self.assertTrue(all("-is:retweet" in value for value in QUERIES.values()))
 
     def test_general_user_is_candidate_not_confirmed(self):
@@ -229,12 +231,13 @@ class XRecentSearchTests(unittest.TestCase):
         self.assertFalse(result["candidates"][0]["confirmed"])
         self.assertEqual(30, result["candidates"][0]["trust_score"])
 
-    def test_official_store_is_high_trust_and_confirmed(self):
+    def test_official_store_is_high_trust_but_x_alone_is_not_confirmed(self):
         opener = Mock()
         opener.open.return_value = _Response(self._payload("official_store"))
         item = XRecentSearch(self.root, opener=opener).search("pokemon", "token")["candidates"][0]
         self.assertEqual(90, item["trust_score"])
-        self.assertTrue(item["confirmed"])
+        self.assertFalse(item["confirmed"])
+        self.assertEqual("pending", item["verification_status"])
 
     def test_since_id_is_used_after_success(self):
         opener = Mock()
