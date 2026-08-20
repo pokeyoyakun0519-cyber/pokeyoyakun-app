@@ -6,6 +6,7 @@ from typing import Any
 
 from core.application_status import JST, parse_jst_datetime
 from core.config_manager import ConfigManager
+from core.product_categories import normalize_product_category
 from core.tcg_categories import normalize_key
 
 
@@ -31,9 +32,7 @@ class ApplicationNotificationService:
             return []
         events: list[dict[str, Any]] = []
         for product in products:
-            category = str(product.get("product_category") or "CARD").strip().upper()
-            if category not in {"CARD", "SUPPLY", "COLLAB_LIMITED"}:
-                category = "CARD"
+            category = normalize_product_category(product)
             tcg_key = normalize_key(product.get("tcg_key"), product.get("tcg"))[0]
             for site in product.get("sites", []):
                 if not isinstance(site, dict) or not self._confirmed(product, site):

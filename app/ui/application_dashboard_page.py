@@ -20,6 +20,7 @@ from core.lottery_manager import LotteryManager
 from core.product_store import ProductStore
 from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import categories
+from core.product_categories import PRODUCT_CATEGORY_LABELS
 
 
 class ApplicationRow(QFrame):
@@ -421,6 +422,14 @@ class ApplicationDashboardPage(QFrame):
         filter_layout.addLayout(filter_row)
 
         filter_row2 = QHBoxLayout()
+        filter_row2.addWidget(QLabel("商品カテゴリ："))
+        self.product_category_filter = QComboBox()
+        self.product_category_filter.addItem("すべて", "all")
+        for value, label in PRODUCT_CATEGORY_LABELS.items():
+            self.product_category_filter.addItem(label, value)
+        self.product_category_filter.currentIndexChanged.connect(self._apply_filters)
+        filter_row2.addWidget(self.product_category_filter)
+
         filter_row2.addWidget(QLabel("応募状態："))
         self.application_state_filter = QComboBox()
         for state in ("すべて", "未応募", "応募済み", "結果待ち", "当選", "落選", "確認中"):
@@ -612,6 +621,9 @@ class ApplicationDashboardPage(QFrame):
             tcg_filter=str(self.tcg_filter.currentData() or "all"),
             sales_mode_filter=str(self.sales_mode_filter.currentData() or "all"),
             prefecture_filter=str(self.prefecture_filter.currentData() or "all"),
+            product_category_filter=str(
+                self.product_category_filter.currentData() or "all"
+            ),
             sort_mode=self.sort_mode.currentText(),
         )
         if state_filter == "確認中":

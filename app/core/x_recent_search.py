@@ -14,12 +14,14 @@ from typing import Any, Callable, Iterable
 from core.json_file_state import CORRUPT, inspect_json_file
 from core.runtime_paths import app_root, bundled_root
 from core.secure_https import build_https_opener
+from core.product_categories import detect_product_category
 
 RECENT_SEARCH_URL = "https://api.x.com/2/tweets/search/recent"
 USER_TIMELINE_URL = "https://api.x.com/2/users/{user_id}/tweets"
 USER_LOOKUP_URL = "https://api.x.com/2/users/by/username/{username}"
 COMMON_TERMS = ("抽選", "予約", "受付", "再販", "再入荷", "入荷", "販売", "先着", "応募",
-                "WEB抽選", "店頭抽選", "予約受付", "販売開始", "入荷予定")
+                "WEB抽選", "店頭抽選", "予約受付", "販売開始", "入荷予定",
+                "受付開始", "締切変更", "販売中止")
 TCG_DEFINITIONS = {
     "pokemon": {"label": "Pokemon", "terms": ("ポケモンカード", "ポケカ")},
     "onepiece": {"label": "ONE PIECE", "terms": ("ONE PIECEカード", "ワンピースカード")},
@@ -217,6 +219,7 @@ class XRecentSearch:
             "x_post_id": post_id, "x_account": username, "detected_at": self.now().isoformat(),
             "tcg": TCG_DEFINITIONS[tcg]["label"], "tcg_key": tcg,
             "product_text": product_text, "store_text": str(trusted.get("store_name", "")),
+            "product_category": detect_product_category(text),
             "sales_method_hint": self.infer_sales_method(text, external_url),
             "deadline_hint": deadline, "confidence": max(0, min(100, confidence)),
             "evidence": [{"source_type": "x_api", "url": source_url, "text": text}],

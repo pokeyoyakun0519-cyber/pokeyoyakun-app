@@ -12,6 +12,7 @@ from core.daily_task_manager import DailyTaskManager
 from core.product_store import ProductStore
 from core.phase3_dashboard import is_new
 from core.tcg_categories import categories, display_name, normalize_key
+from core.product_categories import normalize_product_category
 
 
 class ApplicationDashboard:
@@ -31,6 +32,7 @@ class ApplicationDashboard:
         tcg_filter: str = "all",
         sales_mode_filter: str = "all",
         prefecture_filter: str = "all",
+        product_category_filter: str = "all",
         period_filter: str = "all",
         show_ended: bool | None = None,
         now=None,
@@ -211,6 +213,7 @@ class ApplicationDashboard:
                     "verification_status": site.get(
                         "verification_status", product.get("verification_status", "confirmed")
                     ),
+                    "product_category": normalize_product_category(product),
                     "verification_details": site.get("verification_details", ""),
                 }
                 row["is_candidate"] = str(row["verification_status"]).casefold() in {
@@ -250,6 +253,12 @@ class ApplicationDashboard:
                 continue
             if prefecture_filter != "all" and row["prefecture"] != prefecture_filter:
                 diagnostics["excluded_prefecture_filter"] += 1
+                continue
+            if (
+                product_category_filter != "all"
+                and row["product_category"] != product_category_filter
+            ):
+                diagnostics["excluded_product_category_filter"] += 1
                 continue
             if period_filter == "active" and row["period_ended"]:
                 continue
@@ -315,6 +324,7 @@ class ApplicationDashboard:
         cls, rows: list[dict[str, Any]], *, period_filter: str = "active",
         state_filter: str = "すべて", keyword: str = "", tcg_filter: str = "all",
         sales_mode_filter: str = "all", prefecture_filter: str = "all",
+        product_category_filter: str = "all",
         sort_mode: str = "応募締切順",
     ) -> list[dict[str, Any]]:
         """Filter an already loaded snapshot; this performs no storage or network I/O."""
@@ -324,6 +334,10 @@ class ApplicationDashboard:
             and (tcg_filter == "all" or row.get("tcg_key") == tcg_filter)
             and (sales_mode_filter == "all" or row.get("sales_mode") == sales_mode_filter)
             and (prefecture_filter == "all" or row.get("prefecture") == prefecture_filter)
+            and (
+                product_category_filter == "all"
+                or row.get("product_category", "CARD") == product_category_filter
+            )
             and cls._matches_state(row, state_filter)
             and cls._matches_keyword(row, keyword)
         )]
