@@ -22,6 +22,7 @@ from core.log_manager import LogManager
 from core.notification_manager import NotificationManager
 from core.source_manager import SourceManager
 from core.tcg_categories import categories, display_name
+from core.x_monitoring_status import XMonitoringStatus
 
 
 class SourceEditDialog(QDialog):
@@ -260,6 +261,18 @@ class SourcesPage(QFrame):
         description.setObjectName("MutedText")
         description.setWordWrap(True)
         layout.addWidget(description)
+
+        x_card = QFrame()
+        x_card.setObjectName("SettingsCard")
+        x_layout = QVBoxLayout(x_card)
+        x_title = QLabel("X信頼アカウント監視")
+        x_title.setObjectName("SectionTitle")
+        self.x_monitoring_summary = QLabel("")
+        self.x_monitoring_summary.setObjectName("MutedText")
+        self.x_monitoring_summary.setWordWrap(True)
+        x_layout.addWidget(x_title)
+        x_layout.addWidget(self.x_monitoring_summary)
+        layout.addWidget(x_card)
 
         add_card = QFrame()
         add_card.setObjectName(
@@ -517,6 +530,7 @@ class SourcesPage(QFrame):
         self.reload_sources()
 
     def reload_sources(self) -> None:
+        self._reload_x_monitoring()
         sources = (
             self.source_manager
             .load_sources()
@@ -557,3 +571,18 @@ class SourcesPage(QFrame):
 
         list_layout.addStretch()
         self.scroll.setWidget(container)
+
+    def _reload_x_monitoring(self) -> None:
+        lines = []
+        for item in XMonitoringStatus().rows():
+            lines.append(
+                f'{item.get("tcg", "other")}  @{item.get("username", "")}  '
+                f'{item.get("trust_level", "INFO_ACCOUNT")}  '
+                f'{"有効" if item.get("enabled", True) else "無効"}  '
+                f'最終取得:{item.get("last_fetch") or "未取得"}  '
+                f'最終検知:{item.get("last_post_detected") or "未検知"}  '
+                f'candidate:{item.get("candidate_count", 0)}  '
+                f'confirmed:{item.get("confirmed_count", 0)}  '
+                f'error:{item.get("error") or "なし"}'
+            )
+        self.x_monitoring_summary.setText("\n".join(lines) or "監視アカウント未設定")

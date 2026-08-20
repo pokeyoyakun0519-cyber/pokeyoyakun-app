@@ -197,7 +197,7 @@ class CommonEditionAndUiTest(unittest.TestCase):
         self.assertTrue(hasattr(MainWindow, "_setup_application_assistant"))
         self.assertTrue(hasattr(MainWindow, "_check_application_assistant"))
 
-    def test_dashboard_has_state_and_tcg_tabs_group_toggle(self):
+    def test_dashboard_has_two_period_tabs_and_compact_filters(self):
         from ui.application_dashboard_page import ApplicationDashboardPage
         with tempfile.TemporaryDirectory() as directory, patch.dict(
             "os.environ", {"POKEYOYA_DATA_ROOT": directory}, clear=False
@@ -208,23 +208,14 @@ class CommonEditionAndUiTest(unittest.TestCase):
                 [tab.tabData(i) for i in range(tab.count())]
                 for tab in tabs
             ]
-            self.assertIn(
-                [
-                    "all", "pokemon", "onepiece", "yugioh", "gundam",
-                    "union_arena", "dragon_ball_fusion_world",
-                    "duelmasters", "weiss", "mtg", "other",
-                ],
-                tab_sets,
-            )
-            self.assertIn(
-                [
-                    "すべて", "未応募", "応募済み", "本日締切",
-                    "結果待ち", "当選", "落選", "終了済み",
-                ],
-                tab_sets,
-            )
+            self.assertEqual([["active", "ended"]], tab_sets)
+            self.assertEqual("all", page.tcg_filter.currentData())
+            self.assertEqual("all", page.sales_mode_filter.currentData())
+            self.assertEqual("all", page.prefecture_filter.currentData())
+            self.assertEqual("すべて", page.application_state_filter.currentData())
             self.assertTrue(page.group_by_product.isChecked())
             self.assertEqual(page.sort_mode.currentText(), "応募締切順")
+            self.assertFalse(page.filter_panel.isVisible())
             page.close()
 
     def test_settings_exposes_phase1_and_phase2_switches(self):

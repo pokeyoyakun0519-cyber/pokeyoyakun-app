@@ -23,6 +23,7 @@ from core.maintenance import MaintenanceManager, format_bytes
 from core.site_master_manager import SiteMasterManager
 from core.site_monitor_sync import SiteMonitorSync
 from core.tcg_categories import categories, display_name
+from core.product_categories import PRODUCT_CATEGORY_LABELS
 
 
 class SettingsPage(QFrame):
@@ -211,6 +212,46 @@ class SettingsPage(QFrame):
         behavior_card.layout().addWidget(self.notify_important_application_changes)
         self._register_card("通知", "通知の基本動作", behavior_card, "音 ポップアップ 重要 変更")
 
+        event_card = self._make_card("応募・販売情報の通知対象")
+        self.application_events_enabled = QCheckBox("新規confirmed・受付開始・再販を通知")
+        event_card.layout().addWidget(self.application_events_enabled)
+        event_card.layout().addWidget(QLabel("TCG"))
+        self.notification_tcg_checks = {}
+        for key, label in (
+            ("pokemon", "Pokemon"),
+            ("onepiece", "ONE PIECE"),
+            ("union_arena", "UNION ARENA"),
+            ("dragon_ball_fusion_world", "Dragon Ball Fusion World"),
+        ):
+            checkbox = QCheckBox(label)
+            self.notification_tcg_checks[key] = checkbox
+            event_card.layout().addWidget(checkbox)
+        event_card.layout().addWidget(QLabel("販売方式"))
+        self.notification_sales_checks = {}
+        for mode, label in (
+            ("ONLINE", "ネット販売"),
+            ("STORE", "店舗販売"),
+            ("HYBRID", "オンライン応募・店舗受取"),
+        ):
+            checkbox = QCheckBox(label)
+            self.notification_sales_checks[mode] = checkbox
+            event_card.layout().addWidget(checkbox)
+        self.notification_prefectures = QLineEdit()
+        self.notification_prefectures.setPlaceholderText("都道府県をカンマ区切り。空欄は全国")
+        event_card.layout().addWidget(self.notification_prefectures)
+        event_card.layout().addWidget(QLabel("商品カテゴリ"))
+        self.notification_product_category_checks = {}
+        for value, label in PRODUCT_CATEGORY_LABELS.items():
+            checkbox = QCheckBox(label)
+            self.notification_product_category_checks[value] = checkbox
+            event_card.layout().addWidget(checkbox)
+        self._register_card(
+            "通知",
+            "応募・販売情報の通知対象",
+            event_card,
+            "confirmed TCG 販売方式 都道府県 カテゴリ 再販 予約 抽選",
+        )
+
         reminder_card = self._make_card("締切リマインダー")
         reminder_note = QLabel("未応募かつ受付中で、締切日時が確定している案件だけを通知します。")
         reminder_note.setObjectName("MutedText")
@@ -374,6 +415,23 @@ class SettingsPage(QFrame):
         self.postal_input.setText(profile["postal_code"])
         self.address_input.setText(profile["address"])
         self.sound_path.setText(notification["sound_file"])
+        self.application_events_enabled.setChecked(
+            bool(notification.get("application_events_enabled", True))
+        )
+        notification_tcg = notification.get("tcg", {})
+        for key, checkbox in self.notification_tcg_checks.items():
+            checkbox.setChecked(bool(notification_tcg.get(key, True)))
+        enabled_sales_modes = set(notification.get("sales_modes", ["ONLINE", "STORE", "HYBRID"]))
+        for key, checkbox in self.notification_sales_checks.items():
+            checkbox.setChecked(key in enabled_sales_modes)
+        self.notification_prefectures.setText(
+            ", ".join(str(item) for item in notification.get("prefectures", []))
+        )
+        enabled_product_categories = set(
+            notification.get("product_categories", list(PRODUCT_CATEGORY_LABELS))
+        )
+        for key, checkbox in self.notification_product_category_checks.items():
+            checkbox.setChecked(key in enabled_product_categories)
 
     def _tracked_widgets(self):
         return [
@@ -384,6 +442,11 @@ class SettingsPage(QFrame):
             self.auto_monitor_days, self.notify_new_sites, self.sound_enabled,
             self.popup_enabled, self.notify_important_application_changes,
             self.deadline_24h, self.deadline_3h, self.deadline_30m,
+            self.application_events_enabled,
+            *self.notification_tcg_checks.values(),
+            *self.notification_sales_checks.values(),
+            self.notification_prefectures,
+            *self.notification_product_category_checks.values(),
             self.sound_path, self.name_input, self.furigana_input,
             self.email_input, self.password_input, self.phone_input,
             self.postal_input, self.address_input, *self.site_checks.values(),
@@ -478,7 +541,30 @@ class SettingsPage(QFrame):
                 "email": self.email_input.text().strip(), "phone": self.phone_input.text().strip(),
                 "postal_code": self.postal_input.text().strip(), "address": self.address_input.text().strip(),
             },
-            "notification": {"sound_file": self.sound_path.text().strip()},
+            "notification": {
+                **dict(config.get("notification", {})),
+                "sound_file": self.sound_path.text().strip(),
+                "application_events_enabled": self.application_events_enabled.isChecked(),
+                "tcg": {
+                    key: checkbox.isChecked()
+                    for key, checkbox in self.notification_tcg_checks.items()
+                },
+                "sales_modes": [
+                    key for key, checkbox in self.notification_sales_checks.items()
+                    if checkbox.isChecked()
+                ],
+                "prefectures": [
+                    value.strip()
+                    for value in self.notification_prefectures.text().replace("、", ",").split(",")
+                    if value.strip()
+                ],
+                "product_categories": [
+                    key
+                    for key, checkbox in self.notification_product_category_checks.items()
+                    if checkbox.isChecked()
+                ],
+                "suppress_after_applied": True,
+            },
             "games": {key: checkbox.isChecked() for key, checkbox in self.game_checks.items()},
             "sites": {key: checkbox.isChecked() for key, checkbox in self.site_checks.items()},
             "application_assistant": {

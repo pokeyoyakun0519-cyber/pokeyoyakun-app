@@ -231,6 +231,23 @@ QLabel#StatusOther {
     font-weight: 700;
 }
 
+QFrame#CandidateCard {
+    background-color: #1f2d35;
+    border: 1px solid #8a7436;
+    border-radius: 8px;
+}
+
+QPushButton#AccentButton:disabled {
+    background-color: #344653;
+    color: #8596a3;
+    border-color: #455966;
+}
+
+QLabel#StatusActive {
+    color: #66c0f4;
+    font-weight: 700;
+}
+
 QCheckBox {
     spacing: 8px;
 }
@@ -705,6 +722,10 @@ QProgressBar::chunk {
 
 QLabel[state="success"], QLabel#StatusOpen {
     color: #75d58a;
+}
+
+QLabel#StatusActive {
+    color: #66c0f4;
 }
 
 QLabel[state="warning"], QLabel#StatusLottery {

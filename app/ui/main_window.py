@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from core.behavior_config import BehaviorConfig
 from core.application_change_tracker import ApplicationChangeTracker
 from core.application_reminder import ApplicationDeadlineReminder
+from core.application_notifications import ApplicationNotificationService
 from core.config_manager import ConfigManager
 from core.initial_data_bootstrap import InitialDataBootstrap
 from core.notification_manager import NotificationManager
@@ -430,6 +431,11 @@ class MainWindow(QMainWindow):
         candidate = result.get("candidate_search", {})
         if candidate.get("new_hit_candidates"):
             self._pending_monitor_refresh.update({"products", "applications", "candidates"})
+        x_recent = result.get("x_recent", {})
+        if x_recent.get("candidate_count") or x_recent.get("promoted_count"):
+            self._pending_monitor_refresh.update(
+                {"products", "applications", "candidates", "sources"}
+            )
         if result.get("newly_won") or result.get("gmail_results"):
             self._pending_monitor_refresh.add("applications")
         if not self._pending_monitor_refresh:
@@ -973,6 +979,9 @@ class MainWindow(QMainWindow):
         self.application_reminder = ApplicationDeadlineReminder(
             self.application_store, self.application_config
         )
+        self.application_event_notifications = ApplicationNotificationService(
+            self.application_config
+        )
         self.application_change_tracker = ApplicationChangeTracker(
             self.application_store.root
         )
@@ -991,6 +1000,12 @@ class MainWindow(QMainWindow):
             return
         try:
             products = self.application_store.load_products()
+            for event in self.application_event_notifications.collect(products):
+                self.application_notification_manager.notify_application_event(
+                    event,
+                    parent=self,
+                    tray_controller=self.tray_controller,
+                )
             self.application_change_tracker.compare_and_update(products)
             assistant = self.application_config.load().get(
                 "application_assistant", {}

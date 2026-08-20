@@ -29,8 +29,15 @@ class NotificationStore:
         action_url: str = "",
         action_label: str = "",
         metadata: dict | None = None,
-    ) -> None:
+        application_id: str = "",
+        event_type: str = "",
+        dedupe_key: str = "",
+    ) -> bool:
         items = self.load()
+        if dedupe_key and any(
+            str(item.get("dedupe_key", "")) == dedupe_key for item in items
+        ):
+            return False
         items.insert(
             0,
             {
@@ -42,9 +49,13 @@ class NotificationStore:
                 "action_url": str(action_url),
                 "action_label": str(action_label),
                 "metadata": dict(metadata or {}),
+                "application_id": str(application_id),
+                "event_type": str(event_type),
+                "dedupe_key": str(dedupe_key),
             },
         )
         self._save(items[:500])
+        return True
 
     def mark_all_read(self) -> None:
         items = self.load()

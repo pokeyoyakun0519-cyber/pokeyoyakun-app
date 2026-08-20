@@ -11,11 +11,12 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from core.json_file_state import CORRUPT, inspect_json_file
 from core.runtime_paths import app_root
 from core.secure_https import build_https_opener
+from core.product_categories import detect_product_category
 from core.trusted_x_accounts import (
     GENERAL_INFORMATION,
     OFFICIAL_MANUFACTURER,
@@ -35,12 +36,35 @@ from core.application_discovery import (
 RECENT_SEARCH_URL = "https://api.x.com/2/tweets/search/recent"
 USER_LOOKUP_URL = "https://api.x.com/2/users/by/username/{username}"
 USER_TIMELINE_URL = "https://api.x.com/2/users/{user_id}/tweets"
-QUERIES = {
-    "pokemon": '("ポケモンカード" OR ポケカ) (抽選 OR 予約 OR 再販 OR 受付) -is:retweet',
-    "onepiece": '("ONE PIECEカード" OR "ワンピースカード") (抽選 OR 予約 OR 再販 OR 受付) -is:retweet',
-    "union_arena": '("UNION ARENA" OR ユニオンアリーナ OR ユニアリ) (抽選 OR 予約 OR 再販 OR 再入荷 OR 受付) -is:retweet',
-    "dragon_ball_fusion_world": '("ドラゴンボールスーパーカードゲーム フュージョンワールド" OR "DBSCG FUSION WORLD" OR "DBSCG FW") (抽選 OR 予約 OR 再販 OR 再入荷 OR 受付) -is:retweet',
+COMMON_TERMS = (
+    "抽選", "予約", "受付", "再販", "再入荷", "入荷", "販売", "先着", "応募",
+    "WEB抽選", "店頭抽選", "予約受付", "販売開始", "入荷予定", "受付開始",
+    "締切変更", "販売中止",
+)
+TCG_DEFINITIONS = {
+    "pokemon": {"label": "Pokemon", "terms": ("ポケモンカード", "ポケカ")},
+    "onepiece": {"label": "ONE PIECE", "terms": ("ONE PIECEカード", "ワンピースカード")},
+    "union_arena": {"label": "UNION ARENA", "terms": ("UNION ARENA", "ユニオンアリーナ", "ユニアリ")},
+    "dragon_ball_fusion_world": {
+        "label": "Dragon Ball Super Card Game Fusion World",
+        "terms": ("FUSION WORLD", "フュージョンワールド", "DBSCG FW", "DBFW"),
+    },
 }
+QUERIES = {
+    "pokemon": '("ポケモンカード" OR ポケカ) (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
+    "onepiece": '("ONE PIECEカード" OR "ワンピースカード") (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
+    "union_arena": '("UNION ARENA" OR ユニオンアリーナ OR ユニアリ) (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
+    "dragon_ball_fusion_world": '("ドラゴンボールスーパーカードゲーム フュージョンワールド" OR "DBSCG FUSION WORLD" OR "DBSCG FW") (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
+}
+OFFICIAL_EVIDENCE_TYPES = {
+    "official_product_page", "official_store_page", "official_ec",
+    "official_application_page", "official_x", "premium_bandai",
+}
+CONFIRMING_EVIDENCE_TYPES = {
+    "official_store_page", "official_ec", "official_application_page",
+    "premium_bandai",
+}
+REJECTING_STATUSES = {"rejected", "cancelled", "canceled", "ended", "not_available"}
 
 
 class XRecentSearch:
@@ -84,7 +108,7 @@ class XRecentSearch:
             usernames = [str(account["username"]) for account in batch]
             from_terms = " OR ".join(f"from:{username}" for username in usernames)
             query = (
-                f"({from_terms}) (抽選 OR 予約 OR 受付 OR 応募 OR 再販 OR 再入荷 OR 入荷 OR 受注) "
+                f"({from_terms}) ({' OR '.join(COMMON_TERMS)} OR 受注) "
                 "-is:retweet"
             )
             signature = hashlib.sha256(
@@ -176,6 +200,63 @@ class XRecentSearch:
             "rate_limit_limit": last_headers.get("rate_limit_limit", ""),
             "rate_limit_reset": last_headers.get("rate_limit_reset", ""),
         }
+
+    def search_trusted_timeline(
+        self, account: dict[str, Any], bearer_token: str | None = None
+    ) -> dict[str, Any]:
+        """Fetch one trusted timeline while preserving legacy TTL/since_id state."""
+        token = (bearer_token or os.environ.get("POKEYOYA_X_BEARER_TOKEN", "")).strip()
+        if not token:
+            return {"status": "disabled", "candidates": [], "request_count": 0}
+        username = str(account.get("username", ""))
+        tcg = str(account.get("tcg", ""))
+        key = f"{username.casefold()}:{tcg}"
+        state = self._load_state()
+        timeline = dict(state.get("timeline", {}))
+        current = dict(timeline.get(key, {}))
+        last_request = float(current.get("last_request_at", 0) or 0)
+        if last_request and time.time() - last_request < 300:
+            return {"status": "ttl", "candidates": [], "request_count": 0}
+        runtime_key = "|".join(self.accounts._key(account))
+        observed = dict(self.accounts.load_runtime_state().get(runtime_key, {}))
+        if not observed.get("user_id"):
+            observed["user_id"] = str(
+                state.get("user_ids", {}).get(username.casefold(), "")
+            )
+        result = self._poll_account_timeline(account, observed, token)
+        if result.get("status") == "ok":
+            state = self._load_state()
+            timeline = dict(state.get("timeline", {}))
+            timeline[key] = {
+                "since_id": result.get("since_id", current.get("since_id", "")),
+                "last_request_at": time.time(),
+            }
+            state["timeline"] = timeline
+            saved = dict(self.accounts.load_runtime_state().get(runtime_key, {}))
+            user_id = str(saved.get("user_id", ""))
+            if user_id:
+                user_ids = dict(state.get("user_ids", {}))
+                user_ids[username.casefold()] = user_id
+                state["user_ids"] = user_ids
+            self._save_state(state)
+        return result
+
+    def _next_timeline_account(
+        self, accounts: list[dict[str, Any]], tcg: str
+    ) -> dict[str, Any] | None:
+        eligible = [
+            item for item in accounts
+            if item.get("enabled", True) and item.get("tcg") == tcg
+        ]
+        if not eligible:
+            return None
+        state = self._load_state()
+        rotation = dict(state.get("timeline_rotation", {}))
+        index = int(rotation.get(tcg, 0) or 0) % len(eligible)
+        rotation[tcg] = (index + 1) % len(eligible)
+        state["timeline_rotation"] = rotation
+        self._save_state(state)
+        return eligible[index]
 
     def _search_query(
         self,
@@ -295,14 +376,16 @@ class XRecentSearch:
                 if previous:
                     item = self.deduplicate([previous], [item])[0]
                 by_id[key] = item
-        if any(result.get("candidates") for result in results.values()):
+        verified = self._coalesce_updates(list(by_id.values()))
+        if verified != existing:
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_suffix(".json.tmp")
             temporary.write_text(
-                json.dumps(list(by_id.values()), ensure_ascii=False, indent=2),
+                json.dumps(verified, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
             temporary.replace(path)
+        promoted_count = self._promote_confirmed(verified)
         statuses = [str(value.get("status", "")) for value in results.values()]
         disabled = bool(statuses) and all(value == "disabled" for value in statuses)
         return {
@@ -312,14 +395,295 @@ class XRecentSearch:
                 if disabled else ""
             ),
             "results": results,
-            "candidate_count": len(by_id),
-            "confirmed_count": sum(bool(item.get("confirmed")) for item in by_id.values()),
+            "candidate_count": len(verified),
+            "confirmed_count": sum(bool(item.get("confirmed")) for item in verified),
+            "rejected_count": sum(
+                item.get("verification_status") == "rejected" for item in verified
+            ),
+            "promoted_count": promoted_count,
             "request_count": sum(
                 int(value.get("request_count", 0)) for value in results.values()
             ),
             "cache_hits": sum(int(value.get("cache_hits", 0)) for value in results.values()),
             "cache_misses": sum(int(value.get("cache_misses", 0)) for value in results.values()),
         }
+
+    def _candidate(
+        self, tweet: dict[str, Any], user: dict[str, Any], tcg: str
+    ) -> dict[str, Any] | None:
+        """Compatibility builder for one X post; it can never self-confirm."""
+        if tcg not in TCG_DEFINITIONS:
+            return None
+        text = str(tweet.get("text", "")).strip()
+        if not any(
+            term.casefold() in text.casefold()
+            for term in TCG_DEFINITIONS[tcg]["terms"]
+        ) or not any(term in text for term in COMMON_TERMS):
+            return None
+        classification = self._classify_post(text)
+        if classification == "IRRELEVANT":
+            return None
+        username = str(user.get("username", ""))
+        trusted = next(
+            (
+                item for item in self.load_trusted_accounts()
+                if item.get("enabled", True)
+                and str(item.get("username", "")).casefold() == username.casefold()
+                and item.get("tcg") == tcg
+            ),
+            {},
+        )
+        external_url = self._first_external_url(tweet)
+        parsed = parse_discovery_post(
+            text, tcg_hint=tcg, created_at=str(tweet.get("created_at", ""))
+        )
+        score = int(trusted.get("manual_trust_score", 30) or 30)
+        post_id = str(tweet.get("id", ""))
+        source_url = f"https://x.com/{username}/status/{post_id}"
+        product_text = str(parsed.get("product_name") or text.splitlines()[0])[:300]
+        return {
+            "id": post_id,
+            "source_type": (
+                "official_x"
+                if str(trusted.get("trust_level", "")).startswith("OFFICIAL_")
+                else "trusted_store_x" if trusted else "x_api"
+            ),
+            "source_url": source_url,
+            "x_post_id": post_id,
+            "x_account": username,
+            "detected_at": self.now().isoformat(),
+            "tcg": TCG_DEFINITIONS[tcg]["label"],
+            "tcg_key": tcg,
+            "product_text": product_text,
+            "product_name": product_text,
+            "store_text": str(trusted.get("store_name", "")),
+            "store_name": str(trusted.get("store_name", "")),
+            "product_category": detect_product_category(text),
+            "sales_method_hint": self.infer_sales_method(text, external_url),
+            "deadline_hint": str(parsed.get("application_end_at", "")),
+            "confidence": score,
+            "evidence": [{"source_type": "x_api", "url": source_url, "text": text}],
+            "verification_status": "pending",
+            "confirmed": False,
+            "information_type": (
+                "RESTOCK" if classification == "RESTOCK" else "APPLICATION"
+            ),
+            "application_type": classification,
+            "lifecycle_status": (
+                "cancelled" if classification == "CANCELLED"
+                else "changed" if "締切変更" in text else "active"
+            ),
+            "text": text,
+            "username": username,
+            "display_name": str(user.get("name", trusted.get("display_name", ""))),
+            "trust_level": str(trusted.get("trust_level", "INFO_ACCOUNT")),
+            "trust_score": score,
+            "application_url": external_url,
+            "created_at": str(tweet.get("created_at", "")),
+            "prefecture": "UNKNOWN",
+        }
+
+    def verify_candidate(
+        self,
+        candidate: dict[str, Any],
+        official_evidence: Iterable[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Verify against non-X official evidence; X evidence alone is insufficient."""
+        result = dict(candidate)
+        result.update({"confirmed": False, "verification_status": "pending"})
+        if (
+            result.get("lifecycle_status") == "cancelled"
+            and result.get("trust_level") != "INFO_ACCOUNT"
+        ):
+            result["verification_status"] = "rejected"
+            return result
+        for evidence in official_evidence:
+            if not isinstance(evidence, dict) or not self._official_match(result, evidence):
+                continue
+            kind = str(evidence.get("source_type", ""))
+            url = str(
+                evidence.get("url") or evidence.get("application_url")
+                or evidence.get("official_url") or ""
+            )
+            if kind not in OFFICIAL_EVIDENCE_TYPES or not self._normalized_url(url):
+                continue
+            saved = result.setdefault("evidence", [])
+            record = {"source_type": kind, "url": url}
+            if record not in saved:
+                saved.append(record)
+            if str(evidence.get("status", "")).casefold() in REJECTING_STATUSES:
+                result["verification_status"] = "rejected"
+                return result
+            if kind not in CONFIRMING_EVIDENCE_TYPES:
+                continue
+            result.update({"verification_status": "confirmed", "confirmed": True})
+            result["confidence"] = min(100, int(result.get("confidence", 0) or 0) + 15)
+            if not result.get("application_url"):
+                result["application_url"] = url
+            if str(evidence.get("prefecture", "")).strip():
+                result["prefecture"] = str(evidence["prefecture"]).strip()
+            return result
+        return result
+
+    @classmethod
+    def _coalesce_updates(cls, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        cases: dict[tuple[str, ...], dict[str, Any]] = {}
+        for raw in sorted(
+            items,
+            key=lambda item: str(item.get("detected_at", item.get("created_at", ""))),
+        ):
+            item = dict(raw)
+            application_url = cls._normalized_url(item.get("application_url", ""))
+            if application_url:
+                key = (str(item.get("tcg_key", "")), application_url)
+            else:
+                key = (
+                    str(item.get("tcg_key", "")),
+                    str(item.get("x_account", item.get("username", ""))).casefold(),
+                    cls._normalized_case_text(
+                        item.get("product_text", item.get("product_name", ""))
+                    ),
+                    cls._normalized_case_text(
+                        item.get("store_text", item.get("store_name", ""))
+                    ),
+                )
+            previous = cases.get(key)
+            if previous is not None:
+                item["evidence"] = cls._merge_evidence(
+                    previous.get("evidence", []), item.get("evidence", [])
+                )
+                item["x_post_ids"] = list(dict.fromkeys([
+                    *previous.get(
+                        "x_post_ids",
+                        [previous.get("x_post_id", previous.get("id", ""))],
+                    ),
+                    item.get("x_post_id", item.get("id", "")),
+                ]))
+                item["updated_existing_application"] = True
+            cases[key] = item
+        return list(cases.values())
+
+    @staticmethod
+    def _normalized_case_text(value: Any) -> str:
+        return re.sub(r"[^0-9a-zA-Zぁ-んァ-ヶ一-龠]", "", str(value)).casefold()
+
+    @staticmethod
+    def _merge_evidence(left: Any, right: Any) -> list[dict[str, Any]]:
+        output: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for item in [
+            *(left if isinstance(left, list) else []),
+            *(right if isinstance(right, list) else []),
+        ]:
+            if not isinstance(item, dict):
+                continue
+            key = (
+                str(item.get("source_type", "")),
+                str(item.get("url", item.get("source_url", ""))),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            output.append(dict(item))
+        return output
+
+    def _promote_confirmed(self, items: list[dict[str, Any]]) -> int:
+        discovered = []
+        for item in items:
+            if item.get("verification_status") != "confirmed" or not item.get("confirmed"):
+                continue
+            application_url = str(item.get("application_url", "")).strip()
+            product_text = str(
+                item.get("product_text", item.get("product_name", ""))
+            ).strip()
+            if not self._normalized_url(application_url) or not product_text:
+                continue
+            product_id = "x-" + hashlib.sha256(
+                f'{item.get("tcg_key", "")}|{product_text}'.encode("utf-8")
+            ).hexdigest()[:20]
+            site_key = "x-app-" + hashlib.sha256(
+                application_url.encode("utf-8")
+            ).hexdigest()[:16]
+            discovered.append({
+                "id": product_id,
+                "name": product_text,
+                "tcg_key": item.get("tcg_key", "other"),
+                "tcg": item.get("tcg", "その他"),
+                "product_category": item.get("product_category", "CARD"),
+                "verification_status": "confirmed",
+                "confirmed": True,
+                "detected_at": item.get("detected_at", item.get("created_at", "")),
+                "source_type": item.get("source_type", "x_api"),
+                "source_url": item.get("source_url", ""),
+                "sites": [{
+                    "id": site_key,
+                    "site_key": site_key,
+                    "name": item.get("store_text") or item.get("store_name") or "公式販売ページ",
+                    "url": application_url,
+                    "application_url": application_url,
+                    "application_status": item.get("information_type", "APPLICATION"),
+                    "application_end_at": item.get(
+                        "deadline_hint", item.get("application_end_at", "")
+                    ),
+                    "sales_mode": item.get("sales_method_hint", "UNKNOWN"),
+                    "prefecture": item.get("prefecture", "UNKNOWN"),
+                    "verification_status": "confirmed",
+                    "confirmed": True,
+                    "confidence": item.get("confidence", 0),
+                    "evidence": item.get("evidence", []),
+                    "source_type": item.get("source_type", "x_api"),
+                    "source_account": item.get("x_account", item.get("username", "")),
+                    "source_url": item.get("source_url", ""),
+                    "x_post_id": item.get("x_post_id", item.get("id", "")),
+                    "detected_at": item.get("detected_at", item.get("created_at", "")),
+                }],
+            })
+        if not discovered:
+            return 0
+        from core.product_store import ProductStore
+
+        _products, added = ProductStore(self.root).merge_discovered_products(discovered)
+        return int(added)
+
+    @staticmethod
+    def infer_sales_method(text: str, url: str = "") -> str:
+        online = bool(re.search(r"WEB|Web|web|オンライン|通販|EC", text)) or bool(url)
+        store = bool(re.search(r"店頭|店舗|レジ|整理券", text))
+        return (
+            "HYBRID" if online and store else "ONLINE" if online
+            else "STORE" if store else "UNKNOWN"
+        )
+
+    @staticmethod
+    def _official_match(candidate: dict[str, Any], evidence: dict[str, Any]) -> bool:
+        if str(candidate.get("tcg_key", "")).casefold() != str(
+            evidence.get("tcg_key", "")
+        ).casefold():
+            return False
+        candidate_url = XRecentSearch._normalized_url(candidate.get("application_url", ""))
+        evidence_url = XRecentSearch._normalized_url(
+            evidence.get("url") or evidence.get("application_url")
+            or evidence.get("official_url") or ""
+        )
+        if candidate_url and candidate_url == evidence_url:
+            return True
+        norm = XRecentSearch._normalized_case_text
+        product = norm(candidate.get("product_text", candidate.get("product_name", "")))
+        official_product = norm(
+            evidence.get("product_text", evidence.get("product_name", evidence.get("name", "")))
+        )
+        store = norm(candidate.get("store_text", candidate.get("store_name", "")))
+        official_store = norm(
+            evidence.get("store_text", evidence.get("store_name", ""))
+        )
+        return bool(
+            product and official_product
+            and (product in official_product or official_product in product)
+            and (
+                not store or not official_store
+                or store in official_store or official_store in store
+            )
+        )
 
     @staticmethod
     def deduplicate(web_items: list[dict], x_items: list[dict]) -> list[dict]:
@@ -404,11 +768,13 @@ class XRecentSearch:
     @staticmethod
     def _classify_post(text: str) -> str:
         normalized = re.sub(r"\s+", " ", str(text)).casefold()
+        if re.search(r"販売中止|受付中止|予約中止|抽選中止", normalized):
+            return "CANCELLED"
         if re.search(
             r"買取|デッキレシピ|カードリスト|大会(?:結果|情報)?|"
-            r"イベント|キャンペーン|相場|プレゼント企画|個人売買|"
-            r"譲ります|交換希望|サプライ|スリーブ|プレイマット|"
-            r"フィギュア|グッズ",
+            r"対戦会|相場|キャンペーン|プレゼント企画|"
+            r"個人売買|譲ります|交換希望|"
+            r"フィギュア",
             normalized,
         ):
             return "IRRELEVANT"
@@ -545,9 +911,16 @@ class XRecentSearch:
                 text, tcg_hint=tcg, created_at=str(tweet.get("created_at", ""))
             )
             classification = str(parsed.get("application_type", "NEWS"))
+            product_category = detect_product_category(text)
+            if classification == "IRRELEVANT" and product_category != "CARD":
+                classification = self._classify_post(
+                    text.replace("キャンペーン", "")
+                )
             if classification == "IRRELEVANT":
                 continue
-            source_type = str(trusted.get("source_type", GENERAL_INFORMATION))
+            account_source_type = str(
+                trusted.get("source_type", GENERAL_INFORMATION)
+            )
             source_url = f"https://x.com/{username}/status/{tweet.get('id', '')}"
             application_url = self._first_external_url(tweet) or str(
                 parsed.get("application_url", "")
@@ -572,7 +945,7 @@ class XRecentSearch:
                 )
             }
             evidence = normalize_evidence({
-                "source_type": source_type,
+                "source_type": "X_API",
                 "source_url": source_url,
                 "observed_at": self.now().isoformat(),
                 "trust": score,
@@ -581,30 +954,55 @@ class XRecentSearch:
             })
             item = {
                 "id": str(tweet.get("id", "")),
+                "x_post_id": str(tweet.get("id", "")),
+                "x_account": username,
                 "tcg_key": tcg,
+                "tcg": TCG_DEFINITIONS[tcg]["label"],
                 "information_type": "RESTOCK" if classification == "RESTOCK" else (
                     "APPLICATION" if classification in {"LOTTERY", "RESERVATION"} else "NEWS"
                 ),
                 "application_type": classification,
                 "text": text,
                 "product_name": parsed.get("product_name", ""),
+                "product_text": parsed.get("product_name", "") or text.splitlines()[0][:300],
                 "product_code": parsed.get("product_code", ""),
+                "product_category": product_category,
                 "username": username,
                 "display_name": str(user.get("name", trusted.get("display_name", ""))),
-                "source_type": source_type,
+                "store_text": str(store.get("store_name", "")),
+                "source_type": (
+                    "official_x"
+                    if str(trusted.get("trust_level", "")).startswith("OFFICIAL_")
+                    else "trusted_store_x" if trusted else "x_api"
+                ),
+                "account_source_type": account_source_type,
                 "manual_trust_score": score,
                 "trust_score": score,
+                "trust_level": str(trusted.get("trust_level", "INFO_ACCOUNT")),
                 "application_url": application_url,
                 "source_url": source_url,
                 "evidence": [evidence],
                 "created_at": str(tweet.get("created_at", "")),
+                "detected_at": self.now().isoformat(),
+                "deadline_hint": str(parsed.get("application_end_at", "")),
+                "sales_method_hint": self.infer_sales_method(text, application_url),
+                "lifecycle_status": (
+                    "cancelled" if classification == "CANCELLED"
+                    else "changed" if "締切変更" in text else "active"
+                ),
+                "prefecture": "UNKNOWN",
                 **store,
                 **{
                     key: value for key, value in parsed.items()
                     if key.endswith("_at") or key == "purchase_period"
                 },
             }
-            candidates.append(resolve_candidate(item))
+            resolved = resolve_candidate(item)
+            if classification == "CANCELLED" and trusted:
+                resolved.update({"verification_status": "rejected", "confirmed": False})
+            else:
+                resolved.update({"verification_status": "candidate", "confirmed": False})
+            candidates.append(resolved)
         return candidates
 
     def _poll_account_timeline(
@@ -684,6 +1082,7 @@ class XRecentSearch:
             str(account.get("tcg", "")), payload.get("data", []), users,
             account_map, monitored_only=True,
         )
+        candidates = self._corroborate_with_web(candidates)
         newest = str(payload.get("meta", {}).get("newest_id", ""))
         self.accounts.record_fetch(
             account,
@@ -738,6 +1137,7 @@ class XRecentSearch:
         self._save_state(state)
         return {
             "status": "rate_limited", "candidates": [], "request_count": 1,
+            "rate_limit_429": 1,
             "retry_after": max(1, int(retry_at - time.time())),
             "rate_limit_remaining": headers.get("x-rate-limit-remaining", ""),
             "rate_limit_limit": headers.get("x-rate-limit-limit", ""),
@@ -815,7 +1215,10 @@ class XRecentSearch:
                     )
             else:
                 item["corroboration_status"] = "candidate"
-            output.append(resolve_candidate(item))
+            resolved = resolve_candidate(item)
+            if not match or not match.get("confirmed"):
+                resolved.update({"verification_status": "pending", "confirmed": False})
+            output.append(resolved)
         return output
 
     def _load_state(self) -> dict[str, Any]:

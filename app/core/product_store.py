@@ -20,6 +20,7 @@ from core.json_file_state import (
 from core.retail_price_policy import RetailPricePolicy
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
+from core.product_categories import normalize_product_category
 
 
 class DuplicateProductIdError(ValueError):
@@ -57,6 +58,8 @@ class ProductStore:
             return []
         raw_products = result.data or []
         products = [normalize_record(item)[0] for item in raw_products]
+        for product in products:
+            product["product_category"] = normalize_product_category(product)
         from core.activity_timeline import ActivityTimeline
         from core.product_master import ProductMasterManager
 

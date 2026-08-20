@@ -292,10 +292,11 @@ class TrustedAccountTimelineTest(unittest.TestCase):
         self.assertEqual("74", result["rate_limit_remaining"])
         self.assertEqual("75", result["rate_limit_limit"])
 
-    def test_official_timeline_candidate_reaches_confirmed(self):
+    def test_official_timeline_candidate_requires_web_corroboration(self):
         opener = Mock(); opener.open.return_value = _Response(self.payload())
         item = XRecentSearch(self.root, opener=opener, now=lambda: self.clock).poll_trusted_account_timelines("pokemon", "token")["candidates"][0]
-        self.assertTrue(item["confirmed"])
+        self.assertFalse(item["confirmed"])
+        self.assertEqual("pending", item["verification_status"])
         self.assertEqual("card_labo", item["store_id"])
         self.assertEqual("池袋", item["branch"])
 

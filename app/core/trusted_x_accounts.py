@@ -21,8 +21,20 @@ SOURCE_TYPES = {
     TRUSTED_INFORMATION,
     GENERAL_INFORMATION,
 }
+TRUST_LEVELS = {
+    "OFFICIAL_TCG", "OFFICIAL_STORE", "TRUSTED_CHAIN", "TRUSTED_STORE",
+    "INFO_ACCOUNT",
+}
+_DEFAULT_TRUST_LEVELS = {
+    OFFICIAL_MANUFACTURER: "OFFICIAL_TCG",
+    OFFICIAL_STORE: "OFFICIAL_STORE",
+    OFFICIAL_SHOP_BRANCH: "TRUSTED_STORE",
+    TRUSTED_INFORMATION: "INFO_ACCOUNT",
+    GENERAL_INFORMATION: "INFO_ACCOUNT",
+}
 _LEGACY_SOURCE_TYPES = {
     "manufacturer_official": OFFICIAL_MANUFACTURER,
+    "official_store": OFFICIAL_STORE,
     "store_official": OFFICIAL_SHOP_BRANCH,
     "trusted_information": TRUSTED_INFORMATION,
     "general_information": GENERAL_INFORMATION,
@@ -194,6 +206,9 @@ class TrustedXAccountRegistry:
             manual_score = max(0, min(100, int(manual)))
         except (TypeError, ValueError):
             return None
+        trust_level = str(raw.get("trust_level", "")).strip().upper()
+        if trust_level not in TRUST_LEVELS:
+            trust_level = _DEFAULT_TRUST_LEVELS[source_type]
         return {
             "user_id": str(raw.get("user_id", "")).strip(),
             "username": username,
@@ -202,8 +217,11 @@ class TrustedXAccountRegistry:
             "source_type": source_type,
             "store_name": str(raw.get("store_name", "")).strip(),
             "manual_trust_score": manual_score,
+            "trust_level": trust_level,
             "enabled": bool(raw.get("enabled", True)),
-            "memo": str(raw.get("memo", "")).strip(),
+            "memo": str(
+                raw.get("memo", raw.get("selection_reason", ""))
+            ).strip(),
         }
 
     def _source_path(self) -> Path:

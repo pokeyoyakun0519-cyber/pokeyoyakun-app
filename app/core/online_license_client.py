@@ -166,6 +166,70 @@ class OnlineLicenseClient:
         )
         return ok, message, data
 
+    def request_subscription_code(
+        self,
+        email: str,
+    ) -> tuple[bool, str, dict[str, Any]]:
+        normalized_email = email.strip().casefold()
+        if not normalized_email or "@" not in normalized_email:
+            return False, "メールアドレスを確認してください。", {}
+
+        ok, message, data, _ = self._post_json(
+            "/api/v1/subscriptions/auth/request-code",
+            {
+                "email": normalized_email,
+                "app_version": APP_VERSION,
+            },
+        )
+        return ok, message, data
+
+    def activate_subscription(
+        self,
+        email: str,
+        code: str,
+    ) -> tuple[bool, str, dict[str, Any]]:
+        normalized_email = email.strip().casefold()
+        normalized_code = code.strip()
+        if not normalized_email or "@" not in normalized_email:
+            return False, "メールアドレスを確認してください。", {}
+        if len(normalized_code) != 6 or not normalized_code.isdecimal():
+            return False, "6桁の認証コードを入力してください。", {}
+
+        device_id = self._device_id()
+        ok, message, data, _ = self._post_json(
+            "/api/v1/subscriptions/auth/verify-code",
+            {
+                "email": normalized_email,
+                "code": normalized_code,
+                "device_id": device_id,
+                "app_version": APP_VERSION,
+            },
+        )
+        if not ok:
+            return ok, message, data
+
+        internal_key = str(data.get("license_key", "")).strip().upper()
+        if not internal_key:
+            return False, "自動認証用ライセンスを受信できませんでした。", {}
+        token_ok, token_message, _claims = verify_online_token(
+            data.get("license_token"),
+            internal_key,
+            device_id,
+        )
+        if not token_ok:
+            self.last_response_diagnostic.update(
+                category="signature_error",
+                message=token_message,
+                token_present=bool(data.get("license_token")),
+                token_key_id=self._token_key_id(data.get("license_token")),
+            )
+            return (
+                False,
+                "サーバー署名を検証できません: " + token_message,
+                {},
+            )
+        return True, message, data
+
     def verify(
         self,
         license_key: str,
@@ -307,16 +371,13 @@ class OnlineLicenseClient:
         except urllib.error.HTTPError as error:
             raw = error.read(4096).decode("utf-8", errors="replace")
             data, json_error = self._decode_response_body(raw)
+            secrets_to_hide = self._payload_secrets(payload)
             safe_body = self._sanitize_response(
                 data if data is not None else raw,
-                secret=str(payload.get("license_key", "")),
+                secrets=secrets_to_hide,
             )
             message = self._message_from_response(data)
-            if str(payload.get("license_key", "")):
-                message = message.replace(
-                    str(payload.get("license_key", "")),
-                    "[ライセンスキー非表示]",
-                )
+            message = self._redact_text(message, secrets_to_hide)
             self.last_response_diagnostic.update(
                 http_status=int(error.code),
                 category="http_error" if not json_error else "http_json_error",
@@ -359,7 +420,7 @@ class OnlineLicenseClient:
                 category="json_error",
                 response_json=self._sanitize_response(
                     locals().get("raw", ""),
-                    secret=str(payload.get("license_key", "")),
+                    secrets=self._payload_secrets(payload),
                 ),
                 message=str(error),
             )
@@ -387,7 +448,7 @@ class OnlineLicenseClient:
                 category="invalid_response",
                 response_json=self._sanitize_response(
                     data,
-                    secret=str(payload.get("license_key", "")),
+                    secrets=self._payload_secrets(payload),
                 ),
                 message="JSONオブジェクトではありません。",
             )
@@ -405,15 +466,14 @@ class OnlineLicenseClient:
                 "認証結果を取得しました。",
             )
         )
-        secret = str(payload.get("license_key", ""))
-        if secret:
-            message = message.replace(secret, "[ライセンスキー非表示]")
+        secrets_to_hide = self._payload_secrets(payload)
+        message = self._redact_text(message, secrets_to_hide)
         self.last_response_diagnostic.update(
             http_status=http_status,
             category="ok" if ok else "api_rejected",
             response_json=self._sanitize_response(
                 data,
-                secret=str(payload.get("license_key", "")),
+                secrets=secrets_to_hide,
             ),
             message=" ".join(message.split())[:300],
             token_present=bool(data.get("license_token")),
@@ -427,7 +487,7 @@ class OnlineLicenseClient:
         value: Any,
         path: tuple[str, ...] = (),
         *,
-        secret: str = "",
+        secrets: tuple[str, ...] = (),
     ) -> Any:
         """Keep response structure for diagnostics without secrets or identifiers."""
         if isinstance(value, dict):
@@ -436,7 +496,16 @@ class OnlineLicenseClient:
                 key_text = str(key)
                 lowered = key_text.lower()
                 item_path = path + (lowered,)
-                if lowered in {"license_key", "device_id"}:
+                if lowered in {
+                    "license_key",
+                    "device_id",
+                    "email",
+                    "code",
+                    "stripe_customer_id",
+                    "stripe_subscription_id",
+                    "customer_id",
+                    "subscription_id",
+                }:
                     sanitized[key_text] = "[非表示]"
                 elif lowered == "value" and "signature" in path:
                     sanitized[key_text] = "[署名値非表示]"
@@ -444,18 +513,32 @@ class OnlineLicenseClient:
                     sanitized[key_text] = cls._sanitize_response(
                         item,
                         item_path,
-                        secret=secret,
+                        secrets=secrets,
                     )
             return sanitized
         if isinstance(value, list):
             return [
-                cls._sanitize_response(item, path, secret=secret)
+                cls._sanitize_response(item, path, secrets=secrets)
                 for item in value
             ]
         if isinstance(value, str):
-            text = value.replace(secret, "[ライセンスキー非表示]") if secret else value
-            return text[:1000]
+            return cls._redact_text(value, secrets)[:1000]
         return value
+
+    @staticmethod
+    def _payload_secrets(payload: dict[str, Any]) -> tuple[str, ...]:
+        return tuple(
+            str(payload.get(key, ""))
+            for key in ("license_key", "email", "code", "device_id")
+            if str(payload.get(key, ""))
+        )
+
+    @staticmethod
+    def _redact_text(value: str, secrets: tuple[str, ...]) -> str:
+        output = str(value)
+        for secret in secrets:
+            output = output.replace(secret, "[機密情報非表示]")
+        return output
 
     @staticmethod
     def _token_key_id(token: Any) -> str:

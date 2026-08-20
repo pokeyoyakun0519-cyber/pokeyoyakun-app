@@ -232,12 +232,13 @@ class XRecentSearchTests(unittest.TestCase):
         self.assertFalse(result["candidates"][0]["confirmed"])
         self.assertEqual(30, result["candidates"][0]["trust_score"])
 
-    def test_official_store_is_high_trust_and_confirmed(self):
+    def test_official_store_is_high_trust_but_x_alone_is_pending(self):
         opener = Mock()
         opener.open.return_value = _Response(self._payload("official_store"))
         item = XRecentSearch(self.root, opener=opener).search("pokemon", "token")["candidates"][0]
         self.assertEqual(90, item["trust_score"])
-        self.assertTrue(item["confirmed"])
+        self.assertFalse(item["confirmed"])
+        self.assertEqual("pending", item["verification_status"])
 
     def test_since_id_is_used_after_success(self):
         opener = Mock()

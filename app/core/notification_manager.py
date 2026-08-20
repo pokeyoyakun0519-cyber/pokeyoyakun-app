@@ -95,6 +95,64 @@ class NotificationManager:
         )
         return True
 
+    def notify_application_event(
+        self,
+        event: dict,
+        *,
+        parent=None,
+        tray_controller=None,
+    ) -> bool:
+        labels = {
+            "NEW_CONFIRMED": "新しい応募情報",
+            "APPLICATION_START": "抽選受付開始",
+            "RESERVATION_START": "予約受付開始",
+            "RESTOCK": "再販・再入荷",
+            "SALE_START": "販売開始",
+        }
+        event_type = str(event.get("event_type", "NEW_CONFIRMED"))
+        title = labels.get(event_type, "新しい応募情報")
+        message = (
+            f'{event.get("product_name", "商品名未設定")}\n'
+            f'{event.get("site_name", "店舗名未設定")} / '
+            f'{event.get("sales_mode", "UNKNOWN")} / '
+            f'{event.get("prefecture", "UNKNOWN")}'
+        )
+        added = self.notification_store.add(
+            title,
+            message,
+            "応募情報",
+            action_url=str(event.get("application_url", "")),
+            action_label="応募ページを開く",
+            metadata={
+                "tcg_key": event.get("tcg_key", ""),
+                "product_category": event.get("product_category", "CARD"),
+                "sales_mode": event.get("sales_mode", "UNKNOWN"),
+                "prefecture": event.get("prefecture", "UNKNOWN"),
+            },
+            application_id=str(event.get("application_id", "")),
+            event_type=event_type,
+            dedupe_key=str(event.get("dedupe_key", "")),
+        )
+        if not added:
+            return False
+        config = self.config_manager.load()
+        general = config.get("general", {})
+        if general.get("play_notification_sound", True):
+            self._play_sound(config.get("notification", {}).get("sound_file", ""))
+        if general.get("show_popup", True):
+            if tray_controller is not None and hasattr(tray_controller, "show_application_reminder"):
+                tray_controller.show_application_reminder(
+                    title,
+                    message,
+                    str(event.get("application_url", "")),
+                )
+            elif parent is not None:
+                QMessageBox.information(parent, title, message)
+        self.log_manager.write(
+            f"応募通知: type={event_type} application_id={event.get('application_id', '')}"
+        )
+        return True
+
     def _play_sound(self, sound_file: str) -> None:
         path = Path(sound_file) if sound_file else None
 

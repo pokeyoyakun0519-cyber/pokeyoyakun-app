@@ -282,14 +282,15 @@ class TrustedXAccountDiscoveryTests(unittest.TestCase):
         self.assertIn("since_id=501", opener.open.call_args.args[0].full_url)
         self.assertEqual("502", second["since_id"])
 
-    def test_official_explicit_post_is_confirmed_with_evidence(self):
+    def test_official_explicit_x_post_stays_pending_without_web_evidence(self):
         self.write_accounts()
         opener = Mock()
         opener.open.return_value = _Response(self.payload())
         item = XRecentSearch(self.root, opener=opener, now=lambda: NOW).search_trusted_accounts(
             "pokemon", "token"
         )["candidates"][0]
-        self.assertTrue(item["confirmed"])
+        self.assertFalse(item["confirmed"])
+        self.assertEqual("pending", item["verification_status"])
         self.assertEqual("LOTTERY", item["application_type"])
         self.assertEqual(1, len(item["evidence"]))
 
@@ -301,7 +302,7 @@ class TrustedXAccountDiscoveryTests(unittest.TestCase):
             "pokemon", "token"
         )["candidates"][0]
         self.assertFalse(item["confirmed"])
-        self.assertEqual("candidate", item["verification_status"])
+        self.assertEqual("pending", item["verification_status"])
 
     def test_false_positive_keywords_are_rejected(self):
         self.write_accounts()
@@ -324,12 +325,12 @@ class TrustedXAccountDiscoveryTests(unittest.TestCase):
         self.assertEqual("u501", observed["user_id"])
         self.assertEqual("501", observed["latest_tweet_id"])
         self.assertEqual(1, observed["detected_count"])
-        self.assertEqual(1, observed["confirmed_count"])
+        self.assertEqual(0, observed["confirmed_count"])
         self.assertNotIn("manual_trust_score", observed)
         self.assertEqual(90, json.loads(config.read_text(encoding="utf-8"))[0]["manual_trust_score"])
         combined = TrustedXAccountRegistry(self.root).load_with_observations()[0]
         self.assertEqual(1, combined["past_candidate_count"])
-        self.assertEqual(1.0, combined["observed_accuracy"])
+        self.assertIsNone(combined["observed_accuracy"])
 
     def test_information_post_is_confirmed_only_with_matching_web_evidence(self):
         self.write_accounts(TRUSTED_INFORMATION, 75)

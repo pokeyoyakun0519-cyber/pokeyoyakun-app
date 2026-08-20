@@ -199,6 +199,116 @@ class OnlineLicenseClientTest(unittest.TestCase):
             PRODUCTION_URL + "/api/v1/licenses/deactivate",
         )
 
+    @patch("core.online_license_client.build_https_opener")
+    def test_subscription_code_request_uses_email_only(self, build_opener):
+        opener = FakeOpener(
+            FakeResponse({"ok": True, "message": "送信しました。"})
+        )
+        build_opener.return_value = opener
+        with patch.object(self.client.config_manager, "load", return_value=self.config):
+            ok, message, _ = self.client.request_subscription_code(
+                " Buyer@Example.com "
+            )
+        self.assertTrue(ok, message)
+        self.assertEqual(
+            opener.request.full_url,
+            PRODUCTION_URL + "/api/v1/subscriptions/auth/request-code",
+        )
+        payload = json.loads(opener.request.data.decode("utf-8"))
+        self.assertEqual(payload["email"], "buyer@example.com")
+        self.assertNotIn("license_key", payload)
+        self.assertNotIn("device_id", payload)
+
+    @patch("core.online_license_client.build_https_opener")
+    def test_subscription_activation_requires_signed_internal_license(
+        self,
+        build_opener,
+    ):
+        opener = FakeOpener(
+            FakeResponse(
+                {
+                    "ok": True,
+                    "message": "自動認証しました。",
+                    "license_key": "PKY-INTERNAL",
+                    "license_token": {"signature": {"key_id": "test"}},
+                }
+            )
+        )
+        build_opener.return_value = opener
+        with (
+            patch.object(self.client.config_manager, "load", return_value=self.config),
+            patch.object(self.client, "_device_id", return_value="DEVICE-1"),
+            patch(
+                "core.online_license_client.verify_online_token",
+                return_value=(True, "署名OK", {}),
+            ) as verify_token,
+        ):
+            ok, message, data = self.client.activate_subscription(
+                "buyer@example.com",
+                "123456",
+            )
+        self.assertTrue(ok, message)
+        payload = json.loads(opener.request.data.decode("utf-8"))
+        self.assertEqual(payload["device_id"], "DEVICE-1")
+        self.assertEqual(payload["code"], "123456")
+        self.assertEqual(data["license_key"], "PKY-INTERNAL")
+        verify_token.assert_called_once_with(
+            data["license_token"],
+            "PKY-INTERNAL",
+            "DEVICE-1",
+        )
+
+    @patch("core.online_license_client.build_https_opener")
+    def test_subscription_activation_rejects_unsigned_response(self, build_opener):
+        build_opener.return_value = FakeOpener(
+            FakeResponse(
+                {
+                    "ok": True,
+                    "message": "自動認証しました。",
+                    "license_key": "PKY-INTERNAL",
+                }
+            )
+        )
+        with (
+            patch.object(self.client.config_manager, "load", return_value=self.config),
+            patch(
+                "core.online_license_client.verify_online_token",
+                return_value=(False, "署名がありません。", {}),
+            ),
+        ):
+            ok, message, data = self.client.activate_subscription(
+                "buyer@example.com",
+                "123456",
+            )
+        self.assertFalse(ok)
+        self.assertEqual(data, {})
+        self.assertIn("署名", message)
+
+    @patch("core.online_license_client.build_https_opener")
+    def test_subscription_diagnostics_redact_email_code_and_internal_ids(
+        self,
+        build_opener,
+    ):
+        response = {
+            "ok": False,
+            "message": "buyer@example.com code 123456 rejected",
+            "email": "buyer@example.com",
+            "code": "123456",
+            "stripe_customer_id": "cus_sensitive",
+            "stripe_subscription_id": "sub_sensitive",
+        }
+        build_opener.return_value = FakeOpener(FakeResponse(response))
+        with patch.object(self.client.config_manager, "load", return_value=self.config):
+            self.client.activate_subscription("buyer@example.com", "123456")
+        diagnostic = json.dumps(self.client.last_response_diagnostic)
+        for secret in (
+            "buyer@example.com",
+            "123456",
+            "cus_sensitive",
+            "sub_sensitive",
+        ):
+            self.assertNotIn(secret, diagnostic)
+
     def test_redirect_handler_rejects_non_https_and_other_hosts(self):
         handler = HttpsOnlyRedirectHandler(PRODUCTION_URL)
         request = urllib.request.Request(PRODUCTION_URL + "/health")

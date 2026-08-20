@@ -338,6 +338,7 @@ class MonitorScheduler(QObject):
             "gmail_results",
             [],
         )
+        x_recent = result.get("x_recent", {})
 
         if changed_sources:
             self._notify_source_changes(changed_sources)
@@ -371,7 +372,13 @@ class MonitorScheduler(QObject):
             f"販売情報検索"
             f"{candidate_search.get('searched_count', 0)}件 / "
             f"結果確認待ち{len(due_results)}件 / "
-            f"Gmail結果{len(gmail_results)}件"
+            f"Gmail結果{len(gmail_results)}件 / "
+            f"X取得{x_recent.get('retrieved_count', 0)}件 / "
+            f"X候補{x_recent.get('candidate_count', 0)}件 / "
+            f"X確定{x_recent.get('confirmed_count', 0)}件 / "
+            f"X却下{x_recent.get('rejected_count', 0)}件 / "
+            f"X429 {x_recent.get('rate_limit_429', 0)}件 / "
+            f"X例外{x_recent.get('exception_count', 0)}件"
         )
 
         self.running = False
