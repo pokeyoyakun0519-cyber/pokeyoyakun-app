@@ -420,6 +420,11 @@ class MainWindow(QMainWindow):
         candidate = result.get("candidate_search", {})
         if candidate.get("new_hit_candidates"):
             self._pending_monitor_refresh.update({"products", "applications", "candidates"})
+        x_recent = result.get("x_recent", {})
+        if x_recent.get("candidate_count") or x_recent.get("promoted_count"):
+            self._pending_monitor_refresh.update(
+                {"products", "applications", "candidates", "sources"}
+            )
         if result.get("newly_won") or result.get("gmail_results"):
             self._pending_monitor_refresh.add("applications")
         if not self._pending_monitor_refresh:

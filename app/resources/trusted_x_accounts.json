@@ -1,11 +1,57 @@
 [
   {
-    "username": "pokemon_cojp",
+    "username": "Pokemon_cojp",
     "display_name": "ポケモン公式",
     "category": "manufacturer_official",
     "store_name": "株式会社ポケモン",
     "tcg": "pokemon",
+    "trust_level": "OFFICIAL_TCG",
     "trust_score": 100,
+    "selection_reason": "TCG公式",
+    "enabled": true
+  },
+  {
+    "username": "pokemoncenterPR",
+    "display_name": "ポケモンセンター公式",
+    "category": "official_store",
+    "store_name": "ポケモンセンター",
+    "tcg": "pokemon",
+    "trust_level": "OFFICIAL_STORE",
+    "trust_score": 98,
+    "selection_reason": "公式ショップ",
+    "enabled": true
+  },
+  {
+    "username": "HBSTsendai",
+    "display_name": "ホビーステーション仙台駅前店",
+    "category": "store_official",
+    "store_name": "ホビーステーション仙台駅前店",
+    "tcg": "pokemon",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 90,
+    "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "ikebukuro_labo",
+    "display_name": "カードラボ池袋店",
+    "category": "store_official",
+    "store_name": "カードラボ池袋店",
+    "tcg": "pokemon",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 90,
+    "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "fullcomp_yoko",
+    "display_name": "フルコンプ横浜店",
+    "category": "store_official",
+    "store_name": "フルコンプ横浜店",
+    "tcg": "pokemon",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 88,
+    "selection_reason": "TCG専門店公式",
     "enabled": true
   },
   {
@@ -14,7 +60,53 @@
     "category": "manufacturer_official",
     "store_name": "バンダイ",
     "tcg": "onepiece",
+    "trust_level": "OFFICIAL_TCG",
     "trust_score": 100,
+    "selection_reason": "TCG公式",
+    "enabled": true
+  },
+  {
+    "username": "ONEPIECEtcgSHOP",
+    "display_name": "ONE PIECEカードゲーム公式ショップ",
+    "category": "official_store",
+    "store_name": "ONE PIECEカードゲーム公式ショップ",
+    "tcg": "onepiece",
+    "trust_level": "OFFICIAL_STORE",
+    "trust_score": 98,
+    "selection_reason": "公式ショップ",
+    "enabled": true
+  },
+  {
+    "username": "HBSTsendai",
+    "display_name": "ホビーステーション仙台駅前店",
+    "category": "store_official",
+    "store_name": "ホビーステーション仙台駅前店",
+    "tcg": "onepiece",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 90,
+    "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "ikebukuro_labo",
+    "display_name": "カードラボ池袋店",
+    "category": "store_official",
+    "store_name": "カードラボ池袋店",
+    "tcg": "onepiece",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 90,
+    "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "fullcomp_yoko",
+    "display_name": "フルコンプ横浜店",
+    "category": "store_official",
+    "store_name": "フルコンプ横浜店",
+    "tcg": "onepiece",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 88,
+    "selection_reason": "TCG専門店公式",
     "enabled": true
   },
   {
@@ -23,7 +115,53 @@
     "category": "manufacturer_official",
     "store_name": "バンダイ",
     "tcg": "union_arena",
+    "trust_level": "OFFICIAL_TCG",
     "trust_score": 100,
+    "selection_reason": "TCG公式",
+    "enabled": true
+  },
+  {
+    "username": "HBSTsendai",
+    "display_name": "ホビーステーション仙台駅前店",
+    "category": "store_official",
+    "store_name": "ホビーステーション仙台駅前店",
+    "tcg": "union_arena",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 90,
+    "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "ikebukuro_labo",
+    "display_name": "カードラボ池袋店",
+    "category": "store_official",
+    "store_name": "カードラボ池袋店",
+    "tcg": "union_arena",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 90,
+    "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "fullcomp_yoko",
+    "display_name": "フルコンプ横浜店",
+    "category": "store_official",
+    "store_name": "フルコンプ横浜店",
+    "tcg": "union_arena",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 88,
+    "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "sappo_labo",
+    "display_name": "カードラボ札幌店",
+    "category": "store_official",
+    "store_name": "カードラボ札幌店",
+    "tcg": "union_arena",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 88,
+    "selection_reason": "TCG専門店公式",
     "enabled": true
   },
   {
@@ -32,7 +170,9 @@
     "category": "manufacturer_official",
     "store_name": "バンダイ",
     "tcg": "dragon_ball_fusion_world",
+    "trust_level": "OFFICIAL_TCG",
     "trust_score": 100,
+    "selection_reason": "TCG公式",
     "enabled": true
   },
   {
@@ -40,17 +180,10 @@
     "display_name": "ホビーステーション仙台駅前店",
     "category": "store_official",
     "store_name": "ホビーステーション仙台駅前店",
-    "tcg": "pokemon",
+    "tcg": "dragon_ball_fusion_world",
+    "trust_level": "TRUSTED_STORE",
     "trust_score": 90,
-    "enabled": true
-  },
-  {
-    "username": "HBSTsendai",
-    "display_name": "ホビーステーション仙台駅前店",
-    "category": "store_official",
-    "store_name": "ホビーステーション仙台駅前店",
-    "tcg": "onepiece",
-    "trust_score": 90,
+    "selection_reason": "TCG専門店公式",
     "enabled": true
   },
   {
@@ -58,17 +191,32 @@
     "display_name": "カードラボ池袋店",
     "category": "store_official",
     "store_name": "カードラボ池袋店",
-    "tcg": "pokemon",
+    "tcg": "dragon_ball_fusion_world",
+    "trust_level": "TRUSTED_STORE",
     "trust_score": 90,
+    "selection_reason": "TCG専門店公式",
     "enabled": true
   },
   {
-    "username": "ikebukuro_labo",
-    "display_name": "カードラボ池袋店",
+    "username": "fullcomp_yoko",
+    "display_name": "フルコンプ横浜店",
     "category": "store_official",
-    "store_name": "カードラボ池袋店",
-    "tcg": "onepiece",
-    "trust_score": 90,
+    "store_name": "フルコンプ横浜店",
+    "tcg": "dragon_ball_fusion_world",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 88,
+    "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "sappo_labo",
+    "display_name": "カードラボ札幌店",
+    "category": "store_official",
+    "store_name": "カードラボ札幌店",
+    "tcg": "dragon_ball_fusion_world",
+    "trust_level": "TRUSTED_STORE",
+    "trust_score": 88,
+    "selection_reason": "TCG専門店公式",
     "enabled": true
   }
 ]
