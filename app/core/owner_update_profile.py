@@ -9,7 +9,7 @@ OWNER_PROFILE = UpdateProfile(
     allowed_hosts=frozenset({"pokeyoyakun.duckdns.org"}),
     asset_pattern=re.compile(
         r"^PokeyoyaKun_Owner_Setup_Ver(?P<version>\d+\.\d+\.\d+)"
-        r"(?:_RC(?P<rc>\d+))?\.exe$"
+        r"(?:_RC(?P<rc>\d+)(?:\.(?P<rc_revision>\d+))?)?\.exe$"
     ),
     updater_name="PokeyoyaKunOwnerUpdater.exe",
     application_name="PokeyoyaKun_OwnerEdition.exe",

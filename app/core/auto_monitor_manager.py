@@ -50,6 +50,14 @@ class AutoMonitorManager:
         reasons_by_tcg: dict[str, Counter] = {}
         master = ProductMasterManager(self.store.root)
         master.last_conflicts = []
+        duplicate_suppressed = 0
+        product_indexes_by_id: dict[str, list[int]] = {}
+        for index, product in enumerate(products):
+            product_id = str(
+                product.get("product_id") or product.get("id") or ""
+            )
+            if product_id:
+                product_indexes_by_id.setdefault(product_id, []).append(index)
 
         for candidate in candidates:
             tcg = normalize_key(candidate.get("tcg_key"), candidate.get("tcg"))[0]
@@ -64,11 +72,31 @@ class AutoMonitorManager:
             if self.is_user_excluded(item, excluded):
                 reasons["user_excluded"] += 1
                 continue
-            match_index, match_method = master.find_match(products, item)
+            item_id = str(item.get("product_id") or item.get("id") or "")
+            id_matches = [
+                index
+                for index in product_indexes_by_id.get(item_id, [])
+                if not master.has_identifier_conflict(products[index], item)
+            ]
+            if len(id_matches) == 1:
+                match_index, match_method = id_matches[0], "product_id"
+                duplicate_suppressed += 1
+            else:
+                match_index, match_method = master.find_match(products, item)
             if match_index is not None:
-                merged, changes = master.reconcile_product(
-                    products[match_index], item
-                )
+                if match_method == "product_id":
+                    merged = master.merge_same_id_product(
+                        products[match_index], item
+                    )
+                    changes = (
+                        {"metadata": {"reason": "same_product_id"}}
+                        if merged != products[match_index]
+                        else {}
+                    )
+                else:
+                    merged, changes = master.reconcile_product(
+                        products[match_index], item
+                    )
                 products[match_index] = merged
                 if "release_date" in changes:
                     updated_items.append(merged)
@@ -82,6 +110,10 @@ class AutoMonitorManager:
             if match_method.startswith("ambiguous_"):
                 reasons["ambiguous_product"] += 1
             products.append(item)
+            if item_id:
+                product_indexes_by_id.setdefault(item_id, []).append(
+                    len(products) - 1
+                )
             added_items.append(item)
             reasons["added"] += 1
 
@@ -100,6 +132,7 @@ class AutoMonitorManager:
                 key: dict(value) for key, value in reasons_by_tcg.items()
             },
             "release_date_conflicts": list(master.last_conflicts),
+            "duplicate_suppressed": duplicate_suppressed,
         }
 
     @classmethod
@@ -199,6 +232,15 @@ class AutoMonitorManager:
                 or candidate.get("maker")
                 or candidate.get("brand")
                 or ""
+            ),
+            "image_url": str(
+                candidate.get("image_url")
+                or candidate.get("product_image_url")
+                or ""
+            ),
+            "msrp": candidate.get("msrp"),
+            "reference_price": candidate.get(
+                "reference_price", candidate.get("msrp")
             ),
             "official_url": url,
             "source_name": str(candidate.get("source_name", "公式情報ソース")),

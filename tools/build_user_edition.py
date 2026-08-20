@@ -33,7 +33,7 @@ VERSION_FILE = INSTALLER_DIR / "version_info.txt"
 
 TARGETS = (
     {
-        "name": "PokeyoyaKunUpdater",
+        "name": "PokeyoyaKunUpdaterV2",
         "script": PROJECT_ROOT / "tools" / "user_updater_main.py",
     },
     {
@@ -202,7 +202,7 @@ def verify_user_edition() -> None:
     required = (
         "ポケヨヤ君.exe",
         "ポケヨヤ君_設定.exe",
-        "PokeyoyaKunUpdater.exe",
+        "PokeyoyaKunUpdaterV2.exe",
         "release-integrity.json",
     )
     missing = [

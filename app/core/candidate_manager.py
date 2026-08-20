@@ -4,7 +4,7 @@ import re
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from core.application_period import ApplicationPeriodParser
 from core.application_site import normalize_application_site
@@ -70,6 +70,11 @@ class CandidateManager:
         products = self._load_list(self.products_path)
         identity = ProductMasterManager(self.root)
         products_changed = False
+        candidate_indexes_by_id = {
+            str(item.get("id", "")): index
+            for index, item in enumerate(candidates)
+            if str(item.get("id", ""))
+        }
 
         added = 0
         diagnostic_reasons = Counter()
@@ -122,6 +127,24 @@ class CandidateManager:
             observed["source_name"] = source_name
             observed.setdefault("source_type", "official_source")
 
+            digest = hashlib.sha256(
+                (
+                    f"{source_id}|{name}|"
+                    f"{release_date}|{official_url}|"
+                    f"{product.get('official_product_id') or product.get('official_id') or ''}|"
+                    f"{product.get('product_code') or ''}|"
+                    f"{product.get('jan_code') or product.get('jan') or ''}"
+                ).encode("utf-8")
+            ).hexdigest()[:20]
+            candidate_id = f"official_{digest}"
+            legacy_digest = hashlib.sha256(
+                (
+                    f"{source_id}|{name}|"
+                    f"{release_date}|{official_url}"
+                ).encode("utf-8")
+            ).hexdigest()[:20]
+            legacy_candidate_id = f"official_{legacy_digest}"
+
             product_index, product_match = identity.find_match(
                 products, observed
             )
@@ -139,9 +162,28 @@ class CandidateManager:
             if product_match.startswith("ambiguous_"):
                 diagnostic_reasons["ambiguous_product"] += 1
 
-            candidate_index, candidate_match = identity.find_match(
-                candidates, observed
-            )
+            exact_candidate_index = candidate_indexes_by_id.get(candidate_id)
+            if exact_candidate_index is not None:
+                candidate_index, candidate_match = (
+                    exact_candidate_index, "candidate_id"
+                )
+            else:
+                legacy_index = candidate_indexes_by_id.get(
+                    legacy_candidate_id
+                )
+                if (
+                    legacy_index is not None
+                    and not identity.has_identifier_conflict(
+                        candidates[legacy_index], observed
+                    )
+                ):
+                    candidate_index, candidate_match = (
+                        legacy_index, "legacy_candidate_id"
+                    )
+                else:
+                    candidate_index, candidate_match = identity.find_match(
+                        candidates, observed
+                    )
             if candidate_index is not None:
                 merged, changes = identity.reconcile_product(
                     candidates[candidate_index], observed
@@ -161,16 +203,9 @@ class CandidateManager:
             if candidate_match.startswith("ambiguous_"):
                 diagnostic_reasons["ambiguous_candidate"] += 1
 
-            digest = hashlib.sha256(
-                (
-                    f"{source_id}|{name}|"
-                    f"{release_date}|{official_url}"
-                ).encode("utf-8")
-            ).hexdigest()[:20]
-
             candidates.append(
                 {
-                    "id": f"official_{digest}",
+                    "id": candidate_id,
                     "source_id": source_id,
                     "source_name": source_name,
                     "source_url": source_url,
@@ -184,6 +219,14 @@ class CandidateManager:
                     "release_date": release_date,
                     "product_kind": str(product.get("product_kind", "その他")),
                     "product_code": str(product.get("product_code", "")),
+                    "official_product_id": str(
+                        product.get("official_product_id")
+                        or product.get("official_id")
+                        or ""
+                    ),
+                    "jan_code": str(
+                        product.get("jan_code") or product.get("jan") or ""
+                    ),
                     "msrp": product.get("msrp"),
                     "msrp_includes_tax": bool(product.get("msrp_includes_tax", True)),
                     "reference_price": product.get("reference_price"),
@@ -205,6 +248,7 @@ class CandidateManager:
                     ),
                 }
             )
+            candidate_indexes_by_id[candidate_id] = len(candidates) - 1
             added += 1
             diagnostic_reasons["added"] += 1
 
@@ -223,7 +267,9 @@ class CandidateManager:
 
         self.save_candidates(candidates)
         if products_changed:
-            self._save_list(self.products_path, products)
+            from core.product_store import ProductStore
+
+            ProductStore(self.root)._save_product_file(products)
         identity.log_conflicts()
         self.last_merge_diagnostics = {
             "detected": len(discovered),
@@ -403,14 +449,23 @@ class CandidateManager:
                 hits, messages
             )
 
-            if hits:
+            confirmed_hits = [
+                hit for hit in hits
+                if str(hit.get("verification_status", "confirmed")) != "candidate"
+            ]
+            if confirmed_hits:
                 candidate["status"] = (
-                    f"販売・抽選情報 {len(hits)}件"
+                    f"販売・抽選情報 {len(confirmed_hits)}件"
                 )
                 candidate["approved"] = True
+                approved_candidate = dict(candidate)
+                approved_candidate["retail_hits"] = confirmed_hits
                 self._upsert_product_from_candidate(
-                    candidate
+                    approved_candidate
                 )
+            elif hits:
+                candidate["status"] = f"販売・抽選候補 {len(hits)}件（確認待ち）"
+                candidate["approved"] = False
             else:
                 candidate["status"] = (
                     "販売・抽選情報は未検出"
@@ -423,6 +478,87 @@ class CandidateManager:
         if save:
             self.save_candidates(candidates)
         return updated
+
+    def merge_application_discoveries(
+        self,
+        discoveries: list[dict[str, Any]],
+        *,
+        matcher: Callable[[dict[str, Any], dict[str, Any]], bool],
+    ) -> dict[str, int]:
+        """Merge strong dedicated-adapter discoveries without per-item writes."""
+        candidates = self.load_candidates()
+        created = 0
+        updated = 0
+        ambiguous = 0
+        promoted: dict[str, dict[str, Any]] = {}
+        for discovery in discoveries:
+            record = discovery.get("record")
+            hit = discovery.get("hit")
+            if not isinstance(record, dict) or not isinstance(hit, dict):
+                continue
+            matches = [item for item in candidates if matcher(item, record)]
+            if len(matches) > 1:
+                ambiguous += 1
+                continue
+            if matches:
+                candidate = matches[0]
+            else:
+                name = str(record.get("product_name", "")).strip()
+                tcg_key = normalize_key(record.get("tcg_key"), record.get("tcg"))[0]
+                if not name or tcg_key not in {"pokemon", "onepiece"}:
+                    continue
+                signature = re.sub(r"[^a-z0-9ぁ-んァ-ヶ一-龠]", "", name.casefold())
+                digest = hashlib.sha256(
+                    f"card_labo|{tcg_key}|{signature}".encode("utf-8")
+                ).hexdigest()[:16]
+                candidate = {
+                    "id": f"application_{digest}",
+                    "source_id": "card_labo_application",
+                    "source_name": "カードラボ公式応募記事",
+                    "source_url": str(record.get("article_url", "")),
+                    "official_url": str(record.get("article_url", "")),
+                    "name": name,
+                    "tcg_key": tcg_key,
+                    "tcg": display_name(tcg_key, record.get("tcg")),
+                    "release_date": str(record.get("release_date", "")),
+                    "product_kind": "その他",
+                    "product_code": str(record.get("product_code", "")),
+                    "status": "販売・抽選情報を検出",
+                    "approved": False,
+                    "last_searched": "",
+                    "retail_hits": [],
+                    "search_message": "専用Adapterが公式応募記事を検出",
+                    "search_diagnostics": {},
+                    "created_at": datetime.now().isoformat(timespec="seconds"),
+                }
+                candidates.append(candidate)
+                created += 1
+            key = (str(hit.get("site_key", "")), str(hit.get("url", "")))
+            existing_hits = [
+                dict(value) for value in candidate.get("retail_hits", [])
+                if isinstance(value, dict)
+            ]
+            if key not in {
+                (str(value.get("site_key", "")), str(value.get("url", "")))
+                for value in existing_hits
+            }:
+                existing_hits.append(dict(hit))
+                candidate["retail_hits"] = existing_hits
+                updated += 1
+            if str(hit.get("verification_status", "")) == "confirmed":
+                candidate["approved"] = True
+                candidate["status"] = f"販売・抽選情報 {len(existing_hits)}件"
+                approved = dict(candidate)
+                approved["retail_hits"] = [
+                    value for value in existing_hits
+                    if str(value.get("verification_status", "confirmed")) != "candidate"
+                ]
+                promoted[str(candidate.get("id", ""))] = approved
+        if created or updated:
+            self.save_candidates(candidates)
+            for candidate in promoted.values():
+                self._upsert_product_from_candidate(candidate)
+        return {"created": created, "updated": updated, "ambiguous": ambiguous}
 
     def approve_candidate(
         self,
@@ -497,9 +633,6 @@ class CandidateManager:
         if not hits:
             return
 
-        products = self._load_list(
-            self.products_path
-        )
         product_id = (
             f"retail_{candidate.get('id', '')}"
         )
@@ -530,32 +663,17 @@ class CandidateManager:
             ),
             "product_kind": candidate.get("product_kind", "その他"),
             "product_code": candidate.get("product_code", ""),
+            "official_product_id": candidate.get("official_product_id", ""),
+            "jan_code": candidate.get("jan_code", ""),
             "msrp": candidate.get("msrp"),
             "msrp_includes_tax": candidate.get("msrp_includes_tax", True),
             "reference_price": candidate.get("reference_price"),
             "sites": hits,
         }
 
-        replaced = False
-        for index, current in enumerate(products):
-            if current.get("id") == product_id:
-                product["reserved"] = bool(
-                    current.get("reserved", False)
-                )
-                product["favorite"] = bool(
-                    current.get("favorite", False)
-                )
-                products[index] = product
-                replaced = True
-                break
+        from core.product_store import ProductStore
 
-        if not replaced:
-            products.append(product)
-
-        self._save_list(
-            self.products_path,
-            products,
-        )
+        ProductStore(self.root).merge_discovered_products([product])
 
     @staticmethod
     def _combined_status(
@@ -620,15 +738,25 @@ class CandidateManager:
 
     @staticmethod
     def _is_new_release_candidate(product: dict[str, Any], tcg_key: str) -> bool:
-        if tcg_key not in {"onepiece", "gundam"}:
+        if tcg_key not in {
+            "onepiece", "gundam", "union_arena", "dragon_ball_fusion_world",
+        }:
             return bool(str(product.get("name", "")).strip())
         allowed = {
             "onepiece": {
                 "ブースターパック", "エクストラブースター", "スタートデッキ",
-                "プレミアムカードコレクション", "プレミアム商品",
+                "プレミアムカードコレクション", "プレミアム商品", "その他",
             },
             "gundam": {
                 "ブースターパック", "スタートデッキ", "プレミアムバンダイ", "その他",
+            },
+            "union_arena": {
+                "ブースターパック", "スタートデッキ", "構築済みデッキ",
+                "プレミアム商品", "その他カード商品",
+            },
+            "dragon_ball_fusion_world": {
+                "ブースターパック", "スタートデッキ", "プレミアム商品",
+                "その他カード商品",
             },
         }
         kind = str(product.get("product_kind", "その他"))
@@ -643,15 +771,24 @@ class CandidateManager:
                 return False
             if not re.search(r"カード|セット|コレクション|card|set|collection", lowered_name, re.IGNORECASE):
                 return False
-        try:
-            release = datetime.strptime(
-                str(product.get("release_date", "")), "%Y-%m-%d"
-            ).date()
-        except ValueError:
-            return False
-        age_days = (date.today() - release).days
-        if age_days > 45 or age_days < -730:
-            return False
+        release_text = str(product.get("release_date", "")).strip()
+        if not release_text:
+            # Some current ONE PIECE official catalogue entries expose no date
+            # in the list/detail HTML.  Preserve those official card products as
+            # candidates; AutoMonitorManager will keep them out of monitoring
+            # until a reliable release date is available.
+            if tcg_key not in {
+                "onepiece", "union_arena", "dragon_ball_fusion_world",
+            } or not product.get("manufacturer_official"):
+                return False
+        if release_text:
+            try:
+                release = datetime.strptime(release_text, "%Y-%m-%d").date()
+            except ValueError:
+                return False
+            age_days = (date.today() - release).days
+            if age_days > 45 or age_days < -730:
+                return False
         url = str(product.get("official_url", ""))
         if not url:
             sites = product.get("sites", [])

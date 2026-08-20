@@ -49,6 +49,8 @@ DEFAULT_CONFIG = {
         "onepiece": True,
         "yugioh": True,
         "gundam": True,
+        "union_arena": True,
+        "dragon_ball_fusion_world": True,
         "other": True,
     },
     "sites": {

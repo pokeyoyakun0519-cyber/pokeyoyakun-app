@@ -21,7 +21,7 @@ from core.initial_data_bootstrap import InitialDataBootstrap
 from core.notification_manager import NotificationManager
 from core.product_store import ProductStore
 from core.monitor_scheduler import MonitorScheduler
-from core.p2_startup import P2StartupCoordinator
+from core.p2_startup import P2StartupCoordinator, should_show_user_state_warning
 from core.runtime_paths import is_frozen
 from core.startup_diagnostics import StartupDiagnostics
 from core.tcg_categories import categories
@@ -114,12 +114,15 @@ class MainWindow(QMainWindow):
         self._pending_monitor_refresh = set()
         self.p2_startup_result = P2StartupCoordinator().run()
         self._build_ui()
+        if should_show_user_state_warning(self.p2_startup_result, sys.argv):
+            QTimer.singleShot(0, self._show_user_state_safety_warning)
         self.monitor_scheduler.run_completed.connect(
             self._refresh_data_pages_after_monitor
         )
         self.monitor_scheduler.worker_finished.connect(
             self._continue_startup_after_monitor
         )
+
         self._setup_application_assistant()
         self.monitor_refresh_timer = QTimer(self)
         self.monitor_refresh_timer.setSingleShot(True)
@@ -146,6 +149,14 @@ class MainWindow(QMainWindow):
                 self.shutdown_background_work
             )
         QTimer.singleShot(0, self._show_initial_setup_if_needed)
+
+    def _show_user_state_safety_warning(self):
+        QMessageBox.warning(
+            self,
+            "ユーザー状態ファイルの復元が必要です",
+            "user_state.jsonが破損しているため、状態更新と自動監視を停止しました。\n"
+            "ファイルは変更していません。バックアップからの復元を行ってください。",
+        )
 
     def _build_ui(self):
         central = QWidget()

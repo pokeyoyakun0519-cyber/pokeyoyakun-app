@@ -1,0 +1,26 @@
+{
+  "audited_at": "2026-08-15T00:00:00+09:00",
+  "pokemon": {
+    "minimum_catalog_count": 17,
+    "critical_urls": [
+      "https://www.pokemon-card.com/ex/m6/",
+      "https://www.30th.pokemon-card.com/product/m6a",
+      "https://www.30th.pokemon-card.com/product/mf",
+      "https://www.30th.pokemon-card.com/product/furbox",
+      "https://www.30th.pokemon-card.com/product/cardset"
+    ]
+  },
+  "onepiece": {
+    "minimum_catalog_count": 85,
+    "critical_urls": [
+      "https://www.onepiece-cardgame.com/products/eb05.html",
+      "https://www.onepiece-cardgame.com/products/boosters/op17/",
+      "https://www.onepiece-cardgame.com/products/st31.html",
+      "https://www.onepiece-cardgame.com/products/st32.html",
+      "https://www.onepiece-cardgame.com/products/st33.html",
+      "https://www.onepiece-cardgame.com/products/st34.html",
+      "https://www.onepiece-cardgame.com/products/st35.html",
+      "https://www.onepiece-cardgame.com/products/st36.html"
+    ]
+  }
+}

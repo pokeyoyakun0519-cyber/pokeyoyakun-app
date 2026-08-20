@@ -53,6 +53,7 @@ class YugiohClientCoreTest(unittest.TestCase):
             [item.key for item in categories()],
             [
                 "pokemon", "onepiece", "yugioh", "gundam",
+                "union_arena", "dragon_ball_fusion_world",
                 "duelmasters", "weiss", "mtg", "other",
             ],
         )

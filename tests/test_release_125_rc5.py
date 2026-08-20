@@ -30,10 +30,10 @@ PUBLIC_CONTENT_API_ORIGIN = "https://pokeyoyakun.duckdns.org"
 
 
 class Release125Rc5Test(unittest.TestCase):
-    def test_application_version_is_rc5(self):
+    def test_application_version_is_stable(self):
         self.assertEqual(APP_VERSION, "1.25.0")
-        self.assertEqual(APP_CHANNEL, "rc5")
-        self.assertEqual(CURRENT_RELEASE, "1.25.0-rc5")
+        self.assertEqual(APP_CHANNEL, "stable")
+        self.assertEqual(CURRENT_RELEASE, "1.25.0-stable")
 
     def test_public_apis_use_their_fixed_production_https_origins(self):
         endpoint = json.loads((
@@ -84,7 +84,7 @@ class Release125Rc5Test(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 verify_public_license_endpoint(root)
 
-    def test_executable_installer_and_build_versions_are_rc5(self):
+    def test_executable_installer_and_build_versions_are_stable(self):
         version_info = (
             PROJECT_ROOT / "installer" / "version_info.txt"
         ).read_text(encoding="utf-8")
@@ -94,17 +94,16 @@ class Release125Rc5Test(unittest.TestCase):
         build_installer = (
             PROJECT_ROOT / "tools" / "build_user_installer.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("1.25.0.5", version_info)
-        self.assertIn("1.25.0 RC5", version_info)
-        self.assertIn("1.25.0 RC5 User Edition", installer)
-        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC5", installer)
-        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0_RC5", build_installer)
+        self.assertIn("1.25.0.100", version_info)
+        self.assertIn("ProductVersion', '1.25.0'", version_info)
+        self.assertIn('#define MyAppVersion "1.25.0"', installer)
+        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0", installer)
+        self.assertIn("PokeyoyaKun_User_Setup_Ver1.25.0.exe", build_installer)
         self.assertIn("user_dist_rc5", installer)
         self.assertIn("user_installer_rc5", installer)
 
     def test_tester_documents_mark_rc5_as_non_final(self):
         for name in (
-            "USER_EDITION_README.txt",
             "RELEASE_NOTES_Ver1.25.0_RC5.txt",
             "TESTER_README_Ver1.25.0_RC5.txt",
         ):
@@ -113,6 +112,20 @@ class Release125Rc5Test(unittest.TestCase):
                 self.assertIn("RC5", text)
                 self.assertIn("正式版ではありません", text)
                 self.assertIn("3か月無料ライセンス", text)
+
+    def test_stable_user_documents_match_production_features(self):
+        readme = (PROJECT_ROOT / "USER_EDITION_README.txt").read_text(encoding="utf-8")
+        usage = (PROJECT_ROOT / "使用方法.txt").read_text(encoding="utf-8")
+        notes = (PROJECT_ROOT / "RELEASE_NOTES_Ver1.25.0.txt").read_text(encoding="utf-8")
+        for text in (readme, usage):
+            self.assertIn("Ver.1.25.0", text)
+            self.assertNotIn("Ver.1.25.0 RC5", text)
+            self.assertNotIn("admin_cli.py", text)
+            self.assertNotIn("127.0.0.1:8765", text)
+        self.assertIn("https://api.pokeyoyakun.com", readme)
+        self.assertIn("Gmail OAuth", usage)
+        self.assertIn("RC5 / RC5.1からStable版", notes)
+        self.assertIn("Installer exit 5", notes)
 
     def test_rc5_documents_include_tls_and_yugioh_scope(self):
         for name in (

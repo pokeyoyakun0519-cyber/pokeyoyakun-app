@@ -227,6 +227,7 @@ class ApplicationDashboardP24UiTest(unittest.TestCase):
                 key: 0
                 for key in (
                     "pokemon", "onepiece", "yugioh", "gundam",
+                    "union_arena", "dragon_ball_fusion_world",
                     "duelmasters", "weiss", "mtg", "other",
                 )
             },
@@ -242,6 +243,7 @@ class ApplicationDashboardP24UiTest(unittest.TestCase):
             [page.tcg_filter.itemData(i) for i in range(page.tcg_filter.count())],
             [
                 "all", "pokemon", "onepiece", "yugioh", "gundam",
+                "union_arena", "dragon_ball_fusion_world",
                 "duelmasters", "weiss", "mtg", "other",
             ],
         )

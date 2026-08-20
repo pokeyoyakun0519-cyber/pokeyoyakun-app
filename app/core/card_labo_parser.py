@@ -65,6 +65,22 @@ TCG_PATTERNS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("ガンダムカードゲーム", "gundam card game"),
     ),
     (
+        "union_arena",
+        "",
+        ("union arena", "ユニオンアリーナ", "ユニアリ"),
+    ),
+    (
+        "dragon_ball_fusion_world",
+        "",
+        (
+            "ドラゴンボールスーパーカードゲーム フュージョンワールド",
+            "ドラゴンボールカードゲーム フュージョンワールド",
+            "dragon ball super card game fusion world",
+            "dbscg fusion world",
+            "dbs fw",
+        ),
+    ),
+    (
         "duelmasters",
         "",
         ("デュエル・マスターズ", "デュエルマスターズ", "デュエマ"),
@@ -467,6 +483,18 @@ class CardLaboParser:
             for value in state.get("checked_article_ids", [])
             if str(value)
         }
+        cached_article_records = [
+            dict(record)
+            for record in state.get("article_records", [])
+            if isinstance(record, dict)
+            and str(record.get("article_id", ""))
+            and self._is_article_url(
+                self._canonical_url(record.get("article_url", ""))
+            )
+            and str(record.get("article_type", "")) not in {
+                "", "excluded", "event", "general_news"
+            }
+        ]
 
         rss_entries: list[dict[str, str]] = []
         rss_response = self._request(self.RSS_URL)
@@ -565,13 +593,26 @@ class CardLaboParser:
             article_records.append(record)
 
         calendar_records = self._calendar_records(state, excluded)
-        records = self._deduplicate([*article_records, *calendar_records])
+        # Checked article IDs are an HTTP optimisation, not a data store.  Keep
+        # the normalized records as well so the next scan can reuse the result
+        # instead of making previously found applications disappear.
+        records = self._deduplicate([
+            *article_records,
+            *cached_article_records,
+            *calendar_records,
+        ])
         checked_ids.update(successfully_checked)
         self._save_state({
             "last_checked_at": self._now_iso(),
             "checked_article_ids": sorted(checked_ids)[-1000:],
             "calendar_checked_date": self._today_jst(),
             "calendar_records": calendar_records,
+            "article_records": [
+                record
+                for record in records
+                if str(record.get("article_id", ""))
+                and not str(record.get("article_id", "")).startswith("calendar-")
+            ][:500],
         })
 
         type_counts = Counter(
@@ -1020,6 +1061,11 @@ class CardLaboParser:
             ("pokemon", "", ("ポケモン",)),
             ("onepiece", "", ("ワンピース", "onepiece")),
             ("gundam", "", ("ガンダム",)),
+            ("union_arena", "", ("union arena", "ユニオンアリーナ", "ユニアリ")),
+            (
+                "dragon_ball_fusion_world", "",
+                ("ドラゴンボールスーパーカードゲームフュージョンワールド", "dbscgfw"),
+            ),
             ("duelmasters", "", ("デュエマ",)),
             ("weiss", "", ("ヴァイス",)),
             ("mtg", "", ("mtg", "マジックザギャザリング")),
@@ -1078,6 +1124,13 @@ class CardLaboParser:
             "receipt_period": str(record.get("receipt_period", "")),
         }
         if evidence:
+            hit["verification_status"] = "confirmed"
+            hit["confirmed"] = True
+            hit["source_type"] = "OFFICIAL_SHOP_BRANCH"
+            hit["source_evidence"] = [{
+                "source_type": "OFFICIAL_SHOP_BRANCH",
+                "source_url": article_url,
+            }]
             hit["application_url"] = str(
                 record.get("application_url") or article_url
             )
@@ -1105,11 +1158,33 @@ class CardLaboParser:
         candidate: dict[str, Any],
         record: dict[str, Any],
     ) -> bool:
+        candidate_code = cls._match_product_code(
+            candidate.get("product_code", ""),
+            candidate.get("name", ""),
+        )
+        record_code = cls._match_product_code(
+            record.get("product_code", ""),
+            record.get("product_name", ""),
+            record.get("title", ""),
+        )
+        if candidate_code and record_code:
+            return candidate_code == record_code
         candidate_name = cls._match_text(candidate.get("name", ""))
         product_name = cls._match_text(record.get("product_name", ""))
         if not candidate_name or not product_name:
             return False
         if candidate_name == product_name:
+            return True
+        candidate_signature = cls._product_name_signature(candidate_name)
+        product_signature = cls._product_name_signature(product_name)
+        if (
+            len(candidate_signature) >= 4
+            and len(product_signature) >= 4
+            and (
+                candidate_signature in product_signature
+                or product_signature in candidate_signature
+            )
+        ):
             return True
         candidate_terms = {
             term for term in re.findall(r"[a-z0-9一-龠ァ-ヶ]{2,}", candidate_name)
@@ -1123,6 +1198,28 @@ class CardLaboParser:
             1,
             min(2, len(candidate_terms)),
         )
+
+    @staticmethod
+    def _match_product_code(*values: Any) -> str:
+        text = " ".join(str(value or "") for value in values)
+        match = re.search(
+            r"\b(OP|EB|ST|PRB)\s*[-‐‑‒–—ー]?\s*(\d{2,3})\b",
+            text,
+            re.IGNORECASE,
+        )
+        return f"{match.group(1).upper()}-{match.group(2)}" if match else ""
+
+    @staticmethod
+    def _product_name_signature(value: str) -> str:
+        signature = re.sub(
+            r"ポケモンカードゲーム|ワンピースカードゲーム|onepieceカードゲーム|"
+            r"ブースターパック|拡張パック|スタートデッキ|スターターセット|mega",
+            "",
+            value,
+            flags=re.IGNORECASE,
+        )
+        signature = re.sub(r"(?:op|eb|st|prb)\d{2,3}", "", signature, flags=re.IGNORECASE)
+        return signature.replace("の", "")
 
     @classmethod
     def _detect_store(

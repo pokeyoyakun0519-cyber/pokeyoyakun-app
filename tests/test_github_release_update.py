@@ -46,6 +46,9 @@ class VersionTest(unittest.TestCase):
     def test_rc_and_stable_order(self):
         self.assertLess(ReleaseVersion.parse("v1.25.0-rc3"), ReleaseVersion.parse("v1.25.0"))
         self.assertLess(ReleaseVersion.parse("v1.25.0-rc3"), ReleaseVersion.parse("v1.25.0-rc4"))
+        self.assertLess(ReleaseVersion.parse("v1.25.0-rc5"), ReleaseVersion.parse("v1.25.0-rc5.1"))
+        self.assertLess(ReleaseVersion.parse("v1.25.0-rc5.1"), ReleaseVersion.parse("v1.25.0-rc5.2"))
+        self.assertLess(ReleaseVersion.parse("v1.25.0-rc5.2"), ReleaseVersion.parse("v1.25.0-rc6"))
         self.assertLess(ReleaseVersion.parse("v1.25.0"), ReleaseVersion.parse("v1.25.1-rc1"))
 
     def test_invalid_tags_are_rejected(self):
@@ -73,12 +76,101 @@ class UserReleaseTest(unittest.TestCase):
         with patch.object(self.client, "_json", return_value=payload):
             self.assertFalse(self.client.check(allow_prerelease=True)["available"])
 
-    def test_prerelease_requires_tester_setting(self):
+    def test_rc_channel_receives_prerelease_without_extra_opt_in(self):
         payload = [release("v1.25.0-rc4", "PokeyoyaKun_User_Setup_Ver1.25.0_RC4.exe", prerelease=True)]
         with patch.object(self.client, "_json", return_value=payload):
-            self.assertFalse(self.client.check(allow_prerelease=False)["available"])
+            self.assertTrue(self.client.check(allow_prerelease=False)["available"])
         with patch.object(self.client, "_json", return_value=payload):
             self.assertTrue(self.client.check(allow_prerelease=True)["available"])
+
+    def test_stable_channel_does_not_receive_prerelease_without_opt_in(self):
+        client = ReleaseUpdateClient(USER_PROFILE, "v1.24.0")
+        payload = [release(
+            "v1.25.0-rc4",
+            "PokeyoyaKun_User_Setup_Ver1.25.0_RC4.exe",
+            prerelease=True,
+        )]
+        with patch.object(client, "_json", return_value=payload):
+            self.assertFalse(client.check(allow_prerelease=False)["available"])
+        with patch.object(client, "_json", return_value=payload):
+            self.assertTrue(client.check(allow_prerelease=True)["available"])
+
+    def test_rc51_release_and_asset_are_selected(self):
+        client = ReleaseUpdateClient(USER_PROFILE, "v1.25.0-rc5")
+        payload = [release(
+            "v1.25.0-rc5.1",
+            "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1.exe",
+            prerelease=True,
+        )]
+        with patch.object(client, "_json", return_value=payload):
+            result = client.check(allow_prerelease=True)
+        self.assertTrue(result["available"])
+        self.assertEqual("v1.25.0-rc5.1", result["tag"])
+        self.assertEqual(
+            "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1.exe",
+            result["setup_name"],
+        )
+
+    def test_rc51_same_version_and_downgrade_are_not_updates(self):
+        client = ReleaseUpdateClient(USER_PROFILE, "v1.25.0-rc5.1")
+        payload = [
+            release(
+                "v1.25.0-rc5",
+                "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.exe",
+                prerelease=True,
+            ),
+            release(
+                "v1.25.0-rc5.1",
+                "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1.exe",
+                prerelease=True,
+            ),
+        ]
+        with patch.object(client, "_json", return_value=payload):
+            self.assertFalse(client.check(allow_prerelease=True)["available"])
+
+    def test_rc51_updates_to_rc52_and_rc6(self):
+        for tag, name in (
+            ("v1.25.0-rc5.2", "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.2.exe"),
+            ("v1.25.0-rc6", "PokeyoyaKun_User_Setup_Ver1.25.0_RC6.exe"),
+        ):
+            with self.subTest(tag=tag):
+                client = ReleaseUpdateClient(USER_PROFILE, "v1.25.0-rc5.1")
+                with patch.object(
+                    client,
+                    "_json",
+                    return_value=[release(tag, name, prerelease=True)],
+                ):
+                    self.assertTrue(client.check(allow_prerelease=True)["available"])
+
+    def test_test_and_finaltest_installers_are_not_selected(self):
+        client = ReleaseUpdateClient(USER_PROFILE, "v1.25.0-rc5")
+        for name in (
+            "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1_Test.exe",
+            "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1_FinalTest.exe",
+        ):
+            with self.subTest(name=name), patch.object(
+                client,
+                "_json",
+                return_value=[release("v1.25.0-rc5.1", name, prerelease=True)],
+            ):
+                self.assertFalse(client.check(allow_prerelease=True)["available"])
+
+    def test_missing_installer_or_checksum_is_not_offered(self):
+        client = ReleaseUpdateClient(USER_PROFILE, "v1.25.0-rc5")
+        installer = release(
+            "v1.25.0-rc5.1",
+            "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1.exe",
+            prerelease=True,
+        )
+        no_installer = dict(installer, assets=[asset("SHA256SUMS.txt")])
+        no_checksum = dict(installer, assets=[asset(
+            "PokeyoyaKun_User_Setup_Ver1.25.0_RC5.1.exe"
+        )])
+        for payload in (no_installer, no_checksum):
+            with self.subTest(assets=payload["assets"]), patch.object(
+                client, "_json", return_value=[payload]
+            ):
+                self.assertFalse(client.check()["available"])
 
     def test_github_headers_and_release_list_endpoint(self):
         self.assertEqual(
@@ -226,7 +318,8 @@ class PackagingAndGmailTest(unittest.TestCase):
     def test_installers_preserve_data_and_are_edition_specific(self):
         user = (PROJECT_ROOT / "installer" / "PokeyoyaKun_User_Setup.iss").read_text(encoding="utf-8")
         owner = (PROJECT_ROOT / "installer" / "PokeyoyaKun_Owner_Setup.iss").read_text(encoding="utf-8")
-        self.assertIn("PokeyoyaKunUpdater.exe", user)
+        self.assertIn("PokeyoyaKunUpdaterV2.exe", user)
+        self.assertIn('Name: "{app}\\PokeyoyaKunUpdater.exe"', user)
         self.assertNotIn("OwnerUpdater", user)
         self.assertIn("PokeyoyaKunOwnerUpdater.exe", owner)
         for text in (user, owner):

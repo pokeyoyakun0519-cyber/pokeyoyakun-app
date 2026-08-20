@@ -1,21 +1,28 @@
 #define MyAppName "ポケヨヤ君"
-#define MyAppVersion "1.25.0 RC5 User Edition"
+#define MyAppVersion "1.25.0"
 #define MyAppPublisher "PokeyoyaKun Project"
 #define MyAppExeName "ポケヨヤ君.exe"
+#ifndef BuildAppId
+  #define BuildAppId "{{6B791901-293B-4D40-A6D1-F1A5AD1A6BB3}"
+#endif
+#ifndef BuildDefaultGroupName
+  #define BuildDefaultGroupName MyAppName
+#endif
 #ifndef BuildOutputDir
   #define BuildOutputDir "..\release\user_installer_rc5"
 #endif
 #ifndef BuildOutputBaseFilename
-  #define BuildOutputBaseFilename "PokeyoyaKun_User_Setup_Ver1.25.0_RC5"
+  #define BuildOutputBaseFilename "PokeyoyaKun_User_Setup_Ver1.25.0"
 #endif
 
 [Setup]
-AppId={{6B791901-293B-4D40-A6D1-F1A5AD1A6BB3}
+AppId={#BuildAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+VersionInfoVersion=1.25.0.100
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\PokeyoyaKun
-DefaultGroupName={#MyAppName}
+DefaultGroupName={#BuildDefaultGroupName}
 DisableProgramGroupPage=yes
 OutputDir={#BuildOutputDir}
 OutputBaseFilename={#BuildOutputBaseFilename}
@@ -39,7 +46,7 @@ Name: "desktopicon"; Description: "デスクトップにショートカットを
 [Files]
 Source: "..\release\user_dist_rc5\ポケヨヤ君.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist_rc5\ポケヨヤ君_設定.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\release\user_dist_rc5\PokeyoyaKunUpdater.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\user_dist_rc5\PokeyoyaKunUpdaterV2.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist_rc5\release-integrity.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\user_dist_rc5\README.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\release\user_dist_rc5\使用方法.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
@@ -56,3 +63,4 @@ Filename: "{app}\ポケヨヤ君.exe"; Description: "ポケヨヤ君を起動"; 
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\temp"
+Type: files; Name: "{app}\PokeyoyaKunUpdater.exe"

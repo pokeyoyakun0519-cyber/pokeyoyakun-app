@@ -4,7 +4,17 @@ from typing import Any
 
 from core.auto_monitor_manager import AutoMonitorManager
 from core.candidate_manager import CandidateManager
+from core.json_file_state import CorruptJsonError
 from core.site_monitor_sync import SiteMonitorSync
+
+
+def should_show_user_state_warning(
+    result: dict[str, Any], argv: list[str]
+) -> bool:
+    return (
+        bool(result.get("auto_monitor", {}).get("state_updates_disabled"))
+        and "--smoke-test" not in argv
+    )
 
 
 class P2StartupCoordinator:
@@ -19,6 +29,9 @@ class P2StartupCoordinator:
         try:
             candidates = CandidateManager().load_candidates()
             result["auto_monitor"] = AutoMonitorManager().add_due_candidates(candidates)
-        except (OSError, ValueError, TypeError) as error:
-            result["auto_monitor"] = {"error": str(error)}
+        except (OSError, ValueError, TypeError, CorruptJsonError) as error:
+            result["auto_monitor"] = {
+                "error": str(error),
+                "state_updates_disabled": isinstance(error, CorruptJsonError),
+            }
         return result
