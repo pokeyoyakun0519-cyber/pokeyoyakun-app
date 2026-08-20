@@ -11,10 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "app"))
 
 try:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QLineEdit
     from ui.license_dialog import LicenseDialog
 except ModuleNotFoundError:
     QApplication = None
+    QLineEdit = None
     LicenseDialog = None
 
 
@@ -50,7 +51,10 @@ class SubscriptionLicenseDialogTest(unittest.TestCase):
         self.assertTrue(self.dialog.subscription_code.isVisibleTo(self.dialog))
         self.assertFalse(self.dialog.legacy_panel.isVisibleTo(self.dialog))
         self.assertEqual(self.dialog.subscription_code.maxLength(), 6)
-        self.assertEqual(self.dialog.online_key.echoMode(), self.dialog.online_key.Password)
+        self.assertEqual(
+            self.dialog.online_key.echoMode(),
+            QLineEdit.EchoMode.Password,
+        )
 
     def test_legacy_manual_license_remains_available_but_collapsed(self):
         self.dialog.legacy_toggle.click()
