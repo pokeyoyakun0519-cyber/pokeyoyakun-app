@@ -56,6 +56,16 @@ class ApplicationDeadlineReminder:
                     now=current,
                     release_date=str(product.get("release_date", "")),
                 )
+                verification = str(
+                    site.get(
+                        "verification_status",
+                        product.get("verification_status", "confirmed"),
+                    )
+                ).strip().casefold()
+                if verification in {"candidate", "pending", "confirming", "確認中", "rejected"}:
+                    continue
+                if site.get("confirmed") is False or product.get("confirmed") is False:
+                    continue
                 if str(site.get("application_state", "未応募")) != "未応募":
                     continue
                 if str(site.get("result_status", "未確認")) in self.FINAL_RESULTS:

@@ -32,6 +32,17 @@ DEFAULT_CONFIG = {
     },
     "notification": {
         "sound_file": "",
+        "application_events_enabled": True,
+        "tcg": {
+            "pokemon": True,
+            "onepiece": True,
+            "union_arena": True,
+            "dragon_ball_fusion_world": True,
+        },
+        "sales_modes": ["ONLINE", "STORE", "HYBRID"],
+        "prefectures": [],
+        "product_categories": ["CARD", "SUPPLY", "COLLAB_LIMITED"],
+        "suppress_after_applied": True,
     },
     "games": {
         "pokemon": True,
