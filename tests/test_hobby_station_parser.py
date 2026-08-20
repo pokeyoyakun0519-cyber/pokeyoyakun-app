@@ -383,7 +383,7 @@ class HobbyStationParserTest(unittest.TestCase):
         dashboard.change_tracker.root = self.root
         self.assertEqual(
             1,
-            len(dashboard.build(show_ended=True)["rows"]),
+            len(dashboard.build(show_ended=True, now=self.now)["rows"]),
         )
 
         product_only = HobbyStationParser._build_hit(
