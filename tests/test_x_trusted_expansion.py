@@ -183,6 +183,17 @@ class XTrustedExpansionTest(unittest.TestCase):
             self.assertEqual(rows[0]["confirmed_count"], 1)
             self.assertTrue(rows[0]["last_fetch"])
 
+    def test_monitoring_ui_and_refresh_pipeline_are_connected(self):
+        sources_ui = (PROJECT_ROOT / "app" / "ui" / "sources_page.py").read_text(
+            encoding="utf-8"
+        )
+        main_ui = (PROJECT_ROOT / "app" / "ui" / "main_window.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("X信頼アカウント監視", sources_ui)
+        self.assertIn("candidate_count", sources_ui)
+        self.assertIn('x_recent.get("promoted_count")', main_ui)
+
 
 if __name__ == "__main__":
     unittest.main()

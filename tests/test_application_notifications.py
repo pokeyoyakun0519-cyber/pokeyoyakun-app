@@ -134,6 +134,20 @@ class ApplicationNotificationServiceTest(unittest.TestCase):
         )
         self.assertEqual(reminder.collect_due(now=NOW), [])
 
+    def test_settings_ui_preserves_notification_filters(self):
+        source = (PROJECT_ROOT / "app" / "ui" / "settings_page.py").read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            "application_events_enabled",
+            "notification_tcg_checks",
+            "notification_sales_checks",
+            "notification_prefectures",
+            "notification_product_category_checks",
+            '**dict(config.get("notification", {}))',
+        ):
+            self.assertIn(marker, source)
+
 
 if __name__ == "__main__":
     unittest.main()
