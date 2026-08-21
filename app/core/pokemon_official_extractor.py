@@ -259,13 +259,23 @@ class PokemonOfficialExtractor:
         self, html: str, text: str, detail_url: str, source_name: str,
         fallback_date: str,
     ) -> list[dict]:
-        block = re.compile(
+        price_then_date = re.compile(
             r"商品名\s+(?P<name>.*?)\s+希望小売価格\s+"
             r"(?P<price>\d[\d,]*)円.*?発売日\s+"
             r"(?P<year>20\d{2})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日",
             re.DOTALL,
         )
-        matches = list(block.finditer(text))
+        date_then_price = re.compile(
+            r"商品名\s+(?P<name>.*?)\s+発売日\s+"
+            r"(?P<year>20\d{2})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日"
+            r"(?:(?!商品名).)*?"
+            r"希望小売価格\s+(?P<price>\d[\d,]*)円",
+            re.DOTALL,
+        )
+        matches = sorted(
+            [*price_then_date.finditer(text), *date_then_price.finditer(text)],
+            key=lambda match: match.start(),
+        )
         if not matches:
             title = re.split(r"[｜|]", self._meta_content(html, "og:title"), maxsplit=1)[0]
             matches_data = [(title, None, fallback_date)] if title and fallback_date else []

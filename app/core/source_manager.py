@@ -49,6 +49,11 @@ class SourceManager:
             "tcg_key": "pokemon",
         },
         {
+            "name": "ポケモンカードゲーム30周年 商品情報",
+            "url": "https://www.30th.pokemon-card.com/product",
+            "tcg_key": "pokemon",
+        },
+        {
             "name": "ワンピースカードゲーム公式",
             "url": "https://www.onepiece-cardgame.com/products/?view=normal",
             "tcg_key": "onepiece",
@@ -735,12 +740,16 @@ class SourceManager:
         source_url: str,
         source_name: str,
     ) -> tuple[list[dict], int]:
-        catalog = self._fetch_page(self.POKEMON_PRODUCT_API)
         products = []
-        if catalog["ok"]:
-            products = self.pokemon_extractor.extract_catalog_products(
-                catalog["html"], source_name
-            )
+        is_30th_index = (urlparse(source_url).hostname or "").endswith(
+            "30th.pokemon-card.com"
+        )
+        if not is_30th_index:
+            catalog = self._fetch_page(self.POKEMON_PRODUCT_API)
+            if catalog["ok"]:
+                products = self.pokemon_extractor.extract_catalog_products(
+                    catalog["html"], source_name
+                )
 
         candidates = self.pokemon_extractor.collect_candidate_links(
             top_html,
@@ -752,6 +761,7 @@ class SourceManager:
             for item in products
         }
 
+        candidate_urls = {item["url"].rstrip("/") for item in candidates}
         special_queue = []
         for candidate in candidates:
             if "30th.pokemon-card.com/product/" not in candidate["url"]:
@@ -775,7 +785,9 @@ class SourceManager:
                         r"https://www\.30th\.pokemon-card\.com/product/(?:furbox|cardset)",
                         extra.rstrip("/"),
                     ):
-                        special_queue.append(extra.rstrip("/"))
+                        normalized_extra = extra.rstrip("/")
+                        if normalized_extra not in candidate_urls:
+                            special_queue.append(normalized_extra)
 
             for product in found:
                 key = (

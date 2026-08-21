@@ -287,9 +287,9 @@ class ApplicationRow(QFrame):
 
     @staticmethod
     def _sales_mode_label(value: str) -> str:
-        return {"ONLINE": "ネット販売", "STORE": "店舗販売",
-                "HYBRID": "オンライン応募・店舗受取",
-                "UNKNOWN": "販売方式不明"}.get(str(value), "販売方式不明")
+        return {"ONLINE": "🌐 ネット販売", "STORE": "🏪 店舗販売",
+                "HYBRID": "🏪🌐 店舗＋ネット",
+                "UNKNOWN": "販売方法 未確認"}.get(str(value), "販売方法 未確認")
 
     @staticmethod
     def _prefecture_label(value: str) -> str:
@@ -404,10 +404,10 @@ class ApplicationDashboardPage(QFrame):
 
         filter_row.addWidget(QLabel("販売方式："))
         self.sales_mode_filter = QComboBox()
-        for label, value in (("すべて", "all"), ("ネット販売", "ONLINE"),
-                             ("店舗販売", "STORE"),
-                             ("オンライン応募・店舗受取", "HYBRID"),
-                             ("販売方式不明", "UNKNOWN")):
+        for label, value in (("すべて", "all"), ("🌐 ネット販売", "ONLINE"),
+                             ("🏪 店舗販売", "STORE"),
+                             ("🏪🌐 店舗＋ネット", "HYBRID"),
+                             ("販売方法 未確認", "UNKNOWN")):
             self.sales_mode_filter.addItem(label, value)
         self.sales_mode_filter.currentIndexChanged.connect(self._apply_filters)
         filter_row.addWidget(self.sales_mode_filter)

@@ -573,8 +573,14 @@ class SourcesPage(QFrame):
         self.scroll.setWidget(container)
 
     def _reload_x_monitoring(self) -> None:
-        lines = []
-        for item in XMonitoringStatus().rows():
+        monitor = XMonitoringStatus()
+        summary = monitor.summary()
+        lines = [
+            f'X情報 最終更新: {summary.get("last_success") or "未取得"}  /  '
+            f'状態: {summary.get("state", "未設定")}',
+            summary.get("message", ""),
+        ]
+        for item in monitor.rows():
             lines.append(
                 f'{item.get("tcg", "other")}  @{item.get("username", "")}  '
                 f'{item.get("trust_level", "INFO_ACCOUNT")}  '
