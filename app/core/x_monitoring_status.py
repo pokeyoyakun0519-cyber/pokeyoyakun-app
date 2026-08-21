@@ -87,6 +87,8 @@ class XMonitoringStatus:
     @staticmethod
     def _timestamp(value: object) -> str:
         try:
-            return datetime.fromtimestamp(float(value), timezone.utc).isoformat(timespec="seconds")
+            return datetime.fromtimestamp(
+                float(value), timezone.utc
+            ).astimezone().strftime("%Y/%m/%d %H:%M")
         except (TypeError, ValueError, OSError):
             return ""
