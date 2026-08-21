@@ -88,6 +88,36 @@ class OnlineLicenseConfigTest(unittest.TestCase):
         self.assertTrue(loaded["enabled"])
         self.assertEqual(loaded["server_url"], PRODUCTION_URL)
 
+    def test_release_channel_reenables_stale_disabled_runtime_config(self):
+        self.config.path.write_text(
+            json.dumps({
+                "enabled": False,
+                "server_url": "https://license.example.invalid",
+                "timeout_seconds": 10,
+                "offline_grace_hours": 0,
+            }),
+            encoding="utf-8",
+        )
+        loaded = self.config.load()
+        self.assertTrue(loaded["enabled"])
+        self.assertEqual(PRODUCTION_URL, loaded["server_url"])
+        self.assertEqual(10, loaded["timeout_seconds"])
+        self.assertEqual(0, loaded["offline_grace_hours"])
+
+    def test_release_channel_ignores_license_endpoint_environment_overrides(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "POKEYOYA_ONLINE_LICENSE_SERVER_URL": "https://license.example.invalid",
+                "ONLINE_LICENSE_SERVER_URL": "https://license.example.invalid",
+                "SERVER_URL": "https://license.example.invalid",
+            },
+            clear=False,
+        ):
+            loaded = self.config.load()
+        self.assertTrue(loaded["enabled"])
+        self.assertEqual(PRODUCTION_URL, loaded["server_url"])
+
     def test_developer_mode_accepts_only_production_grade_https(self):
         config = OnlineLicenseConfig(ReleaseConfig(channel="dev"))
         config.path = Path(self.temp_dir.name) / "developer-settings.json"

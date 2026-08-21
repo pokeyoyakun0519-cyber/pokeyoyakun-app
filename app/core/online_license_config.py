@@ -117,9 +117,14 @@ class OnlineLicenseConfig:
         endpoint_configured = is_public_endpoint_configured(server_url)
         result["server_url"] = server_url
         result["endpoint_configured"] = endpoint_configured
-        result["enabled"] = bool(
-            result.get("enabled", defaults["enabled"])
-        ) and endpoint_configured
+        if self.release_config.is_development:
+            result["enabled"] = bool(
+                result.get("enabled", defaults["enabled"])
+            ) and endpoint_configured
+        else:
+            # User Editionでは、旧版が保存したenabled=falseや開発用URLを
+            # 本番固定endpointへ合成しない。同梱endpointの検証結果を正とする。
+            result["enabled"] = endpoint_configured
         result["configuration_error"] = (
             ""
             if endpoint_configured
