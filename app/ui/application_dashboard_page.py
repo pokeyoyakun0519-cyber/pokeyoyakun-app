@@ -95,6 +95,7 @@ class ApplicationRow(QFrame):
 
         store_info = QLabel(
             f'店舗：{row.get("site_name", "店舗名未設定")}　'
+            f'受付開始：{row.get("application_start_at") or "未取得"}　'
             f'締切：{row.get("application_end_at") or row.get("application_end") or "未取得"}　'
             f'方式：{self._sales_mode_label(row.get("sales_mode"))}　'
             f'地域：{self._prefecture_label(row.get("prefecture"))}　'
