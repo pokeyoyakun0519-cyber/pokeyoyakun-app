@@ -44,6 +44,7 @@ from core.chain_application_extractors import (
     PlaysApplicationExtractor,
     TsutayaApplicationExtractor,
 )
+from core.bandai_official_applications import BandaiOfficialApplicationMonitor
 
 
 POKEMON_CENTER_LOTTERY_INDEX = (
@@ -347,14 +348,22 @@ class RetailSearchManager:
     def discover_priority_applications(
         self, enabled_tcg_keys: set[str] | None = None
     ) -> list[dict[str, Any]]:
-        enabled = enabled_tcg_keys or {"pokemon", "onepiece"}
+        enabled = enabled_tcg_keys or {
+            "pokemon", "onepiece", "dragon_ball_fusion_world"
+        }
+        discoveries: list[dict[str, Any]] = []
+        if any(tcg in enabled for tcg in {"onepiece", "dragon_ball_fusion_world"}):
+            bandai_monitor = BandaiOfficialApplicationMonitor(self._fetch)
+            discoveries.extend(bandai_monitor.scan(enabled))
+            self.last_diagnostics["bandai_official_applications"] = dict(
+                bandai_monitor.diagnostics
+            )
         if not any(
             plugin.get("id") == "card_labo"
             for tcg in enabled
             for plugin in enabled_plugins_for_tcg(tcg)
         ):
-            return []
-        discoveries: list[dict[str, Any]] = []
+            return discoveries
         for record in self.card_labo.scan():
             if str(record.get("tcg_key", "")) not in enabled:
                 continue
