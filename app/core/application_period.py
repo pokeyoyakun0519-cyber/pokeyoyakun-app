@@ -12,7 +12,7 @@ PERIOD_KEYWORDS = (
 DATE_TOKEN = (
     r"(?:(?P<{p}year>20\d{{2}})年\s*)?"
     r"(?P<{p}month>\d{{1,2}})月\s*(?P<{p}day>\d{{1,2}})日"
-    r"(?:\s*\([^)]*\))?"
+    r"(?:\s*[（(][^）)]*[）)])?"
     r"(?:\s*(?P<{p}hour>\d{{1,2}}):(?P<{p}minute>\d{{2}}))?"
 )
 RANGE_RE = re.compile(
@@ -48,6 +48,7 @@ class ApplicationPeriodParser:
             "target_store": cls._label_value(relevant, ("対象店舗", "受付店舗", "実施店舗")),
             "period_evidence": "",
             "period_unknown": bool(re.search(r"(?:受付|応募|申込)期間\s*[:：]?\s*未定", relevant)),
+            "application_end_time_confirmed": False,
         }
 
         range_match = RANGE_RE.search(relevant)
@@ -62,6 +63,9 @@ class ApplicationPeriodParser:
             if start and end:
                 result["application_start_at"] = start.isoformat()
                 result["application_end_at"] = end.isoformat()
+                result["application_end_time_confirmed"] = bool(
+                    range_match.group("endhour")
+                )
                 result["period_evidence"] = cls._sanitize(range_match.group(0))
 
         if not result["application_end_at"]:
@@ -73,6 +77,9 @@ class ApplicationPeriodParser:
                 end = cls._match_datetime(end_match, "single", current.date(), release, is_end=True)
                 if end:
                     result["application_end_at"] = end.isoformat()
+                    result["application_end_time_confirmed"] = bool(
+                        end_match.group("singlehour")
+                    )
                     result["period_evidence"] = cls._sanitize(end_match.group(0))
 
         if not result["application_start_at"]:
@@ -109,20 +116,62 @@ class ApplicationPeriodParser:
         release_date: str = "",
     ) -> dict[str, Any]:
         enriched = dict(site)
-        parsed = cls.parse(text, now=now, release_date=release_date)
+        evidence_text = str(text or "")
+        raw_end_at = str(site.get("application_end_at") or "").strip()
+        explicit_end = raw_end_at or str(site.get("application_end") or "").strip()
+        valid_timed_end_at = bool(
+            raw_end_at and cls._has_time(raw_end_at) and cls._is_iso_datetime(raw_end_at)
+        )
+        if valid_timed_end_at:
+            enriched.setdefault("application_end_time_confirmed", True)
+        elif explicit_end:
+            evidence_text += "\n応募締切 " + explicit_end
+        parsed = cls.parse(evidence_text, now=now, release_date=release_date)
         for key, value in parsed.items():
+            if key == "application_end_time_confirmed":
+                continue
+            if key == "application_end_at" and valid_timed_end_at:
+                continue
             if value not in ("", False):
                 enriched[key] = value
             elif key not in enriched:
                 enriched[key] = value
+        if parsed.get("application_end_at") and not valid_timed_end_at:
+            enriched["application_end_time_confirmed"] = bool(
+                parsed.get("application_end_time_confirmed")
+            )
+        elif "application_end_time_confirmed" not in enriched:
+            enriched["application_end_time_confirmed"] = False
         enriched.setdefault("period_source", str(site.get("name", "")))
         enriched.setdefault("period_checked_at", (now or datetime.now(JST)).astimezone(JST).isoformat(timespec="seconds"))
         return enriched
 
     @staticmethod
+    def _has_time(value: str) -> bool:
+        return bool(re.search(r"(?:T|\s)\d{1,2}(?::|時)\d{0,2}", str(value)))
+
+    @staticmethod
+    def _is_iso_datetime(value: str) -> bool:
+        try:
+            datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
     def _normalize_notation(text: str) -> str:
         text = re.sub(
-            r"(?:(20\d{2})[./-])?(\d{1,2})[./](\d{1,2})(?:\s*\([^)]*\))?",
+            r"(?<=\d)：(?=\d)",
+            ":",
+            text,
+        )
+        text = re.sub(
+            r"(\d{1,2})時\s*(\d{1,2})分",
+            lambda match: f"{match.group(1)}:{int(match.group(2)):02d}",
+            text,
+        )
+        text = re.sub(
+            r"(?:(20\d{2})(?:年|[./-]))?(\d{1,2})[./-](\d{1,2})(?:\s*[（(][^）)]*[）)])?",
             lambda match: (
                 (match.group(1) + "年" if match.group(1) else "")
                 + match.group(2) + "月" + match.group(3) + "日"
@@ -189,7 +238,7 @@ class ApplicationPeriodParser:
                 continue
             if release:
                 distance = abs((release - candidate).days)
-                if candidate > release + timedelta(days=45) or candidate < release - timedelta(days=400):
+                if candidate > release + timedelta(days=120) or candidate < release - timedelta(days=400):
                     distance += 1000
             else:
                 distance = abs((candidate - current).days)
@@ -239,3 +288,32 @@ class ApplicationPeriodParser:
         clean = re.sub(r"\b[A-Za-z0-9_-]{24,}\b", "[識別情報非保存]", clean)
         clean = re.sub(r"\s+", " ", clean).strip()
         return clean[:300]
+
+
+def normalize_saved_application_period(
+    site: dict[str, Any],
+    *,
+    product: dict[str, Any] | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """旧応募siteを保存変更なしで、読み込み時に再正規化する。"""
+    product = product or {}
+    evidence: list[str] = []
+    application_period = str(site.get("application_period") or "").strip()
+    if application_period:
+        evidence.append("応募期間：" + application_period)
+    order_period = str(site.get("order_period") or "").strip()
+    if order_period:
+        evidence.append("応募期間：" + order_period)
+    period_evidence = str(site.get("period_evidence") or "").strip()
+    if period_evidence:
+        evidence.append(period_evidence)
+    result_date = str(site.get("result_date") or "").strip()
+    if result_date:
+        evidence.append("結果発表：" + result_date)
+    return ApplicationPeriodParser.enrich_site(
+        site,
+        "\n".join(evidence),
+        now=now,
+        release_date=str(product.get("release_date") or ""),
+    )

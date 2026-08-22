@@ -35,7 +35,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             manager = self._manager(directory)
             sources = manager.load_sources()
-            self.assertEqual(len(sources), 9)
+            self.assertEqual(len(sources), 10)
             self.assertEqual(
                 [item["url"] for item in sources],
                 [item["url"] for item in SourceManager.DEFAULT_SOURCES],
@@ -77,7 +77,7 @@ class OfficialSourceManagerTest(unittest.TestCase):
                 json.dumps(existing, ensure_ascii=False), encoding="utf-8"
             )
             sources = manager.load_sources()
-            self.assertEqual(len(sources), 10)
+            self.assertEqual(len(sources), 11)
             custom = next(item for item in sources if item["id"] == "custom")
             pokemon = next(item for item in sources if item["id"] == "pokemon-existing")
             self.assertFalse(custom["enabled"])

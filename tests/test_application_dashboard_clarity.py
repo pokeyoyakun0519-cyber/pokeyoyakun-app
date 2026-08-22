@@ -136,7 +136,7 @@ class DashboardUiTest(unittest.TestCase):
             page.keyword.setText("商品")
             page.period_tabs.setCurrentIndex(1)
             self.assertEqual(0, page.dashboard.build.call_count)
-            self.assertEqual(2, page.filter_panel.layout().count())
+            self.assertEqual(4, page.filter_panel.layout().count())
             page.close()
 
     def test_candidate_card_disables_confirmed_actions_and_details_fold(self):

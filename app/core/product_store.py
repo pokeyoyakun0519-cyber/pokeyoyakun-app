@@ -8,6 +8,7 @@ from typing import Any
 
 from core.plugin_manager import PluginManager
 from core.application_site import normalize_application_site
+from core.application_period import normalize_saved_application_period
 from core.json_file_state import (
     CORRUPT,
     PRODUCT_LIST_FIELDS,
@@ -120,6 +121,9 @@ class ProductStore:
             "raw_count": len(raw_products),
             "normalized_count": len(products),
             "visible_count": len(visible),
+            "normalized_application_deadlines": int(
+                getattr(self, "_load_normalized_deadline_count", 0)
+            ),
             "per_tcg": dict(per_tcg),
             "excluded_products": list(self.last_excluded_products),
             "excluded_retail_offers": list(self.last_excluded_retail_offers),
@@ -615,9 +619,24 @@ class ProductStore:
                     )] += 1
 
         visible_products = []
+        normalized_deadlines = 0
         today = date.today()
 
         for product in products:
+            normalized_sites = []
+            for raw_site in product.get("sites", []):
+                if not isinstance(raw_site, dict):
+                    continue
+                site = normalize_application_site(raw_site, product=product)
+                normalized = normalize_saved_application_period(site, product=product)
+                if (
+                    not str(site.get("application_end_at") or "").strip()
+                    and str(normalized.get("application_end_at") or "").strip()
+                ):
+                    normalized_deadlines += 1
+                normalized_sites.append(normalized)
+            product["sites"] = normalized_sites
+
             if product.get("source_type") == "retail_search":
                 product["sites"] = self._filter_retail_sites(product)
                 if not product["sites"]:
@@ -629,12 +648,6 @@ class ProductStore:
             product["reserved"] = (
                 product.get("id") in reserved_ids
             )
-
-            product["sites"] = [
-                normalize_application_site(site, product=product)
-                for site in product.get("sites", [])
-                if isinstance(site, dict)
-            ]
 
             for site in product.get("sites", []):
                 key = self._site_state_key(
@@ -705,6 +718,7 @@ class ProductStore:
 
             visible_products.append(product)
 
+        self._load_normalized_deadline_count = normalized_deadlines
         return visible_products
 
     def _filter_retail_sites(self, product: dict[str, Any]) -> list[dict[str, Any]]:

@@ -59,7 +59,8 @@ class TcgCategoryTabs(QWidget):
         self.tab_bar.setExpanding(False)
         self.tab_bar.setMovable(False)
         for key in self._keys:
-            self.tab_bar.addTab(self._label(key, 0))
+            index = self.tab_bar.addTab(self._label(key, 0))
+            self.tab_bar.setTabData(index, key)
         self.tab_bar.currentChanged.connect(self._on_current_changed)
         layout.addWidget(self.tab_bar)
 

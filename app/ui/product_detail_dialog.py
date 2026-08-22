@@ -1,24 +1,25 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel,
-    QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox, QDialog, QHBoxLayout, QLabel,
+    QPushButton, QVBoxLayout,
 )
 
 from core.favorites_manager import FavoritesManager
 from core.product_image_cache import ProductImageCache
+# Kept as an import-compatible seam for existing extensions/tests; store data is
+# intentionally no longer rendered in this product-only dialog.
 from core.site_master_manager import SiteMasterManager
 from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import display_name
 
 
 class ProductDetailDialog(QDialog):
-    """商品1件の詳細と、販売サイトごとの条件を表示する画面。"""
+    """商品そのものの公式情報を表示する画面。"""
 
     def __init__(self, product: dict, parent=None):
         super().__init__(parent)
         self.product = product
-        self.site_master = SiteMasterManager()
         self.favorites = FavoritesManager()
         self.image_cache = ProductImageCache()
 
@@ -80,26 +81,17 @@ class ProductDetailDialog(QDialog):
         flags.addWidget(reserved); flags.addWidget(favorite); flags.addStretch()
         root.addLayout(flags)
 
-        section = QLabel("販売サイト")
-        section.setObjectName("SectionTitle")
-        root.addWidget(section)
-
-        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
-        container = QWidget(); list_layout = QVBoxLayout(container)
-        list_layout.setContentsMargins(0, 0, 0, 0); list_layout.setSpacing(12)
-
-        site_master_map = {site.get("id"): site for site in self.site_master.load_sites()}
-        product_sites = self.product.get("sites", [])
-        if not product_sites:
-            empty = QLabel("販売サイト情報はまだありません。")
-            empty.setAlignment(Qt.AlignCenter); empty.setObjectName("MutedText")
-            list_layout.addWidget(empty)
-        else:
-            for site in product_sites:
-                master = site_master_map.get(site.get("site_key", ""), {})
-                list_layout.addWidget(self._make_site_card(site, master))
-
-        list_layout.addStretch(); scroll.setWidget(container); root.addWidget(scroll, 1)
+        official_url = str(self.product.get("official_url", ""))
+        official_button = QPushButton("公式商品ページを開く")
+        official_button.setObjectName("AccentButton")
+        official_button.setEnabled(can_open_product_url(official_url))
+        official_button.clicked.connect(lambda: open_product_url(official_url))
+        root.addWidget(official_button)
+        note = QLabel("店舗ごとの抽選・予約・販売情報は「応募ダッシュボード」で確認できます。")
+        note.setObjectName("MutedText")
+        note.setWordWrap(True)
+        root.addWidget(note)
+        root.addStretch(1)
         close_row = QHBoxLayout(); close_row.addStretch()
         close_button = QPushButton("閉じる"); close_button.clicked.connect(self.accept)
         close_row.addWidget(close_button); root.addLayout(close_row)
@@ -124,48 +116,6 @@ class ProductDetailDialog(QDialog):
         pixmap = QPixmap(str(path))
         if not pixmap.isNull():
             self.image_label.setPixmap(pixmap.scaled(360, 240, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-
-    def _make_site_card(self, site: dict, master: dict) -> QFrame:
-        card = QFrame(); card.setObjectName("ProductCard")
-        layout = QVBoxLayout(card); layout.setContentsMargins(16, 14, 16, 14); layout.setSpacing(8)
-        header = QHBoxLayout()
-        name = QLabel(site.get("name", master.get("name", "サイト名未設定"))); name.setObjectName("ProductName")
-        status_text = site.get("status", "状態不明")
-        status = QLabel(status_text); status.setObjectName(self._status_object_name(status_text))
-        url = site.get("url", "")
-        open_button = QPushButton("商品ページを開く"); open_button.setObjectName("SmallButton")
-        open_button.setEnabled(can_open_product_url(url)); open_button.clicked.connect(lambda: open_product_url(url))
-        header.addWidget(name); header.addStretch(); header.addWidget(status); header.addWidget(open_button)
-        layout.addLayout(header)
-
-        reference_price = self.product.get("reference_price") or self.product.get("msrp")
-        sale_price = site.get("sale_price")
-        price = QLabel(
-            (f"定価：{int(reference_price):,}円" if isinstance(reference_price, (int, float)) and reference_price > 0 else "定価：価格未確認")
-            + "　"
-            + (f"販売価格：{int(sale_price):,}円" if isinstance(sale_price, (int, float)) and sale_price > 0 else "販売価格：価格未確認")
-            + "　販売元：" + str(site.get("seller", "未確認"))
-        )
-        price.setObjectName("MutedText")
-        layout.addWidget(price)
-
-        sales_type = master.get("sales_type")
-        if sales_type:
-            sales_label = QLabel(f"販売方式：{sales_type}"); sales_label.setObjectName("MutedText"); layout.addWidget(sales_label)
-
-        warnings = []
-        if master.get("purchase_history_required"):
-            warnings.append("※注意※ 購入履歴が必要な場合があります。")
-        if master.get("membership_required"):
-            warnings.append("※注意※ 会員登録が必要です。")
-        if master.get("notes", "").strip():
-            warnings.append(f'※注意※ {master.get("notes").strip()}')
-        if site.get("notice", "").strip():
-            warnings.append(site.get("notice").strip())
-        if warnings:
-            warning = QLabel("\n".join(warnings)); warning.setObjectName("WarningText"); warning.setWordWrap(True)
-            layout.addWidget(warning)
-        return card
 
     @staticmethod
     def _status_object_name(status: str) -> str:

@@ -5,6 +5,12 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from core.application_status import JST, parse_jst_datetime
+from core.application_filters import (
+    is_deadline_soon,
+    region_for_prefecture,
+    stable_store_key,
+)
+from core.application_site import sales_mode_from_evidence
 from core.config_manager import ConfigManager
 from core.product_categories import normalize_product_category
 from core.tcg_categories import normalize_key
@@ -27,7 +33,12 @@ class ApplicationNotificationService:
         now: datetime | None = None,
     ) -> list[dict[str, Any]]:
         current = self._as_jst(now or datetime.now(JST))
-        settings = self.config_manager.load().get("notification", {})
+        config = self.config_manager.load()
+        settings = dict(config.get("notification", {}))
+        settings.setdefault(
+            "favorite_stores",
+            config.get("application_assistant", {}).get("favorite_stores", []),
+        )
         if not settings.get("application_events_enabled", True):
             return []
         events: list[dict[str, Any]] = []
@@ -41,10 +52,17 @@ class ApplicationNotificationService:
                     continue
                 sales_mode = self._sales_mode(site)
                 prefecture = str(site.get("prefecture", "")).strip() or "UNKNOWN"
-                if not self._matches(settings, tcg_key, sales_mode, prefecture, category):
-                    continue
                 detected_at = self._event_time(product, site)
                 if detected_at is None or current - detected_at > self.RECENT_WINDOW:
+                    continue
+                region = region_for_prefecture(prefecture)
+                store_key = stable_store_key(site)
+                if not self._matches(
+                    settings, tcg_key, sales_mode, prefecture, category,
+                    region=region, store_key=store_key,
+                    is_new=current - detected_at <= timedelta(hours=24),
+                    deadline_soon=is_deadline_soon(site, now=current),
+                ):
                     continue
                 event_type = self._event_type(site)
                 application_id = self._application_id(product, site)
@@ -68,6 +86,8 @@ class ApplicationNotificationService:
                         "site_name": str(site.get("name", "店舗名未設定")),
                         "sales_mode": sales_mode,
                         "prefecture": prefecture,
+                        "region": region,
+                        "store_key": store_key,
                         "application_url": str(site.get("application_url") or site.get("url") or ""),
                         "detected_at": detected_at.isoformat(),
                     }
@@ -100,15 +120,33 @@ class ApplicationNotificationService:
         sales_mode: str,
         prefecture: str,
         category: str,
+        *,
+        region: str,
+        store_key: str,
+        is_new: bool,
+        deadline_soon: bool,
     ) -> bool:
         tcg_settings = settings.get("tcg", {})
         if isinstance(tcg_settings, dict) and not tcg_settings.get(tcg_key, True):
             return False
         sales_modes = settings.get("sales_modes", [])
-        if sales_modes and sales_mode not in sales_modes:
+        sales_match = sales_mode in sales_modes or (
+            sales_mode == "HYBRID" and bool({"ONLINE", "STORE"} & set(sales_modes))
+        )
+        if sales_modes and not sales_match:
             return False
         prefectures = settings.get("prefectures", [])
         if prefectures and prefecture not in prefectures:
+            return False
+        regions = settings.get("regions", [])
+        if regions and region not in regions:
+            return False
+        favorite_stores = settings.get("favorite_stores", [])
+        if settings.get("favorite_store_only", False) and store_key not in favorite_stores:
+            return False
+        if settings.get("new_only", False) and not is_new:
+            return False
+        if settings.get("deadline_soon_only", False) and not deadline_soon:
             return False
         categories = settings.get("product_categories", [])
         return not categories or category in categories
@@ -164,8 +202,7 @@ class ApplicationNotificationService:
 
     @staticmethod
     def _sales_mode(site: dict[str, Any]) -> str:
-        value = str(site.get("sales_mode") or site.get("sales_method_hint") or "UNKNOWN").upper()
-        return value if value in {"ONLINE", "STORE", "HYBRID", "UNKNOWN"} else "UNKNOWN"
+        return sales_mode_from_evidence(site)
 
     @staticmethod
     def _as_jst(value: datetime) -> datetime:

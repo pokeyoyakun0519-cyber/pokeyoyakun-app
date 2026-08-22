@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.tcg_categories import display_name, normalize_key
+from core.application_filters import canonical_application_url
 
 
 _APPLICATION_STATUS = re.compile(
@@ -23,10 +25,21 @@ _TRACKING_QUERY_KEYS = {
 }
 _STRONG_APPLICATION_FIELDS = (
     "application_period", "order_period", "application_start_at",
-    "application_end_at", "result_announcement_at", "result_date",
+    "application_end", "application_end_at", "result_announcement_at", "result_date",
 )
 _CONTEXTUAL_APPLICATION_FIELDS = (
     "purchase_period", "receipt_period", "target_store", "target_stores",
+)
+_SALES_MODES = {"ONLINE", "STORE", "HYBRID", "UNKNOWN"}
+_ONLINE_SALES_EVIDENCE = re.compile(
+    r"(?:web|online|オンライン|ネット(?:応募|抽選|受付|販売)|"
+    r"ウェブ|応募フォーム|公式アプリ|アプリ受付|通販|(?<![a-z])ec(?![a-z]))",
+    re.IGNORECASE,
+)
+_STORE_SALES_EVIDENCE = re.compile(
+    r"(?:店頭|店舗(?:受付|抽選|販売|購入|受取)|受取店舗|店舗へ来店|"
+    r"店舗にて|店頭で|Loppi)",
+    re.IGNORECASE,
 )
 
 
@@ -108,6 +121,60 @@ def has_application_evidence(site: dict[str, Any]) -> bool:
     return _has_independent_application_evidence(site)
 
 
+def sales_mode_from_evidence(site: dict[str, Any]) -> str:
+    """明示された販売・応募経路だけから販売方式を返す。"""
+    aliases = {
+        "PHYSICAL": "STORE",
+        "CHAIN": "STORE",
+        "WEB": "ONLINE",
+        "EC": "ONLINE",
+    }
+    for key in ("sales_mode", "sales_method_hint", "channel"):
+        direct = str(site.get(key) or "").strip().upper()
+        direct = aliases.get(direct, direct)
+        if direct in _SALES_MODES and direct != "UNKNOWN":
+            return direct
+
+    values: list[str] = []
+    for key in (
+        "application_method", "application_conditions", "conditions",
+        "notice", "period_evidence", "sales_type", "sales_method_hint", "channel",
+    ):
+        value = site.get(key)
+        if isinstance(value, (list, tuple, set)):
+            values.extend(str(item) for item in value)
+        elif value:
+            values.append(str(value))
+    text = unicodedata.normalize("NFKC", " ".join(values))
+    online = bool(_ONLINE_SALES_EVIDENCE.search(text))
+    store = bool(_STORE_SALES_EVIDENCE.search(text))
+
+    application_url = str(site.get("application_url") or "").strip()
+    try:
+        host = (urlsplit(application_url).hostname or "").casefold()
+    except ValueError:
+        host = ""
+    if any(marker in host for marker in (
+        "pokemoncenter-online", "p-bandai.jp", "premium-bandai",
+    )):
+        online = True
+
+    target_store = bool(site.get("target_store") or site.get("target_stores"))
+    branch_source = str(site.get("source_type") or "").strip().upper() in {
+        "OFFICIAL_SHOP_BRANCH", "OFFICIAL_STORE_PAGE",
+    }
+    if target_store and branch_source:
+        store = True
+
+    if online and store:
+        return "HYBRID"
+    if online:
+        return "ONLINE"
+    if store:
+        return "STORE"
+    return "UNKNOWN"
+
+
 def normalize_application_site(
     site: dict[str, Any],
     *,
@@ -123,6 +190,7 @@ def normalize_application_site(
     )[0]
     normalized["tcg_key"] = tcg_key
     normalized["tcg"] = display_name(tcg_key)
+    normalized["sales_mode"] = sales_mode_from_evidence(normalized)
 
     # 旧実装が商品URLを応募URLへコピーした値は、応募固有の根拠がなければ
     # 応募判定より先にメモリ上だけで除去する。
@@ -141,4 +209,41 @@ def normalize_application_site(
         application_url = str(normalized.get("application_url", "")).strip()
         if not application_url and related_url:
             normalized["application_url"] = related_url
+        normalized["canonical_application_url"] = canonical_application_url(
+            normalized.get("application_url")
+        )
     return normalized
+
+
+def expand_application_branches(site: dict[str, Any]) -> list[dict[str, Any]]:
+    """親ページの明示的な店舗明細を、保存値を推測せず支店別に展開する。"""
+    details = site.get("target_store_details") or site.get("branches")
+    if not isinstance(details, list) or not details:
+        return [dict(site)]
+    output: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw in details:
+        if not isinstance(raw, dict):
+            continue
+        branch = str(raw.get("branch") or raw.get("name") or "").strip()
+        if not branch:
+            continue
+        prefecture = str(raw.get("prefecture") or "UNKNOWN").strip() or "UNKNOWN"
+        city = str(raw.get("city") or "").strip()
+        key = (branch.casefold(), prefecture, city.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        item = dict(site)
+        item.update({
+            "branch": branch,
+            "name": str(raw.get("display_name") or branch),
+            "prefecture": prefecture,
+            "city": city,
+            "address": str(raw.get("address") or "").strip(),
+            "location_source": str(raw.get("location_source") or "official_target_store"),
+        })
+        if raw.get("application_url"):
+            item["application_url"] = str(raw["application_url"])
+        output.append(item)
+    return output or [dict(site)]

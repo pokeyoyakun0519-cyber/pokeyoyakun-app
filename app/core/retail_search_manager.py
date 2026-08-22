@@ -2,6 +2,7 @@ import json
 import re
 import urllib.error
 import urllib.parse
+import urllib.robotparser
 import urllib.request
 from datetime import datetime
 from html import unescape
@@ -27,6 +28,25 @@ from core.secure_https import build_https_opener
 from core.store_candidate_manager import StoreCandidateManager
 from core.store_discovery import StoreDiscovery
 from core.tcg_categories import normalize_key
+from core.web_application_sources import WebApplicationSourceRegistry
+from core.nyuka_now_discovery import (
+    NyukaNowDiscovery,
+    OfficialVerificationQueue,
+    discovery_source_diagnostics,
+)
+from core.runtime_paths import app_root
+from core.chain_application_extractors import (
+    BandaiOfficialShopApplicationExtractor,
+    BatorocoApplicationExtractor,
+    BookoffApplicationExtractor,
+    CardboxApplicationExtractor,
+    FuruichiApplicationExtractor,
+    OtakarasoukoApplicationExtractor,
+    PlaysApplicationExtractor,
+    TsutayaApplicationExtractor,
+)
+from core.bandai_official_applications import BandaiOfficialApplicationMonitor
+from core.nationwide_web_monitor import NationwideWebApplicationMonitor
 
 
 POKEMON_CENTER_LOTTERY_INDEX = (
@@ -43,6 +63,18 @@ POKEMON_CENTER_CARD_INDEX = (
 
 YODOBASHI_LOTTERY = "https://limited.yodobashi.com/"
 YODOBASHI_SEARCH = "https://www.yodobashi.com/?word={query}"
+
+
+def _ascii_safe_url(url: str) -> str:
+    """Encode non-ASCII URL components without double-encoding escapes."""
+    parts = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit((
+        parts.scheme,
+        parts.netloc,
+        urllib.parse.quote(parts.path, safe="/%:@"),
+        urllib.parse.quote(parts.query, safe="=&%:@/?+;,"),
+        urllib.parse.quote(parts.fragment, safe="=&%:@/?+;,"),
+    ))
 
 
 class _LinkParser(HTMLParser):
@@ -116,7 +148,43 @@ class RetailSearchManager:
         self.premium_bandai = PremiumBandaiApplicationAdapter()
         self.store_candidates = StoreCandidateManager()
         self.store_discovery = StoreDiscovery(self.store_candidates)
+        self.web_source_registry = WebApplicationSourceRegistry()
+        self.nyuka_now_discovery = NyukaNowDiscovery(app_root())
+        self.official_verification_queue = OfficialVerificationQueue()
+        self.chain_application_extractors = {
+            "batoroco": BatorocoApplicationExtractor(),
+            "plays": PlaysApplicationExtractor(),
+            "otakarasouko": OtakarasoukoApplicationExtractor(),
+            "cardbox": CardboxApplicationExtractor(),
+            "tsutaya": TsutayaApplicationExtractor(),
+            "furuichi": FuruichiApplicationExtractor(),
+            "bookoff": BookoffApplicationExtractor(),
+            "bandai_official_shop": BandaiOfficialShopApplicationExtractor(),
+        }
+        self._robots_cache: dict[str, bool] = {}
         self.last_diagnostics: dict[str, Any] = {}
+
+    def discover_web_application_candidates(self) -> dict[str, Any]:
+        """Discover and persist candidates without adding them to the dashboard."""
+        candidates = self.nyuka_now_discovery.poll_and_store()
+        queued = self.official_verification_queue.enqueue(candidates)
+        diagnostics = self.nyuka_now_discovery.diagnostics()
+        diagnostics.update({
+            "verification_queue_size": len(queued),
+            "verification_priority": {
+                level: sum(
+                    1 for item in queued
+                    if item.get("verification_priority") == level
+                )
+                for level in ("HIGH", "NORMAL", "LOW")
+            },
+            **self.official_verification_queue.diagnostics(),
+        })
+        return {
+            "candidates": candidates,
+            "queue": queued,
+            "diagnostics": diagnostics,
+        }
 
     def search_candidate(
         self,
@@ -270,6 +338,11 @@ class RetailSearchManager:
             "excluded_count": len(excluded),
             "new_store_candidate_count": new_store_candidates,
             "new_candidate_count": new_store_candidates,
+            "web_source_inventory": self.web_source_registry.diagnostics(),
+            "discovery_source_inventory": discovery_source_diagnostics(
+                self.web_source_registry.diagnostics()["total_sources"]
+            ),
+            "available_chain_extractors": sorted(self.chain_application_extractors),
             **discovery,
             "excluded_reasons": excluded,
             "checked_at": datetime.now().isoformat(timespec="seconds"),
@@ -290,25 +363,171 @@ class RetailSearchManager:
     def discover_priority_applications(
         self, enabled_tcg_keys: set[str] | None = None
     ) -> list[dict[str, Any]]:
-        enabled = enabled_tcg_keys or {"pokemon", "onepiece"}
-        if not any(
+        enabled = enabled_tcg_keys or {
+            "pokemon", "onepiece", "dragon_ball_fusion_world"
+        }
+        discoveries: list[dict[str, Any]] = []
+        external_results: dict[str, dict[str, Any]] = {}
+        if any(tcg in enabled for tcg in {"onepiece", "dragon_ball_fusion_world"}):
+            bandai_monitor = BandaiOfficialApplicationMonitor(self._fetch)
+            bandai_discoveries = bandai_monitor.scan(enabled)
+            discoveries.extend(bandai_discoveries)
+            self.last_diagnostics["bandai_official_applications"] = dict(
+                bandai_monitor.diagnostics
+            )
+            bandai_confirmed = sum(
+                str(item.get("hit", {}).get("verification_status")) == "confirmed"
+                for item in bandai_discoveries
+            )
+            external_results["bandai_official_shop"] = {
+                "checked": True,
+                "success": not bool(bandai_monitor.diagnostics.get("failed_pages")),
+                "candidate": len(bandai_discoveries),
+                "official_verified": bandai_confirmed,
+                "confirmed": bandai_confirmed,
+                "ended": sum(
+                    str(item.get("record", {}).get("status")) == "終了済み"
+                    for item in bandai_discoveries
+                ),
+                "discoveries": bandai_discoveries,
+            }
+        card_labo_enabled = any(
             plugin.get("id") == "card_labo"
             for tcg in enabled
             for plugin in enabled_plugins_for_tcg(tcg)
-        ):
-            return []
-        discoveries: list[dict[str, Any]] = []
-        for record in self.card_labo.scan():
+        )
+        if card_labo_enabled:
+            records = self.card_labo.scan()
+            card_discoveries = self._adapter_discoveries(
+                records, enabled, self.card_labo._build_hit,
+                application_types=self.card_labo.APPLICATION_TYPES,
+            )
+            discoveries.extend(card_discoveries)
+            external_results["card_labo"] = self._adapter_outcome(
+                records, card_discoveries, self.card_labo.last_diagnostics
+            )
+        hobby_enabled = any(
+            plugin.get("id") == "hobby_station"
+            for tcg in enabled
+            for plugin in enabled_plugins_for_tcg(tcg)
+        )
+        if hobby_enabled:
+            records = self.hobby_station.scan()
+            hobby_discoveries = self._adapter_discoveries(
+                records, enabled, self.hobby_station._build_hit,
+                application_types={"application"},
+            )
+            discoveries.extend(hobby_discoveries)
+            external_results["hobby_station"] = self._adapter_outcome(
+                records, hobby_discoveries, self.hobby_station.last_diagnostics
+            )
+        nationwide = NationwideWebApplicationMonitor(
+            self._fetch,
+            registry=self.web_source_registry,
+            robots_allowed=self._robots_allowed,
+        )
+        nationwide_discoveries = nationwide.scan(
+            enabled, external_results=external_results
+        )
+        known = {
+            (
+                str(item.get("record", {}).get("article_url", "")),
+                str(item.get("hit", {}).get("site_key", "")),
+            )
+            for item in discoveries
+        }
+        discoveries.extend(
+            item for item in nationwide_discoveries
+            if (
+                str(item.get("record", {}).get("article_url", "")),
+                str(item.get("hit", {}).get("site_key", "")),
+            ) not in known
+        )
+        self.last_diagnostics["nationwide_web_monitor"] = nationwide.diagnostics
+        return discoveries
+
+    @staticmethod
+    def _adapter_discoveries(
+        records: list[dict[str, Any]],
+        enabled: set[str],
+        build_hit,
+        *,
+        application_types: set[str],
+    ) -> list[dict[str, Any]]:
+        output: list[dict[str, Any]] = []
+        for record in records:
             if str(record.get("tcg_key", "")) not in enabled:
                 continue
-            if record.get("article_type") not in self.card_labo.APPLICATION_TYPES:
+            if str(record.get("article_type", "")) not in application_types:
                 continue
-            if not record.get("application_evidence") or record.get("status") == "終了済み":
+            if not record.get("application_evidence"):
                 continue
-            hit = self.card_labo._build_hit(record)
+            hit = build_hit(record)
             if hit:
-                discoveries.append({"record": dict(record), "hit": hit})
-        return discoveries
+                output.append({"record": dict(record), "hit": hit})
+        return output
+
+    @staticmethod
+    def _adapter_outcome(
+        records: list[dict[str, Any]],
+        discoveries: list[dict[str, Any]],
+        diagnostics: dict[str, Any],
+    ) -> dict[str, Any]:
+        confirmed = sum(
+            str(item.get("hit", {}).get("verification_status")) == "confirmed"
+            for item in discoveries
+        )
+        failures = int(diagnostics.get("http_failure_count", 0))
+        return {
+            "checked": True,
+            "success": failures == 0,
+            "candidate": len(discoveries),
+            "official_verified": confirmed,
+            "confirmed": confirmed,
+            "ended": sum(
+                NationwideWebApplicationMonitor._discovery_ended(item)
+                for item in discoveries
+            ),
+            "parent_urls_checked": 1,
+            "status": "HTTP_ERROR" if failures else (
+                "OK" if discoveries else "NO_CURRENT_APPLICATION"
+            ),
+            "error_code": "HTTP_ERROR" if failures else "",
+            "error_message": f"HTTP failure {failures}" if failures else "",
+            "discoveries": discoveries,
+        }
+
+    def _robots_allowed(self, url: str) -> bool:
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not parsed.hostname:
+            return False
+        origin = f"https://{parsed.netloc.casefold()}"
+        if origin in self._robots_cache:
+            return self._robots_cache[origin]
+        robots_url = origin + "/robots.txt"
+        request = urllib.request.Request(
+            robots_url, headers={"User-Agent": self.USER_AGENT}
+        )
+        try:
+            with build_https_opener().open(request, timeout=10) as response:
+                final = urlparse(response.geturl())
+                if final.scheme != "https" or final.hostname != parsed.hostname:
+                    allowed = False
+                else:
+                    raw = response.read(500_000)
+                    text = raw.decode(
+                        response.headers.get_content_charset() or "utf-8",
+                        errors="replace",
+                    )
+                    parser = urllib.robotparser.RobotFileParser(robots_url)
+                    parser.parse(text.splitlines())
+                    allowed = parser.can_fetch(self.USER_AGENT, url)
+        except urllib.error.HTTPError as error:
+            allowed = error.code == 404
+        except Exception:
+            allowed = False
+        self._robots_cache[origin] = allowed
+        return allowed
 
     def _search_pokemon_center(
         self,
@@ -610,7 +829,7 @@ class RetailSearchManager:
             return {"ok": False, "html": "", "status": "HTTPS以外を拒否"}
 
         request = urllib.request.Request(
-            url,
+            _ascii_safe_url(url),
             headers={
                 "User-Agent": self.USER_AGENT,
                 "Accept-Language": (

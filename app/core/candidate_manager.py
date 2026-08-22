@@ -505,16 +505,24 @@ class CandidateManager:
             else:
                 name = str(record.get("product_name", "")).strip()
                 tcg_key = normalize_key(record.get("tcg_key"), record.get("tcg"))[0]
-                if not name or tcg_key not in {"pokemon", "onepiece"}:
+                if not name or tcg_key not in {
+                    "pokemon", "onepiece", "dragon_ball_fusion_world"
+                }:
                     continue
+                source_id = str(
+                    record.get("source_id") or "official_application"
+                )
+                source_name = str(
+                    record.get("source_name") or "公式応募ページ"
+                )
                 signature = re.sub(r"[^a-z0-9ぁ-んァ-ヶ一-龠]", "", name.casefold())
                 digest = hashlib.sha256(
-                    f"card_labo|{tcg_key}|{signature}".encode("utf-8")
+                    f"{source_id}|{tcg_key}|{signature}".encode("utf-8")
                 ).hexdigest()[:16]
                 candidate = {
                     "id": f"application_{digest}",
-                    "source_id": "card_labo_application",
-                    "source_name": "カードラボ公式応募記事",
+                    "source_id": source_id,
+                    "source_name": source_name,
                     "source_url": str(record.get("article_url", "")),
                     "official_url": str(record.get("article_url", "")),
                     "name": name,
@@ -527,7 +535,7 @@ class CandidateManager:
                     "approved": False,
                     "last_searched": "",
                     "retail_hits": [],
-                    "search_message": "専用Adapterが公式応募記事を検出",
+                    "search_message": "公式Web Adapterが応募記事を検出",
                     "search_diagnostics": {},
                     "created_at": datetime.now().isoformat(timespec="seconds"),
                 }
