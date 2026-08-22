@@ -265,7 +265,7 @@ class SourcesPage(QFrame):
         x_card = QFrame()
         x_card.setObjectName("SettingsCard")
         x_layout = QVBoxLayout(x_card)
-        x_title = QLabel("X信頼アカウント監視")
+        x_title = QLabel("SNS情報監視")
         x_title.setObjectName("SectionTitle")
         self.x_monitoring_summary = QLabel("")
         self.x_monitoring_summary.setObjectName("MutedText")
@@ -576,19 +576,9 @@ class SourcesPage(QFrame):
         monitor = XMonitoringStatus()
         summary = monitor.summary()
         lines = [
-            f'X情報 最終更新: {summary.get("last_success") or "未取得"}  /  '
+            f'SNS情報 最終更新: {summary.get("last_success") or "未取得"}  /  '
             f'状態: {summary.get("state", "未設定")}',
+            "SNS情報監視は補助情報源です。応募の確定には公式Webの根拠を使用します。",
             summary.get("message", ""),
         ]
-        for item in monitor.rows():
-            lines.append(
-                f'{item.get("tcg", "other")}  @{item.get("username", "")}  '
-                f'{item.get("trust_level", "INFO_ACCOUNT")}  '
-                f'{"有効" if item.get("enabled", True) else "無効"}  '
-                f'最終取得:{item.get("last_fetch") or "未取得"}  '
-                f'最終検知:{item.get("last_post_detected") or "未検知"}  '
-                f'candidate:{item.get("candidate_count", 0)}  '
-                f'confirmed:{item.get("confirmed_count", 0)}  '
-                f'error:{item.get("error") or "なし"}'
-            )
-        self.x_monitoring_summary.setText("\n".join(lines) or "監視アカウント未設定")
+        self.x_monitoring_summary.setText("\n".join(lines) or "SNS監視は未設定です")

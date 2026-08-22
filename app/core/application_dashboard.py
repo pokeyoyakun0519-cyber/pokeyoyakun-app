@@ -4,9 +4,18 @@ from typing import Any
 
 from core.application_period import ApplicationPeriodParser
 from core.application_site import (
+    expand_application_branches,
     has_application_evidence,
     normalize_application_site,
     sales_mode_from_evidence,
+)
+from core.application_filters import (
+    application_identity,
+    deadline_state,
+    is_deadline_soon,
+    region_for_prefecture,
+    sales_channel_matches,
+    stable_store_key,
 )
 from core.application_change_tracker import ApplicationChangeTracker
 from core.application_condition_detector import ApplicationConditionDetector
@@ -65,19 +74,25 @@ class ApplicationDashboard:
                 product_tcg_key, Counter()
             )
             product_diagnostics["loaded_products"] += 1
-            for site in product.get("sites", []):
+            normalized_sites = []
+            for raw_site in product.get("sites", []):
                 diagnostics["loaded_sites"] += 1
                 product_diagnostics["loaded_sites"] += 1
                 site = ApplicationPeriodParser().enrich_site(
-                    dict(site),
+                    dict(raw_site),
                     "\n".join(
-                        str(site.get(key, ""))
+                        str(raw_site.get(key, ""))
                         for key in ("application_period", "order_period", "result_date")
-                        if site.get(key)
+                        if raw_site.get(key)
                     ),
                     release_date=str(product.get("release_date", "")),
                 )
                 site = normalize_application_site(site, product=product)
+                normalized_sites.extend(expand_application_branches(site))
+            diagnostics["expanded_branch_rows"] += max(
+                0, len(normalized_sites) - len(product.get("sites", []))
+            )
+            for site in normalized_sites:
                 if not has_application_evidence(site):
                     diagnostics["excluded_no_application_evidence"] += 1
                     product_diagnostics["excluded_no_application_evidence"] += 1
@@ -190,7 +205,7 @@ class ApplicationDashboard:
                         or site.get("created_at")
                         or site.get("detected_at")
                         or site.get("application_start_at"),
-                        now=now,
+                        now=now, days=1,
                     ),
                     "application_end_at": site.get("application_end_at", ""),
                     "result_announcement_at": site.get("result_announcement_at", ""),
@@ -223,10 +238,17 @@ class ApplicationDashboard:
                 row["is_candidate"] = str(row["verification_status"]).casefold() in {
                     "candidate", "pending", "confirming", "確認中",
                 } or ("confirmed" in site and site.get("confirmed") is False)
+                row["region"] = region_for_prefecture(row["prefecture"])
+                row["store_key"] = stable_store_key(row)
+                row["deadline_state"] = deadline_state(row, now=now)
+                row["deadline_soon"] = is_deadline_soon(row)
                 rows.append(row)
                 if row["period_ended"]:
                     row_diagnostics["ended_rows"] += 1
 
+        before_dedupe = len(rows)
+        rows = self._dedupe_rows(rows)
+        diagnostics["duplicate_rows_merged"] = before_dedupe - len(rows)
         eligible_rows = []
         for row in rows:
             if row["period_ended"]:
@@ -331,6 +353,11 @@ class ApplicationDashboard:
         state_filter: str = "すべて", keyword: str = "", tcg_filter: str = "all",
         sales_mode_filter: str = "all", prefecture_filter: str = "all",
         product_category_filter: str = "all",
+        sales_channel_filter: str = "all", region_filter: str = "all",
+        favorites_filter: str = "all",
+        favorite_prefectures: set[str] | None = None,
+        favorite_store_keys: set[str] | None = None,
+        new_only: bool = False, deadline_soon_only: bool = False,
         sort_mode: str = "応募締切順",
     ) -> list[dict[str, Any]]:
         """Filter an already loaded snapshot; this performs no storage or network I/O."""
@@ -339,7 +366,22 @@ class ApplicationDashboard:
             and (period_filter != "ended" or bool(row.get("period_ended")))
             and (tcg_filter == "all" or row.get("tcg_key") == tcg_filter)
             and (sales_mode_filter == "all" or row.get("sales_mode") == sales_mode_filter)
+            and sales_channel_matches(row.get("sales_mode"), sales_channel_filter)
             and (prefecture_filter == "all" or row.get("prefecture") == prefecture_filter)
+            and (region_filter == "all" or row.get("region") == region_filter)
+            and (
+                favorites_filter == "all"
+                or (
+                    favorites_filter in {"prefecture", "any"}
+                    and row.get("prefecture") in (favorite_prefectures or set())
+                )
+                or (
+                    favorites_filter in {"store", "any"}
+                    and row.get("store_key") in (favorite_store_keys or set())
+                )
+            )
+            and (not new_only or bool(row.get("is_new")))
+            and (not deadline_soon_only or bool(row.get("deadline_soon")))
             and (
                 product_category_filter == "all"
                 or row.get("product_category", "CARD") == product_category_filter
@@ -349,6 +391,34 @@ class ApplicationDashboard:
         )]
         visible.sort(key=cls._sort_key(sort_mode))
         return visible
+
+    @staticmethod
+    def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        merged: dict[str, dict[str, Any]] = {}
+        order: list[str] = []
+        for raw in rows:
+            row = dict(raw)
+            key = application_identity(row)
+            if key not in merged:
+                merged[key] = row
+                order.append(key)
+                continue
+            current = merged[key]
+            current_evidence = current.get("evidence", [])
+            incoming_evidence = row.get("evidence", [])
+            values = []
+            for item in (
+                *(current_evidence if isinstance(current_evidence, list) else [current_evidence]),
+                *(incoming_evidence if isinstance(incoming_evidence, list) else [incoming_evidence]),
+            ):
+                if item and item not in values:
+                    values.append(item)
+            current["evidence"] = values
+            if current.get("is_candidate") and not row.get("is_candidate"):
+                preserved = values
+                merged[key] = row
+                merged[key]["evidence"] = preserved
+        return [merged[key] for key in order]
 
     @staticmethod
     def _sales_mode(site: dict[str, Any]) -> str:

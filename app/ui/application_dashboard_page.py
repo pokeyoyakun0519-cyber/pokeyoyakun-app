@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QCheckBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLineEdit,
     QLabel,
@@ -21,6 +22,10 @@ from core.product_store import ProductStore
 from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import categories
 from core.product_categories import PRODUCT_CATEGORY_LABELS
+from core.application_filters import (
+    REGION_NAMES,
+    sales_channel_matches,
+)
 from ui.tcg_category_tabs import (
     ALL_CATEGORY_KEY,
     TcgCategoryTabs,
@@ -36,12 +41,16 @@ class ApplicationRow(QFrame):
         store: ProductStore,
         reload_callback,
         applied_callback,
+        favorite_callback=None,
+        favorite_store_keys=None,
     ):
         super().__init__()
         self.row = row
         self.store = store
         self.reload_callback = reload_callback
         self.applied_callback = applied_callback
+        self.favorite_callback = favorite_callback
+        self.favorite_store_keys = set(favorite_store_keys or [])
         self.setObjectName("CandidateCard" if row.get("is_candidate") else "ProductCard")
 
         layout = QVBoxLayout(self)
@@ -95,6 +104,20 @@ class ApplicationRow(QFrame):
             new_label = QLabel("NEW")
             new_label.setObjectName("StatusOpen")
             header.addWidget(new_label)
+        if row.get("changes"):
+            changed_label = QLabel("更新あり")
+            changed_label.setObjectName("StatusLottery")
+            header.addWidget(changed_label)
+        favorite_button = QPushButton(
+            "★ お気に入り店舗" if row.get("store_key") in self.favorite_store_keys
+            else "☆ お気に入り店舗"
+        )
+        favorite_button.setObjectName("SmallButton")
+        favorite_button.setEnabled(bool(row.get("store_key")) and favorite_callback is not None)
+        favorite_button.clicked.connect(
+            lambda: favorite_callback(row) if favorite_callback is not None else None
+        )
+        header.addWidget(favorite_button)
         header.addWidget(state)
         header.addWidget(application_button)
         layout.addLayout(header)
@@ -102,7 +125,8 @@ class ApplicationRow(QFrame):
         store_info = QLabel(
             f'店舗：{row.get("site_name", "店舗名未設定")}　'
             f'受付開始：{row.get("application_start_at") or "未取得"}　'
-            f'締切：{row.get("application_end_at") or row.get("application_end") or "未取得"}　'
+            f'締切：{row.get("application_end_at") or row.get("application_end") or "未取得"}'
+            f'（{row.get("remaining_text") or "締切日時不明"}）　'
             f'方式：{self._sales_mode_label(row.get("sales_mode"))}　'
             f'地域：{self._prefecture_label(row.get("prefecture"))}　'
             f'応募状態：{"確認中" if row.get("is_candidate") else row.get("application_state", "未応募")}'
@@ -117,6 +141,7 @@ class ApplicationRow(QFrame):
         )
         warning_label.setObjectName("StatusLottery" if warnings else "MutedText")
         warning_label.setWordWrap(True)
+        warning_label.setVisible(bool(warnings))
         layout.addWidget(warning_label)
 
         changes = row.get("changes", {})
@@ -221,7 +246,7 @@ class ApplicationRow(QFrame):
 
         layout.addWidget(controls_widget)
 
-        self.detail_widgets = [product_button, warning_label, change_label, schedule,
+        self.detail_widgets = [product_button, change_label, schedule,
                                history, related_url, technical, controls_widget]
         for widget in self.detail_widgets:
             widget.setVisible(False)
@@ -311,7 +336,8 @@ class ApplicationRow(QFrame):
 
 
 class ApplicationProductGroup(QFrame):
-    def __init__(self, group: dict, store: ProductStore, reload_callback, applied_callback):
+    def __init__(self, group: dict, store: ProductStore, reload_callback, applied_callback,
+                 favorite_callback=None, favorite_store_keys=None):
         super().__init__()
         self.setObjectName("SettingsCard")
         layout = QVBoxLayout(self)
@@ -324,7 +350,10 @@ class ApplicationProductGroup(QFrame):
         layout.addWidget(title)
         for row in group.get("rows", []):
             layout.addWidget(
-                ApplicationRow(row, store, reload_callback, applied_callback)
+                ApplicationRow(
+                    row, store, reload_callback, applied_callback,
+                    favorite_callback, favorite_store_keys,
+                )
             )
 
 
@@ -379,17 +408,38 @@ class ApplicationDashboardPage(QFrame):
         description.setWordWrap(True)
         layout.addWidget(description)
 
+        self.sales_tabs = QTabBar()
+        self.sales_tabs.setExpanding(False)
+        for label, value in (
+            ("すべて 0", "all"),
+            ("ネット販売 0", "online"),
+            ("店舗販売 0", "store"),
+        ):
+            index = self.sales_tabs.addTab(label)
+            self.sales_tabs.setTabData(index, value)
+        self.sales_tabs.currentChanged.connect(self._apply_filters)
+        layout.addWidget(self.sales_tabs)
+
+        self.region_tabs = QTabBar()
+        self.region_tabs.setExpanding(False)
+        for value in REGION_NAMES:
+            index = self.region_tabs.addTab(value)
+            self.region_tabs.setTabData(index, "all" if value == "全国" else value)
+        self.region_tabs.currentChanged.connect(self._apply_filters)
+        self.region_tabs.setVisible(False)
+        layout.addWidget(self.region_tabs)
+
         self.period_tabs = QTabBar()
         self.period_tabs.setExpanding(False)
         for label, value in (("受付中 0", "active"), ("応募期間終了 0", "ended")):
             index = self.period_tabs.addTab(label)
             self.period_tabs.setTabData(index, value)
         self.period_tabs.currentChanged.connect(self._apply_filters)
-        layout.addWidget(self.period_tabs)
 
         self.tcg_tabs = TcgCategoryTabs()
         self.tcg_tabs.category_changed.connect(self._on_tcg_category_changed)
         layout.addWidget(self.tcg_tabs)
+        layout.addWidget(self.period_tabs)
 
         filter_header = QHBoxLayout()
         self.filter_toggle = QPushButton("絞り込みを表示")
@@ -413,7 +463,6 @@ class ApplicationDashboardPage(QFrame):
         self.tcg_filter.setVisible(False)
         self.tcg_filter.currentIndexChanged.connect(self._on_legacy_tcg_filter_changed)
 
-        filter_row.addWidget(QLabel("販売方式："))
         self.sales_mode_filter = QComboBox()
         for label, value in (("すべて", "all"), ("🌐 ネット販売", "ONLINE"),
                              ("🏪 店舗販売", "STORE"),
@@ -421,7 +470,7 @@ class ApplicationDashboardPage(QFrame):
                              ("販売方法 未確認", "UNKNOWN")):
             self.sales_mode_filter.addItem(label, value)
         self.sales_mode_filter.currentIndexChanged.connect(self._apply_filters)
-        filter_row.addWidget(self.sales_mode_filter)
+        self.sales_mode_filter.setVisible(False)
 
         filter_row.addWidget(QLabel("都道府県："))
         self.prefecture_filter = QComboBox()
@@ -479,6 +528,33 @@ class ApplicationDashboardPage(QFrame):
         self.group_by_product.toggled.connect(self._toggle_group_by_product)
         filter_row2.addWidget(self.group_by_product)
         filter_layout.addLayout(filter_row2)
+
+        favorites_input_row = QHBoxLayout()
+        favorites_input_row.addWidget(QLabel("お気に入り都道府県："))
+        assistant = self.config_manager.load().get("application_assistant", {})
+        self.favorite_prefectures_input = QLineEdit()
+        self.favorite_prefectures_input.setPlaceholderText("東京都, 大阪府（明示名のみ）")
+        self.favorite_prefectures_input.setText(
+            ", ".join(str(value) for value in assistant.get("favorite_prefectures", []))
+        )
+        favorites_input_row.addWidget(self.favorite_prefectures_input, 1)
+        save_favorites = QPushButton("地域を保存")
+        save_favorites.setObjectName("SmallButton")
+        save_favorites.clicked.connect(self._save_favorite_prefectures)
+        favorites_input_row.addWidget(save_favorites)
+        filter_layout.addLayout(favorites_input_row)
+        self.favorite_prefectures_only = QCheckBox("お気に入り地域のみ")
+        self.favorite_stores_only = QCheckBox("お気に入り店舗のみ")
+        self.new_only = QCheckBox("新着のみ")
+        self.deadline_soon_only = QCheckBox("締切間近（72時間以内）")
+        quick_filters = QGridLayout()
+        for index, checkbox in enumerate((
+            self.favorite_prefectures_only, self.favorite_stores_only,
+            self.new_only, self.deadline_soon_only,
+        )):
+            checkbox.toggled.connect(self._apply_filters)
+            quick_filters.addWidget(checkbox, index // 2, index % 2)
+        filter_layout.addLayout(quick_filters)
         self.filter_panel.setVisible(False)
         layout.addWidget(self.filter_panel)
 
@@ -488,6 +564,7 @@ class ApplicationDashboardPage(QFrame):
         layout.addWidget(self.scroll, 1)
 
         self._snapshot = None
+        self._reload_favorites()
         self.reload(force=True)
         self.period_timer = QTimer(self)
         self.period_timer.setInterval(60_000)
@@ -538,6 +615,45 @@ class ApplicationDashboardPage(QFrame):
         config = self.config_manager.load()
         config.setdefault("application_assistant", {})["group_by_product"] = bool(enabled)
         self.config_manager.save(config)
+        self._apply_filters()
+
+    def _reload_favorites(self):
+        assistant = self.config_manager.load().get("application_assistant", {})
+        self.favorite_prefectures = {
+            str(value).strip() for value in assistant.get("favorite_prefectures", [])
+            if str(value).strip()
+        }
+        self.favorite_store_keys = {
+            str(value).strip() for value in assistant.get("favorite_stores", [])
+            if str(value).strip()
+        }
+
+    def _save_favorite_prefectures(self):
+        values = [
+            value.strip()
+            for value in self.favorite_prefectures_input.text().replace("、", ",").split(",")
+            if value.strip()
+        ]
+        config = self.config_manager.load()
+        config.setdefault("application_assistant", {})["favorite_prefectures"] = values
+        self.config_manager.save(config)
+        self._reload_favorites()
+        self._apply_filters()
+
+    def _toggle_favorite_store(self, row: dict):
+        key = str(row.get("store_key") or "").strip()
+        if not key:
+            return
+        config = self.config_manager.load()
+        assistant = config.setdefault("application_assistant", {})
+        values = {str(value) for value in assistant.get("favorite_stores", [])}
+        if key in values:
+            values.remove(key)
+        else:
+            values.add(key)
+        assistant["favorite_stores"] = sorted(values)
+        self.config_manager.save(config)
+        self._reload_favorites()
         self._apply_filters()
 
     def _on_tcg_category_changed(self, key: str):
@@ -637,7 +753,13 @@ class ApplicationDashboardPage(QFrame):
 
         state_filter = str(self.application_state_filter.currentData() or "すべて")
         period_filter = str(self.period_tabs.tabData(self.period_tabs.currentIndex()) or "active")
-        rows_without_tcg = self.dashboard.filter_cached(
+        favorite_filter = (
+            "any" if self.favorite_prefectures_only.isChecked() and self.favorite_stores_only.isChecked()
+            else "prefecture" if self.favorite_prefectures_only.isChecked()
+            else "store" if self.favorite_stores_only.isChecked()
+            else "all"
+        )
+        rows_before_sales = self.dashboard.filter_cached(
             all_rows, period_filter=period_filter,
             state_filter="すべて" if state_filter == "確認中" else state_filter,
             keyword=self.keyword.text(),
@@ -647,12 +769,36 @@ class ApplicationDashboardPage(QFrame):
             product_category_filter=str(
                 self.product_category_filter.currentData() or "all"
             ),
+            favorites_filter=favorite_filter,
+            favorite_prefectures=self.favorite_prefectures,
+            favorite_store_keys=self.favorite_store_keys,
+            new_only=self.new_only.isChecked(),
+            deadline_soon_only=self.deadline_soon_only.isChecked(),
             sort_mode=self.sort_mode.currentText(),
         )
         if state_filter == "確認中":
-            rows_without_tcg = [
-                row for row in rows_without_tcg if row.get("is_candidate")
+            rows_before_sales = [
+                row for row in rows_before_sales if row.get("is_candidate")
             ]
+        sales_counts = {
+            key: sum(sales_channel_matches(row.get("sales_mode"), key) for row in rows_before_sales)
+            for key in ("all", "online", "store")
+        }
+        for index, label in enumerate(("すべて", "ネット販売", "店舗販売")):
+            key = str(self.sales_tabs.tabData(index))
+            self.sales_tabs.setTabText(index, f"{label} {sales_counts[key]}")
+        sales_channel = str(self.sales_tabs.tabData(self.sales_tabs.currentIndex()) or "all")
+        rows_after_sales = [
+            row for row in rows_before_sales
+            if sales_channel_matches(row.get("sales_mode"), sales_channel)
+        ]
+        self.region_tabs.setVisible(sales_channel == "store")
+        region_filter = str(self.region_tabs.tabData(self.region_tabs.currentIndex()) or "all")
+        rows_without_tcg = [
+            row for row in rows_after_sales
+            if sales_channel != "store" or region_filter == "all"
+            or row.get("region") == region_filter
+        ]
         self.tcg_tabs.set_counts(category_counts(rows_without_tcg))
         rows = list(filter_items_by_category(
             rows_without_tcg, self.tcg_tabs.selected_key
@@ -688,7 +834,8 @@ class ApplicationDashboardPage(QFrame):
             for group in self.dashboard._group_rows(rows):
                 list_layout.addWidget(
                     ApplicationProductGroup(
-                        group, self.store, lambda: self.reload(force=True), self._on_marked_applied
+                        group, self.store, lambda: self.reload(force=True), self._on_marked_applied,
+                        self._toggle_favorite_store, self.favorite_store_keys,
                     )
                 )
         else:
@@ -699,6 +846,8 @@ class ApplicationDashboardPage(QFrame):
                         self.store,
                         lambda: self.reload(force=True),
                         self._on_marked_applied,
+                        self._toggle_favorite_store,
+                        self.favorite_store_keys,
                     )
                 )
 

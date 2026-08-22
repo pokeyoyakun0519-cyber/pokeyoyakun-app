@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.tcg_categories import display_name, normalize_key
+from core.application_filters import canonical_application_url
 
 
 _APPLICATION_STATUS = re.compile(
@@ -208,4 +209,41 @@ def normalize_application_site(
         application_url = str(normalized.get("application_url", "")).strip()
         if not application_url and related_url:
             normalized["application_url"] = related_url
+        normalized["canonical_application_url"] = canonical_application_url(
+            normalized.get("application_url")
+        )
     return normalized
+
+
+def expand_application_branches(site: dict[str, Any]) -> list[dict[str, Any]]:
+    """親ページの明示的な店舗明細を、保存値を推測せず支店別に展開する。"""
+    details = site.get("target_store_details") or site.get("branches")
+    if not isinstance(details, list) or not details:
+        return [dict(site)]
+    output: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw in details:
+        if not isinstance(raw, dict):
+            continue
+        branch = str(raw.get("branch") or raw.get("name") or "").strip()
+        if not branch:
+            continue
+        prefecture = str(raw.get("prefecture") or "UNKNOWN").strip() or "UNKNOWN"
+        city = str(raw.get("city") or "").strip()
+        key = (branch.casefold(), prefecture, city.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        item = dict(site)
+        item.update({
+            "branch": branch,
+            "name": str(raw.get("display_name") or branch),
+            "prefecture": prefecture,
+            "city": city,
+            "address": str(raw.get("address") or "").strip(),
+            "location_source": str(raw.get("location_source") or "official_target_store"),
+        })
+        if raw.get("application_url"):
+            item["application_url"] = str(raw["application_url"])
+        output.append(item)
+    return output or [dict(site)]

@@ -241,7 +241,7 @@ class SourcesNavigationTest(unittest.TestCase):
             window.sources_button.click()
             self.app.processEvents()
             self.assertIs(window.sources_page, window.pages.currentWidget())
-            self.assertIn("X情報 最終更新", window.sources_page.x_monitoring_summary.text())
+            self.assertIn("SNS情報 最終更新", window.sources_page.x_monitoring_summary.text())
             self.assertIn("状態: 未設定", window.sources_page.x_monitoring_summary.text())
             window.close()
 

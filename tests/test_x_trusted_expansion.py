@@ -190,8 +190,8 @@ class XTrustedExpansionTest(unittest.TestCase):
         main_ui = (PROJECT_ROOT / "app" / "ui" / "main_window.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("X信頼アカウント監視", sources_ui)
-        self.assertIn("candidate_count", sources_ui)
+        self.assertIn("SNS情報監視", sources_ui)
+        self.assertNotIn("monitor.rows()", sources_ui)
         self.assertIn('x_recent.get("promoted_count")', main_ui)
 
 

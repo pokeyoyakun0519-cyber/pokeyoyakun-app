@@ -239,6 +239,15 @@ class SettingsPage(QFrame):
         self.notification_prefectures = QLineEdit()
         self.notification_prefectures.setPlaceholderText("都道府県をカンマ区切り。空欄は全国")
         event_card.layout().addWidget(self.notification_prefectures)
+        self.notification_regions = QLineEdit()
+        self.notification_regions.setPlaceholderText("地方をカンマ区切り。空欄は全地方")
+        event_card.layout().addWidget(self.notification_regions)
+        self.notification_favorite_store_only = QCheckBox("お気に入り店舗だけ通知")
+        self.notification_new_only = QCheckBox("新着（24時間以内）だけ通知")
+        self.notification_deadline_soon_only = QCheckBox("締切間近（72時間以内）だけ通知")
+        event_card.layout().addWidget(self.notification_favorite_store_only)
+        event_card.layout().addWidget(self.notification_new_only)
+        event_card.layout().addWidget(self.notification_deadline_soon_only)
         event_card.layout().addWidget(QLabel("商品カテゴリ"))
         self.notification_product_category_checks = {}
         for value, label in PRODUCT_CATEGORY_LABELS.items():
@@ -427,6 +436,16 @@ class SettingsPage(QFrame):
         self.notification_prefectures.setText(
             ", ".join(str(item) for item in notification.get("prefectures", []))
         )
+        self.notification_regions.setText(
+            ", ".join(str(item) for item in notification.get("regions", []))
+        )
+        self.notification_favorite_store_only.setChecked(
+            bool(notification.get("favorite_store_only", False))
+        )
+        self.notification_new_only.setChecked(bool(notification.get("new_only", False)))
+        self.notification_deadline_soon_only.setChecked(
+            bool(notification.get("deadline_soon_only", False))
+        )
         enabled_product_categories = set(
             notification.get("product_categories", list(PRODUCT_CATEGORY_LABELS))
         )
@@ -446,6 +465,10 @@ class SettingsPage(QFrame):
             *self.notification_tcg_checks.values(),
             *self.notification_sales_checks.values(),
             self.notification_prefectures,
+            self.notification_regions,
+            self.notification_favorite_store_only,
+            self.notification_new_only,
+            self.notification_deadline_soon_only,
             *self.notification_product_category_checks.values(),
             self.sound_path, self.name_input, self.furigana_input,
             self.email_input, self.password_input, self.phone_input,
@@ -558,6 +581,14 @@ class SettingsPage(QFrame):
                     for value in self.notification_prefectures.text().replace("、", ",").split(",")
                     if value.strip()
                 ],
+                "regions": [
+                    value.strip()
+                    for value in self.notification_regions.text().replace("、", ",").split(",")
+                    if value.strip()
+                ],
+                "favorite_store_only": self.notification_favorite_store_only.isChecked(),
+                "new_only": self.notification_new_only.isChecked(),
+                "deadline_soon_only": self.notification_deadline_soon_only.isChecked(),
                 "product_categories": [
                     key
                     for key, checkbox in self.notification_product_category_checks.items()
@@ -568,6 +599,7 @@ class SettingsPage(QFrame):
             "games": {key: checkbox.isChecked() for key, checkbox in self.game_checks.items()},
             "sites": {key: checkbox.isChecked() for key, checkbox in self.site_checks.items()},
             "application_assistant": {
+                **dict(config.get("application_assistant", {})),
                 "deadline_reminders_enabled": any((self.deadline_24h.isChecked(), self.deadline_3h.isChecked(), self.deadline_30m.isChecked())),
                 "reminders": [
                     {"minutes": 1440, "enabled": self.deadline_24h.isChecked(), "label": "24時間前"},

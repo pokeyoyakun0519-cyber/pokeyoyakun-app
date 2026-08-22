@@ -43,6 +43,10 @@ DEFAULT_CONFIG = {
         "prefectures": [],
         "product_categories": ["CARD", "SUPPLY", "COLLAB_LIMITED"],
         "suppress_after_applied": True,
+        "regions": [],
+        "favorite_store_only": False,
+        "new_only": False,
+        "deadline_soon_only": False,
     },
     "games": {
         "pokemon": True,
@@ -75,6 +79,8 @@ DEFAULT_CONFIG = {
         ],
         "group_by_product": True,
         "important_changes_only": True,
+        "favorite_prefectures": [],
+        "favorite_stores": [],
     },
 }
 
