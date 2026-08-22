@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from core.nationwide_web_monitor import NationwideWebApplicationMonitor
+from core.retail_search_manager import _ascii_safe_url
 
 
 JST = timezone(timedelta(hours=9))
@@ -78,6 +79,12 @@ class Test5NationwideWebMonitorTest(unittest.TestCase):
         self.assertFalse(discoveries[0]["hit"]["confirmed"])
         self.assertEqual(1, monitor.diagnostics["checked_sources"])
         self.assertEqual(1, monitor.diagnostics["application_candidates"])
+
+    def test_non_ascii_official_url_is_safely_percent_encoded(self):
+        self.assertEqual(
+            "https://seagullonline.jp/category/%E4%BA%88%E7%B4%84%E6%83%85%E5%A0%B1/",
+            _ascii_safe_url("https://seagullonline.jp/category/予約情報/"),
+        )
 
     def test_app_and_sns_only_are_not_fetched(self):
         monitor = self._monitor()

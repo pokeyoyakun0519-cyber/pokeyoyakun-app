@@ -65,6 +65,18 @@ YODOBASHI_LOTTERY = "https://limited.yodobashi.com/"
 YODOBASHI_SEARCH = "https://www.yodobashi.com/?word={query}"
 
 
+def _ascii_safe_url(url: str) -> str:
+    """Encode non-ASCII URL components without double-encoding escapes."""
+    parts = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit((
+        parts.scheme,
+        parts.netloc,
+        urllib.parse.quote(parts.path, safe="/%:@"),
+        urllib.parse.quote(parts.query, safe="=&%:@/?+;,"),
+        urllib.parse.quote(parts.fragment, safe="=&%:@/?+;,"),
+    ))
+
+
 class _LinkParser(HTMLParser):
     def __init__(self, base_url: str):
         super().__init__(convert_charrefs=True)
@@ -817,7 +829,7 @@ class RetailSearchManager:
             return {"ok": False, "html": "", "status": "HTTPS以外を拒否"}
 
         request = urllib.request.Request(
-            url,
+            _ascii_safe_url(url),
             headers={
                 "User-Agent": self.USER_AGENT,
                 "Accept-Language": (
