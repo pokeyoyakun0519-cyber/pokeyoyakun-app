@@ -21,10 +21,15 @@ class CandidateAutoSearch:
         discovery_result = {"created": 0, "updated": 0, "ambiguous": 0}
         web_discovery = {"candidates": [], "queue": [], "diagnostics": {}}
         if isinstance(self.searcher, RetailSearchManager):
-            web_discovery = self.searcher.discover_web_application_candidates()
-            discoveries = self.searcher.discover_priority_applications(
+            web_discovery = self.searcher.discover_web_application_candidates(
                 enabled_tcg_keys
             )
+            discoveries = [
+                *web_discovery.get("verified_discoveries", []),
+                *self.searcher.discover_priority_applications(
+                    enabled_tcg_keys
+                ),
+            ]
             discovery_result = self.candidates.merge_application_discoveries(
                 discoveries,
                 matcher=self.searcher.card_labo._matches_candidate,

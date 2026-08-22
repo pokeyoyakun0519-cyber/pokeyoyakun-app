@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.log_manager import LogManager
+from core.autonomous_source_registry import OfficialSourceCandidateStore
 from core.notification_manager import NotificationManager
 from core.source_manager import SourceManager
 from core.tcg_categories import categories, display_name
@@ -605,6 +606,7 @@ class SourcesPage(QFrame):
         registry = discovery_source_diagnostics()
         nationwide = NationwideWebApplicationMonitor.load_saved_diagnostics()
         inventory = WebApplicationSourceRegistry().diagnostics()
+        autonomous = OfficialSourceCandidateStore(app_root()).diagnostics()
         official_sources = [
             source for source in self.source_manager.load_sources()
             if source.get("enabled", True)
@@ -632,10 +634,19 @@ class SourcesPage(QFrame):
         monitorable = int(nationwide.get("monitorable_branch_count", 0))
         checked = int(nationwide.get("actual_checked_branch_count", 0))
         coverage = float(nationwide.get("coverage_percent", 0.0))
+        source_states = autonomous.get("by_state", {})
+        newly_found = int(autonomous.get("discovered_candidate_count", 0))
+        verifying = int(source_states.get("VERIFYING", 0))
+        difficult = sum(
+            int(source_states.get(name, 0))
+            for name in ("BLOCKED_ROBOTS", "APP_REQUIRED", "SNS_ONLY", "UNSUPPORTED")
+        )
         self.web_monitoring_summary.setText(
             f"状態: {state}  /  最終確認: {last_success}\n"
             f"監視店舗: {candidate_branches}候補  /  Web監視可能: {monitorable}  /  "
             f"確認済み: {checked}（{coverage:.1f}%）  /  一部取得困難: {int(nationwide.get('error', 0))}\n"
+            f"自動発見: 新規{newly_found}  /  確認中{verifying}  /  "
+            f"監視可能{int(autonomous.get('monitorable_count', 0))}  /  監視困難{difficult}\n"
             f"公式ソース: {official_state}  /  "
             f"補助情報ソース: {'正常' if not error else '一部確認中'}（安全な自動監視 {enabled_count}件）\n"
             "補助情報から見つけた案件は、公式ページで確認できるまで応募一覧へ確定表示しません。"

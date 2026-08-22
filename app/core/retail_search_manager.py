@@ -10,6 +10,10 @@ from html.parser import HTMLParser
 from typing import Any
 
 from core.application_period import ApplicationPeriodParser
+from core.autonomous_web_discovery import (
+    AutonomousApplicationSourceDiscovery,
+    discovery_event,
+)
 from core.application_site import normalize_application_site
 from core.bushiroad_store_parser import BushiroadStoreParser
 from core.card_labo_parser import CardLaboParser
@@ -151,6 +155,9 @@ class RetailSearchManager:
         self.web_source_registry = WebApplicationSourceRegistry()
         self.nyuka_now_discovery = NyukaNowDiscovery(app_root())
         self.official_verification_queue = OfficialVerificationQueue()
+        self.autonomous_discovery = AutonomousApplicationSourceDiscovery(
+            app_root()
+        )
         self.chain_application_extractors = {
             "batoroco": BatorocoApplicationExtractor(),
             "plays": PlaysApplicationExtractor(),
@@ -164,10 +171,14 @@ class RetailSearchManager:
         self._robots_cache: dict[str, bool] = {}
         self.last_diagnostics: dict[str, Any] = {}
 
-    def discover_web_application_candidates(self) -> dict[str, Any]:
+    def discover_web_application_candidates(
+        self,
+        enabled_tcg_keys: set[str] | None = None,
+    ) -> dict[str, Any]:
         """Discover and persist candidates without adding them to the dashboard."""
         candidates = self.nyuka_now_discovery.poll_and_store()
         queued = self.official_verification_queue.enqueue(candidates)
+        autonomous = self.autonomous_discovery.run(enabled_tcg_keys)
         diagnostics = self.nyuka_now_discovery.diagnostics()
         diagnostics.update({
             "verification_queue_size": len(queued),
@@ -179,10 +190,14 @@ class RetailSearchManager:
                 for level in ("HIGH", "NORMAL", "LOW")
             },
             **self.official_verification_queue.diagnostics(),
+            "autonomous_discovery": autonomous["diagnostics"],
         })
         return {
             "candidates": candidates,
             "queue": queued,
+            "verified_discoveries": autonomous["discoveries"],
+            "source_candidates": autonomous["source_candidates"],
+            "event": discovery_event(autonomous),
             "diagnostics": diagnostics,
         }
 

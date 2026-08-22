@@ -506,7 +506,9 @@ class CandidateManager:
                 name = str(record.get("product_name", "")).strip()
                 tcg_key = normalize_key(record.get("tcg_key"), record.get("tcg"))[0]
                 if not name or tcg_key not in {
-                    "pokemon", "onepiece", "dragon_ball_fusion_world"
+                    "pokemon", "onepiece", "dragon_ball_fusion_world",
+                    "yugioh", "gundam", "union_arena", "duelmasters",
+                    "weiss", "mtg",
                 }:
                     continue
                 source_id = str(
