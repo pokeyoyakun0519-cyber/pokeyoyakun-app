@@ -35,6 +35,11 @@ _END_STATUSES = {
     "closed",
     "ended",
     "expired",
+    "中止",
+    "キャンセル",
+    "受付中止",
+    "抽選中止",
+    "予約中止",
 }
 _PLANNED_END = re.compile(r"終了(?:する)?(?:予定|見込|見込み|予告)")
 _END_PHRASE = re.compile(
@@ -67,7 +72,7 @@ def evaluate_application_period(
         current = current.astimezone(JST)
 
     start = parse_jst_datetime(site.get("application_start_at"))
-    end = parse_jst_datetime(site.get("application_end_at"))
+    end = _application_end(site, current)
     explicit_end = _explicit_end_source(site)
     if explicit_end:
         if end and current <= end:
@@ -121,6 +126,25 @@ def evaluate_application_period(
         "remaining_text": text,
         "end_reason": "",
     }
+
+
+def _application_end(site: dict[str, Any], current: datetime) -> datetime | None:
+    raw_at = str(site.get("application_end_at") or "").strip()
+    if raw_at and re.search(r"(?:T|\s)\d{1,2}(?::|時)\d{0,2}", raw_at):
+        return parse_jst_datetime(raw_at)
+    raw = raw_at or str(site.get("application_end") or "").strip()
+    if not raw:
+        return None
+    # application_end is already a semantic deadline field.  Parsing it does
+    # not permit unrelated release dates to become deadlines.
+    from core.application_period import ApplicationPeriodParser
+
+    parsed = ApplicationPeriodParser.parse(
+        "応募締切 " + raw,
+        now=current,
+        release_date=str(site.get("release_date") or ""),
+    )
+    return parse_jst_datetime(parsed.get("application_end_at"))
 
 
 def _explicit_end_source(site: dict[str, Any]) -> str:

@@ -1,3 +1,5 @@
+import re
+
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QComboBox,
@@ -125,7 +127,7 @@ class ApplicationRow(QFrame):
         store_info = QLabel(
             f'店舗：{row.get("site_name", "店舗名未設定")}　'
             f'受付開始：{row.get("application_start_at") or "未取得"}　'
-            f'締切：{row.get("application_end_at") or row.get("application_end") or "未取得"}'
+            f'締切：{self._deadline_label(row)}'
             f'（{row.get("remaining_text") or "締切日時不明"}）　'
             f'方式：{self._sales_mode_label(row.get("sales_mode"))}　'
             f'地域：{self._prefecture_label(row.get("prefecture"))}　'
@@ -165,7 +167,7 @@ class ApplicationRow(QFrame):
             f'状態：{row.get("period_status", "未確認")} '
             f'（{row.get("remaining_text", "")}）\n'
             f'応募開始：{row.get("application_start_at") or "未取得"}　'
-            f'応募締切：{row.get("application_end_at") or "未取得"}　'
+            f'応募締切：{self._deadline_label(row)}　'
             f'結果発表予定：{row.get("result_announcement_at") or row.get("result_date") or "未取得"}\n'
             f'受付方式：{row.get("application_method") or "未取得"}　'
             f'応募条件：{row.get("application_conditions") or "未取得"}'
@@ -322,6 +324,26 @@ class ApplicationRow(QFrame):
         return {"ONLINE": "🌐 ネット販売", "STORE": "🏪 店舗販売",
                 "HYBRID": "🏪🌐 店舗＋ネット",
                 "UNKNOWN": "販売方法 未確認"}.get(str(value), "販売方法 未確認")
+
+    @staticmethod
+    def _deadline_label(row: dict) -> str:
+        value = str(
+            row.get("application_end_at") or row.get("application_end") or ""
+        ).strip()
+        if not value:
+            return "未取得"
+        date_match = re.match(r"(20\d{2})[-/年](\d{1,2})[-/月](\d{1,2})日?", value)
+        display = (
+            f"{date_match.group(1)}/{int(date_match.group(2)):02d}/"
+            f"{int(date_match.group(3)):02d}"
+            if date_match else value
+        )
+        time_match = re.search(r"(?:T|\s)(\d{1,2}):(\d{2})", value)
+        if row.get("application_end_time_confirmed", True) and time_match:
+            display += f" {int(time_match.group(1)):02d}:{time_match.group(2)}"
+        elif not row.get("application_end_time_confirmed", True):
+            display += "（時刻未確認）"
+        return display
 
     @staticmethod
     def _prefecture_label(value: str) -> str:

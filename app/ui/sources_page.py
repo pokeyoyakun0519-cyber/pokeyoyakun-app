@@ -25,6 +25,8 @@ from core.tcg_categories import categories, display_name
 from core.x_monitoring_status import XMonitoringStatus
 from core.nyuka_now_discovery import NyukaNowDiscovery, discovery_source_diagnostics
 from core.runtime_paths import app_root
+from core.nationwide_web_monitor import NationwideWebApplicationMonitor
+from core.web_application_sources import WebApplicationSourceRegistry
 
 
 class SourceEditDialog(QDialog):
@@ -601,6 +603,8 @@ class SourcesPage(QFrame):
     def _reload_web_monitoring(self) -> None:
         diagnostics = NyukaNowDiscovery(app_root()).diagnostics()
         registry = discovery_source_diagnostics()
+        nationwide = NationwideWebApplicationMonitor.load_saved_diagnostics()
+        inventory = WebApplicationSourceRegistry().diagnostics()
         official_sources = [
             source for source in self.source_manager.load_sources()
             if source.get("enabled", True)
@@ -617,12 +621,21 @@ class SourcesPage(QFrame):
             official_state = "正常"
         else:
             official_state = "更新待ち"
-        last_success = diagnostics.get("last_success") or "未取得"
-        error = diagnostics.get("error")
+        last_success = nationwide.get("last_success") or diagnostics.get("last_success") or "未取得"
+        error = diagnostics.get("error") or int(nationwide.get("error", 0))
         state = "一部確認中" if error else ("正常" if last_success != "未取得" else "更新待ち")
         enabled_count = len(registry.get("auto_enabled", []))
+        candidate_branches = sum(
+            int(value.get("explicit_branches", 0))
+            for value in inventory.get("by_tcg", {}).values()
+        )
+        monitorable = int(nationwide.get("monitorable_branch_count", 0))
+        checked = int(nationwide.get("actual_checked_branch_count", 0))
+        coverage = float(nationwide.get("coverage_percent", 0.0))
         self.web_monitoring_summary.setText(
             f"状態: {state}  /  最終確認: {last_success}\n"
+            f"監視店舗: {candidate_branches}候補  /  Web監視可能: {monitorable}  /  "
+            f"確認済み: {checked}（{coverage:.1f}%）  /  一部取得困難: {int(nationwide.get('error', 0))}\n"
             f"公式ソース: {official_state}  /  "
             f"補助情報ソース: {'正常' if not error else '一部確認中'}（安全な自動監視 {enabled_count}件）\n"
             "補助情報から見つけた案件は、公式ページで確認できるまで応募一覧へ確定表示しません。"

@@ -82,7 +82,10 @@ class ApplicationDashboard:
                     dict(raw_site),
                     "\n".join(
                         str(raw_site.get(key, ""))
-                        for key in ("application_period", "order_period", "result_date")
+                        for key in (
+                            "application_period", "order_period", "result_date",
+                            "application_end",
+                        )
                         if raw_site.get(key)
                     ),
                     release_date=str(product.get("release_date", "")),
@@ -208,6 +211,9 @@ class ApplicationDashboard:
                         now=now, days=1,
                     ),
                     "application_end_at": site.get("application_end_at", ""),
+                    "application_end_time_confirmed": bool(
+                        site.get("application_end_time_confirmed", True)
+                    ),
                     "result_announcement_at": site.get("result_announcement_at", ""),
                     "application_method": site.get("application_method", ""),
                     "application_conditions": site.get("application_conditions", ""),

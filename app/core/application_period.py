@@ -48,6 +48,7 @@ class ApplicationPeriodParser:
             "target_store": cls._label_value(relevant, ("対象店舗", "受付店舗", "実施店舗")),
             "period_evidence": "",
             "period_unknown": bool(re.search(r"(?:受付|応募|申込)期間\s*[:：]?\s*未定", relevant)),
+            "application_end_time_confirmed": False,
         }
 
         range_match = RANGE_RE.search(relevant)
@@ -62,6 +63,9 @@ class ApplicationPeriodParser:
             if start and end:
                 result["application_start_at"] = start.isoformat()
                 result["application_end_at"] = end.isoformat()
+                result["application_end_time_confirmed"] = bool(
+                    range_match.group("endhour")
+                )
                 result["period_evidence"] = cls._sanitize(range_match.group(0))
 
         if not result["application_end_at"]:
@@ -73,6 +77,9 @@ class ApplicationPeriodParser:
                 end = cls._match_datetime(end_match, "single", current.date(), release, is_end=True)
                 if end:
                     result["application_end_at"] = end.isoformat()
+                    result["application_end_time_confirmed"] = bool(
+                        end_match.group("singlehour")
+                    )
                     result["period_evidence"] = cls._sanitize(end_match.group(0))
 
         if not result["application_start_at"]:
@@ -109,7 +116,15 @@ class ApplicationPeriodParser:
         release_date: str = "",
     ) -> dict[str, Any]:
         enriched = dict(site)
-        parsed = cls.parse(text, now=now, release_date=release_date)
+        evidence_text = str(text or "")
+        explicit_end = str(
+            site.get("application_end_at") or site.get("application_end") or ""
+        ).strip()
+        if explicit_end and cls._has_time(explicit_end):
+            enriched.setdefault("application_end_time_confirmed", True)
+        if explicit_end and not cls._has_time(explicit_end):
+            evidence_text += "\n応募締切 " + explicit_end
+        parsed = cls.parse(evidence_text, now=now, release_date=release_date)
         for key, value in parsed.items():
             if value not in ("", False):
                 enriched[key] = value
@@ -120,9 +135,18 @@ class ApplicationPeriodParser:
         return enriched
 
     @staticmethod
+    def _has_time(value: str) -> bool:
+        return bool(re.search(r"(?:T|\s)\d{1,2}(?::|時)\d{0,2}", str(value)))
+
+    @staticmethod
     def _normalize_notation(text: str) -> str:
         text = re.sub(
-            r"(?:(20\d{2})[./-])?(\d{1,2})[./](\d{1,2})(?:\s*\([^)]*\))?",
+            r"(\d{1,2})時\s*(\d{1,2})分",
+            lambda match: f"{match.group(1)}:{int(match.group(2)):02d}",
+            text,
+        )
+        text = re.sub(
+            r"(?:(20\d{2})[./-])?(\d{1,2})[./-](\d{1,2})(?:\s*\([^)]*\))?",
             lambda match: (
                 (match.group(1) + "年" if match.group(1) else "")
                 + match.group(2) + "月" + match.group(3) + "日"
