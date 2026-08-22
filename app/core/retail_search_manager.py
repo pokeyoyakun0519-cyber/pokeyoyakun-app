@@ -51,6 +51,7 @@ from core.chain_application_extractors import (
 )
 from core.bandai_official_applications import BandaiOfficialApplicationMonitor
 from core.nationwide_web_monitor import NationwideWebApplicationMonitor
+from core.pokemon_coverage_expansion import PokemonCoverageExpansionMonitor
 
 
 POKEMON_CENTER_LOTTERY_INDEX = (
@@ -156,6 +157,9 @@ class RetailSearchManager:
         self.nyuka_now_discovery = NyukaNowDiscovery(app_root())
         self.official_verification_queue = OfficialVerificationQueue()
         self.autonomous_discovery = AutonomousApplicationSourceDiscovery(
+            app_root()
+        )
+        self.pokemon_coverage_expansion = PokemonCoverageExpansionMonitor(
             app_root()
         )
         self.chain_application_extractors = {
@@ -383,6 +387,32 @@ class RetailSearchManager:
         }
         discoveries: list[dict[str, Any]] = []
         external_results: dict[str, dict[str, Any]] = {}
+        if "pokemon" in enabled:
+            pokemon_discoveries = self.pokemon_coverage_expansion.scan()
+            discoveries.extend(pokemon_discoveries)
+            expansion_diagnostics = dict(
+                self.pokemon_coverage_expansion.diagnostics
+            )
+            self.last_diagnostics["pokemon_coverage_expansion"] = (
+                expansion_diagnostics
+            )
+            expansion_confirmed = sum(
+                str(item.get("hit", {}).get("verification_status"))
+                == "confirmed"
+                for item in pokemon_discoveries
+            )
+            external_results["pokemon_coverage_expansion"] = {
+                "checked": True,
+                "success": expansion_diagnostics.get("status") == "OK",
+                "candidate": len(pokemon_discoveries),
+                "official_verified": expansion_confirmed,
+                "confirmed": expansion_confirmed,
+                "ended": sum(
+                    NationwideWebApplicationMonitor._discovery_ended(item)
+                    for item in pokemon_discoveries
+                ),
+                "discoveries": pokemon_discoveries,
+            }
         if any(tcg in enabled for tcg in {"onepiece", "dragon_ball_fusion_world"}):
             bandai_monitor = BandaiOfficialApplicationMonitor(self._fetch)
             bandai_discoveries = bandai_monitor.scan(enabled)

@@ -371,6 +371,15 @@ class SafeDiscoveryFetcherTest(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(UnsafeDiscoveryUrl):
                 fetcher.validate_url(url)
 
+    def test_monitor_can_use_an_isolated_state_file(self):
+        state_path = self.root / "data" / "pokemon_coverage_state.json"
+        fetcher = SafeDiscoveryFetcher(
+            self.root,
+            resolver=_public_resolver,
+            state_path=state_path,
+        )
+        self.assertEqual(state_path, fetcher.path)
+
     def test_private_dns_answer_is_rejected(self):
         resolver = lambda host, port, **kwargs: [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.5", port))

@@ -214,7 +214,7 @@ class NyukaNowDiscoveryTest(unittest.TestCase):
         self.assertEqual(70, diagnostics["by_trust_tier"]["TIER_A_OFFICIAL"])
         self.assertGreaterEqual(diagnostics["by_trust_tier"]["TIER_B_DISCOVERY"], 1)
         self.assertGreaterEqual(diagnostics["by_trust_tier"]["TIER_C_REFERENCE"], 1)
-        self.assertEqual(["nyuka_now"], diagnostics["auto_enabled"])
+        self.assertEqual(["nyuka_now", "pokesoku"], diagnostics["auto_enabled"])
         self.assertEqual(NYUKA_NOW_INDEX, diagnostics["sources"][0]["url"])
 
 

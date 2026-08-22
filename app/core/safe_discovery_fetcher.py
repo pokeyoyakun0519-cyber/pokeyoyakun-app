@@ -68,9 +68,12 @@ class SafeDiscoveryFetcher:
         budget: RequestBudget | None = None,
         now: Callable[[], datetime] | None = None,
         ttl_hours: int = 12,
+        state_path: Path | None = None,
     ) -> None:
         self.root = Path(root)
-        self.path = self.root / "data" / "autonomous_fetch_state.json"
+        self.path = state_path or (
+            self.root / "data" / "autonomous_fetch_state.json"
+        )
         self.resolver = resolver or socket.getaddrinfo
         self._injected_opener = opener
         self.budget = budget or RequestBudget()

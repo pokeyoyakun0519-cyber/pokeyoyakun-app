@@ -58,8 +58,8 @@ DISCOVERY_SOURCES = (
     ),
     DiscoverySourceDefinition(
         "pokesoku", "ポケ速", "https://pokesoku.com/lottery-2026-08/",
-        TIER_B_DISCOVERY, ("pokemon",), False, "AUDITED_NOT_ENABLED",
-        "更新中の公式リンク付き一覧を確認。専用parser/robots確認前は自動取得しない。",
+        TIER_B_DISCOVERY, ("pokemon",), True, "SAFE_PUBLIC_HTML",
+        "専用parserで公式リンクだけを発見し、リンク先の公式Evidenceでのみconfirmedにする。",
     ),
     DiscoverySourceDefinition(
         "tcg_calendar", "TCGカレンダー", "https://tcgcalendar.jp/",
