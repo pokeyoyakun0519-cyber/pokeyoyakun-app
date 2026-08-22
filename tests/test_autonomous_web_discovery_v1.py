@@ -128,7 +128,7 @@ class AutonomousWebDiscoveryE2ETest(unittest.TestCase):
         self.assertEqual(1, len(dashboard["rows"]))
         self.assertEqual("confirmed", dashboard["rows"][0]["verification_status"])
 
-    def test_third_party_only_never_confirms_or_auto_promotes(self):
+    def test_third_party_to_official_link_is_quarantined_not_confirmed(self):
         url = "https://discovery.example/article"
         destination = "https://unknown-shop.example/lottery"
         engine, registry, _fetcher = self._engine(
@@ -141,8 +141,23 @@ class AutonomousWebDiscoveryE2ETest(unittest.TestCase):
         result = engine.run({"pokemon"})
         self.assertEqual(1, len(result["discoveries"]))
         self.assertFalse(result["discoveries"][0]["hit"]["confirmed"])
+        self.assertEqual(1, len(result["source_candidates"]))
+        candidate = next(item for item in registry.records if item["base_url"] == destination)
+        self.assertEqual("TIER_C_REFERENCE", candidate["trust_tier"])
+        self.assertEqual("DISCOVERED_CANDIDATE", candidate["source_state"])
+        self.assertFalse(candidate["enabled"])
+
+    def test_third_party_without_official_evidence_never_confirms(self):
+        url = "https://discovery.example/article-only"
+        engine, registry, _fetcher = self._engine(
+            [_seed("third_party_only", url, tier="TIER_B_DISCOVERY")],
+            {url: '<article>ポケモンカード「商品Z」抽選販売 応募受付 2026/8/30まで</article>'},
+        )
+        result = engine.run({"pokemon"})
+        self.assertEqual(1, len(result["discoveries"]))
+        self.assertFalse(result["discoveries"][0]["hit"]["confirmed"])
         self.assertEqual([], result["source_candidates"])
-        self.assertFalse(any(item["base_url"] == destination for item in registry.records))
+        self.assertFalse(any(item["id"].startswith("discovered_") for item in registry.records))
 
     def test_official_page_to_external_form_uses_primary_and_secondary_evidence(self):
         url = "https://shop.example/news/1"

@@ -281,7 +281,8 @@ class AutonomousApplicationSourceDiscovery:
         # application source.  Require explicit anchor context; matching the URL
         # itself admitted social-share links whose query string contained "store".
         link_text = re.sub(r"\s+", " ", str(link.get("text", ""))).strip()
-        if parent.get("trust_tier") != "TIER_A_OFFICIAL" or not OFFICIAL_LINK_TERMS.search(link_text):
+        parent_tier = str(parent.get("trust_tier", ""))
+        if parent_tier not in {"TIER_A_OFFICIAL", "TIER_B_DISCOVERY"} or not OFFICIAL_LINK_TERMS.search(link_text):
             return None
         url = canonical_url(link.get("url"))
         host = canonical_host(url)
@@ -300,8 +301,8 @@ class AutonomousApplicationSourceDiscovery:
             name=str(link_text or host)[:200],
             url=url,
             source_url=str(parent.get("base_url", "")),
-            provenance="verified_official_link",
-            trust_tier="TIER_A_OFFICIAL",
+            provenance="verified_official_link" if parent_tier == "TIER_A_OFFICIAL" else "third_party_official_link_candidate",
+            trust_tier="TIER_A_OFFICIAL" if parent_tier == "TIER_A_OFFICIAL" else "TIER_C_REFERENCE",
             supported_tcg=hints,
             seed_type="RETAILER",
         )
@@ -321,9 +322,13 @@ class AutonomousApplicationSourceDiscovery:
         checked_hosts.add(host)
         self.registry.begin_verification(str(candidate["id"]))
         result = self.fetcher.fetch(url, force=True)
+        official_provenance = any(
+            item.get("provenance") == "verified_official_link"
+            for item in candidate.get("official_evidence", [])
+        )
         if not result.get("ok"):
             updated = self.registry.complete_verification(str(candidate["id"]), {
-                "official_provenance": True,
+                "official_provenance": official_provenance,
                 "https": bool(url),
                 "robots_allowed": result.get("status") != "ROBOTS_BLOCKED",
                 "fetch_success": False,
@@ -340,10 +345,7 @@ class AutonomousApplicationSourceDiscovery:
             tcg_hint=sorted(set(candidate.get("supported_tcg", [])) & enabled),
         )
         updated = self.registry.complete_verification(str(candidate["id"]), {
-            "official_provenance": any(
-                item.get("provenance") == "verified_official_link"
-                for item in candidate.get("official_evidence", [])
-            ),
+            "official_provenance": official_provenance,
             "https": True,
             "robots_allowed": True,
             "fetch_success": True,
