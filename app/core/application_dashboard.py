@@ -307,6 +307,26 @@ class ApplicationDashboard:
             )["displayed_rows"] += 1
         diagnostics["eligible_rows"] = len(eligible_rows)
         diagnostics["displayed_rows"] = len(visible)
+        coverage_by_tcg = {}
+        for item in categories():
+            active_rows = [row for row in eligible_rows if row.get("tcg_key") == item.key and not row.get("period_ended")]
+            applications_per_chain = Counter(
+                str(row.get("chain") or row.get("site_key") or row.get("store_name") or "unknown")
+                for row in active_rows
+            )
+            active_total = sum(applications_per_chain.values())
+            dominant_ratio = max(applications_per_chain.values()) / active_total if active_total else 0.0
+            coverage_by_tcg[item.key] = {
+                "active_chain_count": len(applications_per_chain),
+                "active_branch_count": len({
+                    (str(row.get("chain") or row.get("site_key") or "unknown"),
+                     str(row.get("branch") or row.get("store_name") or ""))
+                    for row in active_rows
+                }),
+                "applications_per_chain": dict(applications_per_chain),
+                "dominant_chain_ratio": round(dominant_ratio, 3),
+                "chain_diversity_warning": bool(active_total and dominant_ratio >= 0.8),
+            }
 
         visible.sort(
             key=self._sort_key(sort_mode)
@@ -342,6 +362,7 @@ class ApplicationDashboard:
                 item.key: dict(diagnostics_by_tcg.get(item.key, Counter()))
                 for item in categories()
             },
+            "coverage_by_tcg": coverage_by_tcg,
         }
 
     @classmethod
