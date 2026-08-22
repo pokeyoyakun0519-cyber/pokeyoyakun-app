@@ -27,6 +27,17 @@ from core.secure_https import build_https_opener
 from core.store_candidate_manager import StoreCandidateManager
 from core.store_discovery import StoreDiscovery
 from core.tcg_categories import normalize_key
+from core.web_application_sources import WebApplicationSourceRegistry
+from core.chain_application_extractors import (
+    BandaiOfficialShopApplicationExtractor,
+    BatorocoApplicationExtractor,
+    BookoffApplicationExtractor,
+    CardboxApplicationExtractor,
+    FuruichiApplicationExtractor,
+    OtakarasoukoApplicationExtractor,
+    PlaysApplicationExtractor,
+    TsutayaApplicationExtractor,
+)
 
 
 POKEMON_CENTER_LOTTERY_INDEX = (
@@ -116,6 +127,17 @@ class RetailSearchManager:
         self.premium_bandai = PremiumBandaiApplicationAdapter()
         self.store_candidates = StoreCandidateManager()
         self.store_discovery = StoreDiscovery(self.store_candidates)
+        self.web_source_registry = WebApplicationSourceRegistry()
+        self.chain_application_extractors = {
+            "batoroco": BatorocoApplicationExtractor(),
+            "plays": PlaysApplicationExtractor(),
+            "otakarasouko": OtakarasoukoApplicationExtractor(),
+            "cardbox": CardboxApplicationExtractor(),
+            "tsutaya": TsutayaApplicationExtractor(),
+            "furuichi": FuruichiApplicationExtractor(),
+            "bookoff": BookoffApplicationExtractor(),
+            "bandai_official_shop": BandaiOfficialShopApplicationExtractor(),
+        }
         self.last_diagnostics: dict[str, Any] = {}
 
     def search_candidate(
@@ -270,6 +292,8 @@ class RetailSearchManager:
             "excluded_count": len(excluded),
             "new_store_candidate_count": new_store_candidates,
             "new_candidate_count": new_store_candidates,
+            "web_source_inventory": self.web_source_registry.diagnostics(),
+            "available_chain_extractors": sorted(self.chain_application_extractors),
             **discovery,
             "excluded_reasons": excluded,
             "checked_at": datetime.now().isoformat(timespec="seconds"),
