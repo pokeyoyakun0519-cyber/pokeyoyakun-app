@@ -1,10 +1,10 @@
 import json
 
 from core.runtime_paths import app_root
-from core.version import APP_CHANNEL, APP_VERSION
+from core.version import APP_RELEASE_CHANNEL, APP_VERSION
 
 
-CURRENT_RELEASE = f"{APP_VERSION}-{APP_CHANNEL.lower()}"
+CURRENT_RELEASE = f"{APP_VERSION}-{APP_RELEASE_CHANNEL.lower()}"
 
 
 class WhatsNewManager:
