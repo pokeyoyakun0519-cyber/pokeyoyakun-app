@@ -23,6 +23,8 @@ from core.notification_manager import NotificationManager
 from core.source_manager import SourceManager
 from core.tcg_categories import categories, display_name
 from core.x_monitoring_status import XMonitoringStatus
+from core.nyuka_now_discovery import NyukaNowDiscovery, discovery_source_diagnostics
+from core.runtime_paths import app_root
 
 
 class SourceEditDialog(QDialog):
@@ -261,6 +263,18 @@ class SourcesPage(QFrame):
         description.setObjectName("MutedText")
         description.setWordWrap(True)
         layout.addWidget(description)
+
+        web_card = QFrame()
+        web_card.setObjectName("SettingsCard")
+        web_layout = QVBoxLayout(web_card)
+        web_title = QLabel("Web情報監視")
+        web_title.setObjectName("SectionTitle")
+        self.web_monitoring_summary = QLabel("")
+        self.web_monitoring_summary.setObjectName("MutedText")
+        self.web_monitoring_summary.setWordWrap(True)
+        web_layout.addWidget(web_title)
+        web_layout.addWidget(self.web_monitoring_summary)
+        layout.addWidget(web_card)
 
         x_card = QFrame()
         x_card.setObjectName("SettingsCard")
@@ -530,6 +544,7 @@ class SourcesPage(QFrame):
         self.reload_sources()
 
     def reload_sources(self) -> None:
+        self._reload_web_monitoring()
         self._reload_x_monitoring()
         sources = (
             self.source_manager
@@ -582,3 +597,33 @@ class SourcesPage(QFrame):
             summary.get("message", ""),
         ]
         self.x_monitoring_summary.setText("\n".join(lines) or "SNS監視は未設定です")
+
+    def _reload_web_monitoring(self) -> None:
+        diagnostics = NyukaNowDiscovery(app_root()).diagnostics()
+        registry = discovery_source_diagnostics()
+        official_sources = [
+            source for source in self.source_manager.load_sources()
+            if source.get("enabled", True)
+        ]
+        official_states = {
+            str(source.get("check_state", "unchecked")).casefold()
+            for source in official_sources
+        }
+        if not official_sources:
+            official_state = "未設定"
+        elif "error" in official_states:
+            official_state = "一部確認中"
+        elif "checked" in official_states:
+            official_state = "正常"
+        else:
+            official_state = "更新待ち"
+        last_success = diagnostics.get("last_success") or "未取得"
+        error = diagnostics.get("error")
+        state = "一部確認中" if error else ("正常" if last_success != "未取得" else "更新待ち")
+        enabled_count = len(registry.get("auto_enabled", []))
+        self.web_monitoring_summary.setText(
+            f"状態: {state}  /  最終確認: {last_success}\n"
+            f"公式ソース: {official_state}  /  "
+            f"補助情報ソース: {'正常' if not error else '一部確認中'}（安全な自動監視 {enabled_count}件）\n"
+            "補助情報から見つけた案件は、公式ページで確認できるまで応募一覧へ確定表示しません。"
+        )

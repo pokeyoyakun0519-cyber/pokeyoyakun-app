@@ -199,10 +199,13 @@ class UserSnsUiTest(unittest.TestCase):
             monitor.return_value.rows.return_value = [{"username": "secret_account", "trust_level": "OFFICIAL"}]
             page = SourcesPage()
             text = page.x_monitoring_summary.text()
+            web_text = page.web_monitoring_summary.text()
             self.assertIn("SNS情報 最終更新", text)
             self.assertNotIn("secret_account", text)
             self.assertNotIn("OFFICIAL", text)
             monitor.return_value.rows.assert_not_called()
+            self.assertIn("補助情報ソース", web_text)
+            self.assertIn("公式ページで確認できるまで", web_text)
             page.close()
 
     def test_dashboard_has_sales_tabs_and_store_only_region_tabs(self):

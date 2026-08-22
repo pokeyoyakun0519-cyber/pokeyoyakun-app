@@ -243,6 +243,7 @@ class SourcesNavigationTest(unittest.TestCase):
             self.assertIs(window.sources_page, window.pages.currentWidget())
             self.assertIn("SNS情報 最終更新", window.sources_page.x_monitoring_summary.text())
             self.assertIn("状態: 未設定", window.sources_page.x_monitoring_summary.text())
+            self.assertIn("補助情報ソース", window.sources_page.web_monitoring_summary.text())
             window.close()
 
 

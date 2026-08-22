@@ -28,6 +28,12 @@ from core.store_candidate_manager import StoreCandidateManager
 from core.store_discovery import StoreDiscovery
 from core.tcg_categories import normalize_key
 from core.web_application_sources import WebApplicationSourceRegistry
+from core.nyuka_now_discovery import (
+    NyukaNowDiscovery,
+    OfficialVerificationQueue,
+    discovery_source_diagnostics,
+)
+from core.runtime_paths import app_root
 from core.chain_application_extractors import (
     BandaiOfficialShopApplicationExtractor,
     BatorocoApplicationExtractor,
@@ -128,6 +134,8 @@ class RetailSearchManager:
         self.store_candidates = StoreCandidateManager()
         self.store_discovery = StoreDiscovery(self.store_candidates)
         self.web_source_registry = WebApplicationSourceRegistry()
+        self.nyuka_now_discovery = NyukaNowDiscovery(app_root())
+        self.official_verification_queue = OfficialVerificationQueue()
         self.chain_application_extractors = {
             "batoroco": BatorocoApplicationExtractor(),
             "plays": PlaysApplicationExtractor(),
@@ -139,6 +147,28 @@ class RetailSearchManager:
             "bandai_official_shop": BandaiOfficialShopApplicationExtractor(),
         }
         self.last_diagnostics: dict[str, Any] = {}
+
+    def discover_web_application_candidates(self) -> dict[str, Any]:
+        """Discover and persist candidates without adding them to the dashboard."""
+        candidates = self.nyuka_now_discovery.poll_and_store()
+        queued = self.official_verification_queue.enqueue(candidates)
+        diagnostics = self.nyuka_now_discovery.diagnostics()
+        diagnostics.update({
+            "verification_queue_size": len(queued),
+            "verification_priority": {
+                level: sum(
+                    1 for item in queued
+                    if item.get("verification_priority") == level
+                )
+                for level in ("HIGH", "NORMAL", "LOW")
+            },
+            **self.official_verification_queue.diagnostics(),
+        })
+        return {
+            "candidates": candidates,
+            "queue": queued,
+            "diagnostics": diagnostics,
+        }
 
     def search_candidate(
         self,
@@ -293,6 +323,9 @@ class RetailSearchManager:
             "new_store_candidate_count": new_store_candidates,
             "new_candidate_count": new_store_candidates,
             "web_source_inventory": self.web_source_registry.diagnostics(),
+            "discovery_source_inventory": discovery_source_diagnostics(
+                self.web_source_registry.diagnostics()["total_sources"]
+            ),
             "available_chain_extractors": sorted(self.chain_application_extractors),
             **discovery,
             "excluded_reasons": excluded,

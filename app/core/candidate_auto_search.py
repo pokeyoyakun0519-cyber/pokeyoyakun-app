@@ -19,7 +19,9 @@ class CandidateAutoSearch:
         enabled_tcg_keys: set[str] | None = None,
     ) -> dict[str, Any]:
         discovery_result = {"created": 0, "updated": 0, "ambiguous": 0}
+        web_discovery = {"candidates": [], "queue": [], "diagnostics": {}}
         if isinstance(self.searcher, RetailSearchManager):
+            web_discovery = self.searcher.discover_web_application_candidates()
             discoveries = self.searcher.discover_priority_applications(
                 enabled_tcg_keys
             )
@@ -105,6 +107,7 @@ class CandidateAutoSearch:
             "new_hit_candidates": new_hit_candidates,
             "cancelled": cancelled,
             "application_discovery": discovery_result,
+            "web_discovery": web_discovery,
         }
 
     @staticmethod
