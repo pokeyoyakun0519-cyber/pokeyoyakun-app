@@ -25,7 +25,7 @@ _TRACKING_QUERY_KEYS = {
 }
 _STRONG_APPLICATION_FIELDS = (
     "application_period", "order_period", "application_start_at",
-    "application_end_at", "result_announcement_at", "result_date",
+    "application_end", "application_end_at", "result_announcement_at", "result_date",
 )
 _CONTEXTUAL_APPLICATION_FIELDS = (
     "purchase_period", "receipt_period", "target_store", "target_stores",

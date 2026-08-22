@@ -106,7 +106,7 @@ def evaluate_application_period(
         return {
             "period_status": explicit_open or ("受付中" if start else "締切日時不明"),
             "period_ended": False,
-            "remaining_text": "締切日時を確認できません",
+            "remaining_text": "締切日時不明",
             "end_reason": "",
         }
     remaining = end - current

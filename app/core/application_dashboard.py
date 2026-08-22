@@ -2,7 +2,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any
 
-from core.application_period import ApplicationPeriodParser
+from core.application_period import normalize_saved_application_period
 from core.application_site import (
     expand_application_branches,
     has_application_evidence,
@@ -78,17 +78,8 @@ class ApplicationDashboard:
             for raw_site in product.get("sites", []):
                 diagnostics["loaded_sites"] += 1
                 product_diagnostics["loaded_sites"] += 1
-                site = ApplicationPeriodParser().enrich_site(
-                    dict(raw_site),
-                    "\n".join(
-                        str(raw_site.get(key, ""))
-                        for key in (
-                            "application_period", "order_period", "result_date",
-                            "application_end",
-                        )
-                        if raw_site.get(key)
-                    ),
-                    release_date=str(product.get("release_date", "")),
+                site = normalize_saved_application_period(
+                    dict(raw_site), product=product, now=now,
                 )
                 site = normalize_application_site(site, product=product)
                 normalized_sites.extend(expand_application_branches(site))
