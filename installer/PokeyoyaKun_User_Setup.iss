@@ -14,11 +14,14 @@
 #ifndef BuildOutputBaseFilename
   #define BuildOutputBaseFilename "PokeyoyaKun_User_Setup_Ver1.25.0"
 #endif
+#ifndef BuildAppVersion
+  #define BuildAppVersion MyAppVersion
+#endif
 
 [Setup]
 AppId={#BuildAppId}
 AppName={#MyAppName}
-AppVersion={#MyAppVersion}
+AppVersion={#BuildAppVersion}
 VersionInfoVersion=1.25.0.100
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\PokeyoyaKun

@@ -27,7 +27,7 @@ class AboutPage(QFrame):
         info = QLabel(
             f"ポケヨヤ君\n"
             f"バージョン：{APP_VERSION}\n"
-            f"チャンネル：{APP_CHANNEL}\n\n"
+            f"チャンネル：{APP_CHANNEL.upper()}\n\n"
             f"インストール先：\n{install_root()}\n\n"
             f"設定・データ保存先：\n{app_root()}"
         )

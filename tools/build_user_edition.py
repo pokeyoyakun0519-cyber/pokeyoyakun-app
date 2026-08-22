@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -18,6 +19,14 @@ from release_security import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BUILD_OWNER_EDITION = False
 APP_DIR = PROJECT_ROOT / "app"
+sys.path.insert(0, str(APP_DIR))
+
+from core.version import (  # noqa: E402
+    APP_VERSION,
+    format_version_label,
+    normalize_build_channel,
+)
+
 ASSETS_DIR = PROJECT_ROOT / "assets"
 INSTALLER_DIR = PROJECT_ROOT / "installer"
 DIST_DIR = PROJECT_ROOT / "release" / "user_dist_rc5"
@@ -27,6 +36,8 @@ TEMP_BUILD_ROOT = (
 )
 BUILD_DIR = TEMP_BUILD_ROOT / "build"
 SPEC_DIR = TEMP_BUILD_ROOT / "spec"
+GENERATED_DIR = TEMP_BUILD_ROOT / "generated"
+BUILD_METADATA_FILE = GENERATED_DIR / "build_metadata.json"
 
 ICON_PATH = ASSETS_DIR / "pokeyoya_icon.ico"
 VERSION_FILE = INSTALLER_DIR / "version_info.txt"
@@ -79,6 +90,7 @@ def clean() -> None:
     for folder in (
         BUILD_DIR,
         SPEC_DIR,
+        GENERATED_DIR,
     ):
         if folder.exists():
             shutil.rmtree(folder)
@@ -101,6 +113,23 @@ def clean() -> None:
     SPEC_DIR.mkdir(
         parents=True,
         exist_ok=True,
+    )
+
+
+def write_build_metadata(channel: str) -> None:
+    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    BUILD_METADATA_FILE.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "version": APP_VERSION,
+                "channel": channel,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
     )
 
 
@@ -142,6 +171,8 @@ def build_target(
         f"{APP_DIR / 'core' / 'online_license_endpoint.json'};core",
         "--add-data",
         f"{APP_DIR / 'core' / 'online_license_public_keys.json'};core",
+        "--add-data",
+        f"{BUILD_METADATA_FILE};core",
         "--collect-all",
         "google.auth",
         "--collect-all",
@@ -261,8 +292,16 @@ def _build_commit() -> str:
 
 
 def main() -> None:
+    try:
+        channel = normalize_build_channel(
+            os.environ.get("POKEYOYAKUN_BUILD_CHANNEL")
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
     print("ポケヨヤ君 User Editionをビルドします。")
     print("管理サーバー・管理CLI・開発ツールは含めません。")
+    print("画面表示:", format_version_label(channel))
     verify_public_license_endpoint(PROJECT_ROOT)
     findings = scan_repository(PROJECT_ROOT)
     if findings:
@@ -272,6 +311,7 @@ def main() -> None:
         )
     ensure_dependencies()
     clean()
+    write_build_metadata(channel)
 
     for target in TARGETS:
         build_target(target)

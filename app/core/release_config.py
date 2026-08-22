@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 
-from core.version import APP_CHANNEL
+from core.version import APP_RELEASE_CHANNEL
 
 
 @dataclass(frozen=True)
 class ReleaseConfig:
-    channel: str = APP_CHANNEL
+    channel: str = APP_RELEASE_CHANNEL
 
     @property
     def is_development(self) -> bool:

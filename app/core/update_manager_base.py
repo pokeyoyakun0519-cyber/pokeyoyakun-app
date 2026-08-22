@@ -9,11 +9,11 @@ from threading import Event
 
 from core.release_update import ReleaseUpdateClient, UpdateError
 from core.runtime_paths import app_root, install_root, is_frozen
-from core.version import APP_CHANNEL, APP_VERSION
+from core.version import APP_RELEASE_CHANNEL, APP_VERSION
 
 
 def current_tag() -> str:
-    channel = APP_CHANNEL.strip().lower()
+    channel = APP_RELEASE_CHANNEL.strip().lower()
     return f"v{APP_VERSION}" if channel in {"stable", "release"} else f"v{APP_VERSION}-{channel}"
 
 

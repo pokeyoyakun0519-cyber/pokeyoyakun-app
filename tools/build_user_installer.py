@@ -3,10 +3,16 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+APP_DIR = PROJECT_ROOT / "app"
+sys.path.insert(0, str(APP_DIR))
+
+from core.version import APP_VERSION, normalize_build_channel  # noqa: E402
+
 SCRIPT = (
     PROJECT_ROOT
     / "installer"
@@ -44,6 +50,13 @@ def find_iscc() -> Path | None:
 
 
 def main() -> None:
+    try:
+        channel = normalize_build_channel(
+            os.environ.get("POKEYOYAKUN_BUILD_CHANNEL")
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
     iscc = find_iscc()
     if iscc is None:
         raise SystemExit(
@@ -51,10 +64,13 @@ def main() -> None:
             "公式サイトからインストール後、もう一度実行してください。"
         )
 
-    completed = subprocess.run([
-        str(iscc),
-        str(SCRIPT),
-    ])
+    command = [str(iscc)]
+    if channel != "stable":
+        command.append(
+            f"/DBuildAppVersion={APP_VERSION} {channel.upper()}"
+        )
+    command.append(str(SCRIPT))
+    completed = subprocess.run(command)
     if completed.returncode != 0:
         raise SystemExit(
             "User Editionインストーラー作成に失敗しました。"
