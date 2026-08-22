@@ -21,6 +21,12 @@ from core.product_store import ProductStore
 from core.safe_product_url import can_open_product_url, open_product_url
 from core.tcg_categories import categories
 from core.product_categories import PRODUCT_CATEGORY_LABELS
+from ui.tcg_category_tabs import (
+    ALL_CATEGORY_KEY,
+    TcgCategoryTabs,
+    category_counts,
+    filter_items_by_category,
+)
 
 
 class ApplicationRow(QFrame):
@@ -365,7 +371,7 @@ class ApplicationDashboardPage(QFrame):
         layout.addWidget(self.summary)
 
         description = QLabel(
-            "商品一覧にある店舗ごとの応募状況をまとめて表示します。"
+            "各店舗・公式サイトの抽選、予約、応募受付情報をまとめて表示します。"
             "結果確認日が来たものを上に表示し、"
             "当選・落選もここから記録できます。"
         )
@@ -381,6 +387,10 @@ class ApplicationDashboardPage(QFrame):
         self.period_tabs.currentChanged.connect(self._apply_filters)
         layout.addWidget(self.period_tabs)
 
+        self.tcg_tabs = TcgCategoryTabs()
+        self.tcg_tabs.category_changed.connect(self._on_tcg_category_changed)
+        layout.addWidget(self.tcg_tabs)
+
         filter_header = QHBoxLayout()
         self.filter_toggle = QPushButton("絞り込みを表示")
         self.filter_toggle.setObjectName("SmallButton")
@@ -395,13 +405,13 @@ class ApplicationDashboardPage(QFrame):
         filter_layout.setSpacing(8)
 
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("TCG："))
+        # 過去のUIテスト・内部操作との互換用。画面上の選択は常設タブへ集約する。
         self.tcg_filter = QComboBox()
         self.tcg_filter.addItem("すべて", "all")
-        for item in categories():
+        for item in categories(enabled_only=True):
             self.tcg_filter.addItem(item.short_name, item.key)
-        self.tcg_filter.currentIndexChanged.connect(self._apply_filters)
-        filter_row.addWidget(self.tcg_filter)
+        self.tcg_filter.setVisible(False)
+        self.tcg_filter.currentIndexChanged.connect(self._on_legacy_tcg_filter_changed)
 
         filter_row.addWidget(QLabel("販売方式："))
         self.sales_mode_filter = QComboBox()
@@ -530,6 +540,18 @@ class ApplicationDashboardPage(QFrame):
         self.config_manager.save(config)
         self._apply_filters()
 
+    def _on_tcg_category_changed(self, key: str):
+        index = self.tcg_filter.findData(key)
+        self.tcg_filter.blockSignals(True)
+        self.tcg_filter.setCurrentIndex(max(0, index))
+        self.tcg_filter.blockSignals(False)
+        self._apply_filters()
+
+    def _on_legacy_tcg_filter_changed(self, _index: int):
+        self.tcg_tabs.select_category(
+            str(self.tcg_filter.currentData() or ALL_CATEGORY_KEY)
+        )
+
     def reload(self, *_args, force: bool = False):
         if force or self._snapshot is None:
             self._snapshot = self.dashboard.build(state_filter="すべて", show_ended=True)
@@ -582,7 +604,7 @@ class ApplicationDashboardPage(QFrame):
                     f'eligible={values.get("eligible_rows", 0)} '
                     f'displayed={values.get("displayed_rows", 0)} '
                     f'no_evidence={values.get("excluded_no_application_evidence", 0)} '
-                    f'ended={values.get("excluded_ended", 0)} '
+                    f'ended={values.get("ended_rows", 0)} '
                     f'tcg_filter={values.get("excluded_tcg_filter", 0)} '
                     f'state_filter={values.get("excluded_state_filter", 0)} '
                     f'keyword={values.get("excluded_keyword", 0)}'
@@ -615,11 +637,11 @@ class ApplicationDashboardPage(QFrame):
 
         state_filter = str(self.application_state_filter.currentData() or "すべて")
         period_filter = str(self.period_tabs.tabData(self.period_tabs.currentIndex()) or "active")
-        rows = self.dashboard.filter_cached(
+        rows_without_tcg = self.dashboard.filter_cached(
             all_rows, period_filter=period_filter,
             state_filter="すべて" if state_filter == "確認中" else state_filter,
             keyword=self.keyword.text(),
-            tcg_filter=str(self.tcg_filter.currentData() or "all"),
+            tcg_filter=ALL_CATEGORY_KEY,
             sales_mode_filter=str(self.sales_mode_filter.currentData() or "all"),
             prefecture_filter=str(self.prefecture_filter.currentData() or "all"),
             product_category_filter=str(
@@ -628,7 +650,13 @@ class ApplicationDashboardPage(QFrame):
             sort_mode=self.sort_mode.currentText(),
         )
         if state_filter == "確認中":
-            rows = [row for row in rows if row.get("is_candidate")]
+            rows_without_tcg = [
+                row for row in rows_without_tcg if row.get("is_candidate")
+            ]
+        self.tcg_tabs.set_counts(category_counts(rows_without_tcg))
+        rows = list(filter_items_by_category(
+            rows_without_tcg, self.tcg_tabs.selected_key
+        ))
 
         state_counts = {state: sum(row.get("dashboard_state") == state for row in all_rows)
                         for state in ("未応募", "応募済み", "当選", "落選")}

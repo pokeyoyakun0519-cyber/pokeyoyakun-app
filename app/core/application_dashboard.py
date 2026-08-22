@@ -3,7 +3,11 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from core.application_period import ApplicationPeriodParser
-from core.application_site import has_application_evidence, normalize_application_site
+from core.application_site import (
+    has_application_evidence,
+    normalize_application_site,
+    sales_mode_from_evidence,
+)
 from core.application_change_tracker import ApplicationChangeTracker
 from core.application_condition_detector import ApplicationConditionDetector
 from core.application_status import JST, evaluate_application_period
@@ -220,6 +224,8 @@ class ApplicationDashboard:
                     "candidate", "pending", "confirming", "確認中",
                 } or ("confirmed" in site and site.get("confirmed") is False)
                 rows.append(row)
+                if row["period_ended"]:
+                    row_diagnostics["ended_rows"] += 1
 
         eligible_rows = []
         for row in rows:
@@ -346,11 +352,7 @@ class ApplicationDashboard:
 
     @staticmethod
     def _sales_mode(site: dict[str, Any]) -> str:
-        value = str(site.get("sales_mode") or site.get("sales_method_hint")
-                    or site.get("channel") or "UNKNOWN").strip().upper()
-        aliases = {"ONLINE": "ONLINE", "STORE": "STORE", "PHYSICAL": "STORE",
-                   "HYBRID": "HYBRID", "CHAIN": "STORE", "UNKNOWN": "UNKNOWN"}
-        return aliases.get(value, "UNKNOWN")
+        return sales_mode_from_evidence(site)
 
     @staticmethod
     def _within_ended_retention(row: dict[str, Any], now) -> bool:

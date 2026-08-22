@@ -17,6 +17,7 @@ from core.application_status import JST
 from core.config_manager import ConfigManager
 from core.notification_store import NotificationStore
 from core.product_store import ProductStore
+from core.tcg_categories import categories
 
 
 def product(end: datetime, *, site_key: str = "shop", tcg_key: str = "pokemon") -> dict:
@@ -208,7 +209,11 @@ class CommonEditionAndUiTest(unittest.TestCase):
                 [tab.tabData(i) for i in range(tab.count())]
                 for tab in tabs
             ]
-            self.assertEqual([["active", "ended"]], tab_sets)
+            self.assertIn(["active", "ended"], tab_sets)
+            self.assertIn(
+                ["all"] + [item.key for item in categories(enabled_only=True)],
+                tab_sets,
+            )
             self.assertEqual("all", page.tcg_filter.currentData())
             self.assertEqual("all", page.sales_mode_filter.currentData())
             self.assertEqual("all", page.prefecture_filter.currentData())

@@ -644,6 +644,7 @@ class MainWindow(QMainWindow):
             self.notification_center_button,
             self.email_accounts_button,
             self.scheduler_button,
+            self.sources_button,
             self.open_settings_button,
         }
         self._apply_ui_mode(self.ui_mode)
