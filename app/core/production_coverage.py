@@ -17,6 +17,7 @@ from core.web_application_sources import (
     PRIORITY_TCG,
     WebApplicationSourceRegistry,
 )
+from core.restricted_application import UNVERIFIED_RESTRICTED, verification_bucket
 
 
 COVERAGE_STATES = {
@@ -24,6 +25,7 @@ COVERAGE_STATES = {
     "RECENTLY_ENDED", "NO_CURRENT_APPLICATION", "APP_REQUIRED", "SNS_ONLY",
     "ROBOTS_BLOCKED", "PARSER_NEEDED", "HTTP_ERROR", "UNSUPPORTED",
     "VERIFYING", "DISCOVERED_CANDIDATE", "TEMPORARILY_FAILED",
+    "UNVERIFIED_RESTRICTED",
 }
 PREFECTURES = (
     "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
@@ -194,13 +196,14 @@ def build_production_coverage(
                     },
                 })
 
-    confirmed = [
+    displayable = [
         item for item in discoveries
         if isinstance(item, dict)
-        and str(item.get("hit", {}).get("verification_status")) == "confirmed"
+        and verification_bucket(item.get("hit", {}).get("verification_status"))
+        in {"confirmed", UNVERIFIED_RESTRICTED}
     ]
     applications = []
-    for item in confirmed:
+    for item in displayable:
         state = _period_state(item, now)
         if state not in {"CURRENT_APPLICATION", "RECENTLY_ENDED"}:
             continue
@@ -211,6 +214,9 @@ def build_production_coverage(
             "product": str(item.get("record", {}).get("product_name") or ""),
             "official_url": str(item.get("record", {}).get("article_url") or ""),
             "application_url": str(item.get("hit", {}).get("application_url") or item.get("hit", {}).get("url") or ""),
+            "verification_status": verification_bucket(
+                item.get("hit", {}).get("verification_status")
+            ),
         })
 
     by_tcg: dict[str, Any] = {}
@@ -226,6 +232,12 @@ def build_production_coverage(
             "recently_ended_chain_count": len({row["chain"] for row in apps if row["state"] == "RECENTLY_ENDED"}),
             "active_branch_count": len({(row["chain"], row["branch"]) for row in apps if row["state"] == "CURRENT_APPLICATION"}),
             "recently_ended_branch_count": len({(row["chain"], row["branch"]) for row in apps if row["state"] == "RECENTLY_ENDED"}),
+            "confirmed_application_count": sum(
+                row["verification_status"] == "confirmed" for row in apps
+            ),
+            "restricted_application_count": sum(
+                row["verification_status"] == UNVERIFIED_RESTRICTED for row in apps
+            ),
         }
     prefectures = {}
     for prefecture in PREFECTURES:
@@ -255,6 +267,14 @@ def build_production_coverage(
             "unique_prefecture_count": len({row["prefecture"] for row in active + recent if row["prefecture"]}),
             "unique_product_count": len({row["product"] for row in active + recent if row["product"]}),
             "dominant_chain_ratio": round(max(chain_counts.values()) / sum(chain_counts.values()), 3) if chain_counts else 0.0,
+            "confirmed_application_count": sum(
+                row["verification_status"] == "confirmed" for row in applications
+            ),
+            "restricted_application_count": sum(
+                row["verification_status"] == UNVERIFIED_RESTRICTED
+                for row in applications
+            ),
+            "dashboard_application_count": len(applications),
         },
         "by_tcg": by_tcg, "by_prefecture": prefectures,
         "inventory": inventory, "applications": applications,

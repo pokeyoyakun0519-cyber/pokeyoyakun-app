@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
     "notification": {
         "sound_file": "",
         "application_events_enabled": True,
+        "include_unverified_restricted": True,
         "tcg": {
             "pokemon": True,
             "onepiece": True,

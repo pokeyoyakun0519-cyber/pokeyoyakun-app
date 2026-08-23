@@ -12,6 +12,7 @@ from core.tcg_categories import display_name
 
 
 STATUS_LABELS = {
+    "UNVERIFIED_RESTRICTED": "要公式確認",
     "CURRENT_APPLICATION": "応募受付中",
     "RECENTLY_ENDED": "最近終了",
     "NO_CURRENT_APPLICATION": "現在応募なし",
@@ -30,6 +31,9 @@ STATUS_LABELS = {
 }
 
 STATUS_REASONS = {
+    "UNVERIFIED_RESTRICTED": (
+        "サイト側の自動確認制限があります。応募前に公式情報をご確認ください"
+    ),
     "CURRENT_APPLICATION": "公式情報で受付中の応募を確認しています",
     "RECENTLY_ENDED": "応募受付は終了しましたが、終了後14日以内の情報です",
     "NO_CURRENT_APPLICATION": "現在受付中の応募を確認できていません",
@@ -55,7 +59,7 @@ FILTER_STATES = {
     "verifying": {"VERIFYING", "DISCOVERED_CANDIDATE", "DISCOVERED"},
     "app": {"APP_REQUIRED"},
     "sns": {"SNS_ONLY"},
-    "restricted": {"ROBOTS_BLOCKED", "HTTP_ERROR", "TEMPORARILY_FAILED", "PARSER_NEEDED"},
+    "restricted": {"UNVERIFIED_RESTRICTED", "ROBOTS_BLOCKED", "HTTP_ERROR", "TEMPORARILY_FAILED", "PARSER_NEEDED"},
     "unsupported": {"UNSUPPORTED"},
 }
 
@@ -135,13 +139,15 @@ def build_source_inventory_view(report: dict[str, Any]) -> dict[str, Any]:
         "chain_count": len({str(row["chain"]) for row in rows}),
         "branch_store_count": len(branch_keys),
         "source_count": len(sources),
-        "current": state_counts["CURRENT_APPLICATION"],
-        "recent": state_counts["RECENTLY_ENDED"],
+        "current": sum(int(row.get("current_application_count") or 0) for row in rows),
+        "recent": sum(int(row.get("recently_ended_count") or 0) for row in rows),
         "no_current": sum(state_counts[name] for name in ("NO_CURRENT_APPLICATION", "MONITORABLE", "OFFICIAL_VERIFIED")),
         "verifying": sum(state_counts[name] for name in ("VERIFYING", "DISCOVERED_CANDIDATE", "DISCOVERED")),
         "app_required": state_counts["APP_REQUIRED"],
         "sns_only": state_counts["SNS_ONLY"],
-        "restricted": sum(state_counts[name] for name in ("ROBOTS_BLOCKED", "HTTP_ERROR", "TEMPORARILY_FAILED")),
+        "restricted": sum(state_counts[name] for name in (
+            "UNVERIFIED_RESTRICTED", "ROBOTS_BLOCKED", "HTTP_ERROR", "TEMPORARILY_FAILED"
+        )),
         "parser_needed": state_counts["PARSER_NEEDED"],
         "unsupported": state_counts["UNSUPPORTED"],
     }
@@ -170,7 +176,12 @@ def filter_source_inventory(
 
 def _present_row(source: dict[str, Any], application: dict[str, Any] | None) -> dict[str, Any]:
     application = application or {}
-    state = str(application.get("state") or source.get("state") or "DISCOVERED_CANDIDATE")
+    period_state = str(application.get("state") or "")
+    state = (
+        "UNVERIFIED_RESTRICTED"
+        if application.get("verification_status") == "unverified_restricted"
+        else period_state or str(source.get("state") or "DISCOVERED_CANDIDATE")
+    )
     prefecture = str(application.get("prefecture") or "")
     if not prefecture:
         values = source.get("prefectures", [])
@@ -179,7 +190,7 @@ def _present_row(source: dict[str, Any], application: dict[str, Any] | None) -> 
     tcg = str(application.get("tcg") or source.get("tcg") or "other")
     chain = str(application.get("chain") or source.get("chain") or "unknown")
     branch = str(application.get("branch") or "支店情報未取得")
-    is_application = state in {"CURRENT_APPLICATION", "RECENTLY_ENDED"}
+    is_application = period_state in {"CURRENT_APPLICATION", "RECENTLY_ENDED"}
     return {
         "display_name": str(source.get("display_name") or chain),
         "chain": chain, "branch": branch, "tcg": tcg,
@@ -192,15 +203,18 @@ def _present_row(source: dict[str, Any], application: dict[str, Any] | None) -> 
         "official_url": official_url,
         "official_url_safe": can_open_product_url(official_url),
         "dashboard_listed": is_application,
-        "monitored": state in {"CURRENT_APPLICATION", "RECENTLY_ENDED", "NO_CURRENT_APPLICATION", "MONITORABLE"},
+        "monitored": state in {
+            "CURRENT_APPLICATION", "UNVERIFIED_RESTRICTED", "RECENTLY_ENDED",
+            "NO_CURRENT_APPLICATION", "MONITORABLE",
+        },
         "verified_official": state in {"CURRENT_APPLICATION", "RECENTLY_ENDED", "NO_CURRENT_APPLICATION", "MONITORABLE", "OFFICIAL_VERIFIED"},
-        "current_application_count": int(state == "CURRENT_APPLICATION"),
-        "recently_ended_count": int(state == "RECENTLY_ENDED"),
+        "current_application_count": int(period_state == "CURRENT_APPLICATION"),
+        "recently_ended_count": int(period_state == "RECENTLY_ENDED"),
         "monitoring_type": _monitoring_label(
             source.get("monitoring_type") or source.get("source_class")
             or source.get("monitor_type")
         ),
-        "monitoring_restriction": state == "ROBOTS_BLOCKED",
+        "monitoring_restriction": state in {"ROBOTS_BLOCKED", "UNVERIFIED_RESTRICTED"},
         "parser_status": "対応待ち" if state == "PARSER_NEEDED" else "確認済み" if state in {"CURRENT_APPLICATION", "RECENTLY_ENDED", "NO_CURRENT_APPLICATION"} else "確認中",
         "application_status": "掲載" if is_application else "未掲載",
     }
@@ -223,7 +237,7 @@ def _monitoring_label(value: object) -> str:
 
 def _state_priority(state: str) -> int:
     return {
-        "CURRENT_APPLICATION": 100, "RECENTLY_ENDED": 90,
+        "CURRENT_APPLICATION": 100, "UNVERIFIED_RESTRICTED": 95, "RECENTLY_ENDED": 90,
         "VERIFYING": 80, "DISCOVERED_CANDIDATE": 75, "DISCOVERED": 75,
         "APP_REQUIRED": 70, "SNS_ONLY": 65, "ROBOTS_BLOCKED": 60,
         "PARSER_NEEDED": 55, "HTTP_ERROR": 50, "TEMPORARILY_FAILED": 50,

@@ -4,6 +4,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from core.safe_product_url import validate_product_url
+from core.restricted_application import UNVERIFIED_RESTRICTED, verification_bucket
 
 
 APPLICATION_PATH_TYPES = {
@@ -15,6 +16,7 @@ APPLICATION_PATH_TYPES = {
     "UNKNOWN",
 }
 _EXTERNAL_APPLICATION_HOSTS = {"livepocket.jp", "t.livepocket.jp"}
+_TRUSTED_DISCOVERY_HOSTS = {"nyuka-now.com", "www.nyuka-now.com"}
 
 
 def application_action(row: dict[str, Any]) -> dict[str, Any]:
@@ -34,7 +36,19 @@ def application_action(row: dict[str, Any]) -> dict[str, Any]:
         label = "応募ページを開く"
     target = next((url for url in candidates if safe_application_action_url(url, row)), "")
     enabled = bool(target) and not bool(row.get("is_candidate"))
-    if row.get("is_candidate"):
+    if verification_bucket(row.get("verification_status")) == UNVERIFIED_RESTRICTED:
+        official = str(row.get("official_detail_url") or "").strip()
+        discovery = str(row.get("discovery_source_url") or row.get("site_url") or "").strip()
+        target = official or discovery
+        if target and safe_application_action_url(target, row):
+            enabled = True
+        if official:
+            label = "公式情報を確認する"
+            guidance = "応募前に公式ページで期間・商品・条件をご確認ください"
+        else:
+            label = "情報元を確認する"
+            guidance = "公式情報ではありません。店舗公式ページも必ずご確認ください"
+    elif row.get("is_candidate"):
         guidance = "公式確認が完了するまで応募操作は利用できません"
     return {
         "application_path_type": path_type,
@@ -100,6 +114,12 @@ def safe_application_action_url(url: str, row: dict[str, Any]) -> bool:
         return True
     except ValueError:
         pass
+    if (
+        verification_bucket(row.get("verification_status")) == UNVERIFIED_RESTRICTED
+        and url == str(row.get("discovery_source_url") or "").strip()
+        and _host(url) in _TRUSTED_DISCOVERY_HOSTS
+    ):
+        return True
     if _host(url) not in _EXTERNAL_APPLICATION_HOSTS:
         return False
     if str(row.get("verification_status") or "").strip().casefold() != "confirmed":

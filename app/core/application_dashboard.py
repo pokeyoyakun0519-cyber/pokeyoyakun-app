@@ -28,6 +28,7 @@ from core.tcg_categories import categories, display_name, normalize_key
 from core.product_categories import normalize_product_category
 from core.application_action import application_action
 from core.application_freshness import assess_unknown_deadline
+from core.restricted_application import UNVERIFIED_RESTRICTED, verification_bucket
 
 
 class ApplicationDashboard:
@@ -135,6 +136,7 @@ class ApplicationDashboard:
                     "site_url": site.get("url", ""),
                     "application_url": site.get("application_url", ""),
                     "official_detail_url": site.get("official_detail_url", ""),
+                    "discovery_source_url": site.get("discovery_source_url", ""),
                     "application_path_type": site.get(
                         "application_path_type", site.get("application_path", "")
                     ),
@@ -238,11 +240,18 @@ class ApplicationDashboard:
                     ),
                     "product_category": normalize_product_category(product),
                     "verification_details": site.get("verification_details", ""),
+                    "restriction_reason": site.get("restriction_reason", ""),
+                    "last_checked_at": site.get(
+                        "last_checked_at", site.get("last_verified_at", "")
+                    ),
                     **freshness,
                 }
                 row["is_candidate"] = str(row["verification_status"]).casefold() in {
-                    "candidate", "pending", "confirming", "確認中",
+                    "candidate", "pending", "confirming", "確認中", UNVERIFIED_RESTRICTED,
                 } or ("confirmed" in site and site.get("confirmed") is False)
+                row["is_restricted"] = verification_bucket(
+                    row["verification_status"]
+                ) == UNVERIFIED_RESTRICTED
                 row["region"] = region_for_prefecture(row["prefecture"])
                 row["store_key"] = stable_store_key(row)
                 row["deadline_state"] = deadline_state(row, now=now)
@@ -376,6 +385,13 @@ class ApplicationDashboard:
                 item.key: tcg_counts[item.key] for item in categories()
             },
             "rows": visible,
+            "verification_counts": {
+                "confirmed": sum(
+                    verification_bucket(row.get("verification_status")) == "confirmed"
+                    for row in eligible_rows
+                ),
+                "restricted": sum(bool(row.get("is_restricted")) for row in eligible_rows),
+            },
             "groups": self._group_rows(visible),
             "total_rows": len(eligible_rows),
             "history_total_rows": len(rows),

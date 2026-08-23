@@ -8,6 +8,9 @@ from typing import Any, Callable
 
 from core.application_period import ApplicationPeriodParser
 from core.application_site import normalize_application_site
+from core.restricted_application import (
+    CONFIRMED, REJECTED, UNVERIFIED_RESTRICTED, verification_bucket,
+)
 from core.json_file_state import (
     CANDIDATE_LIST_FIELDS,
     PRODUCT_LIST_FIELDS,
@@ -449,20 +452,26 @@ class CandidateManager:
                 hits, messages
             )
 
-            confirmed_hits = [
-                hit for hit in hits
-                if str(hit.get("verification_status", "confirmed")) != "candidate"
-            ]
+            confirmed_hits = [hit for hit in hits if verification_bucket(
+                hit.get("verification_status", "confirmed")) == CONFIRMED]
+            restricted_hits = [hit for hit in hits if verification_bucket(
+                hit.get("verification_status")) == UNVERIFIED_RESTRICTED]
             if confirmed_hits:
                 candidate["status"] = (
                     f"販売・抽選情報 {len(confirmed_hits)}件"
                 )
                 candidate["approved"] = True
                 approved_candidate = dict(candidate)
-                approved_candidate["retail_hits"] = confirmed_hits
+                approved_candidate["retail_hits"] = [*confirmed_hits, *restricted_hits]
                 self._upsert_product_from_candidate(
                     approved_candidate
                 )
+            elif restricted_hits:
+                candidate["status"] = f"要公式確認 {len(restricted_hits)}件"
+                candidate["approved"] = False
+                restricted_candidate = dict(candidate)
+                restricted_candidate["retail_hits"] = restricted_hits
+                self._upsert_product_from_candidate(restricted_candidate)
             elif hits:
                 candidate["status"] = f"販売・抽選候補 {len(hits)}件（確認待ち）"
                 candidate["approved"] = False
@@ -548,27 +557,83 @@ class CandidateManager:
                 dict(value) for value in candidate.get("retail_hits", [])
                 if isinstance(value, dict)
             ]
-            if key not in {
-                (str(value.get("site_key", "")), str(value.get("url", "")))
-                for value in existing_hits
-            }:
+            existing_index = next((index for index, value in enumerate(existing_hits)
+                if key == (str(value.get("site_key", "")), str(value.get("url", "")))), None)
+            status = verification_bucket(hit.get("verification_status"))
+            if status == REJECTED:
+                if existing_index is not None:
+                    existing_hits.pop(existing_index)
+                    candidate["retail_hits"] = existing_hits
+                    updated += 1
+                self._remove_product_hit(candidate, hit)
+                continue
+            if existing_index is None:
                 existing_hits.append(dict(hit))
                 candidate["retail_hits"] = existing_hits
                 updated += 1
-            if str(hit.get("verification_status", "")) == "confirmed":
+            else:
+                previous = existing_hits[existing_index]
+                previous_status = verification_bucket(previous.get("verification_status"))
+                rank = {"candidate": 0, UNVERIFIED_RESTRICTED: 1, CONFIRMED: 2}
+                if rank.get(status, 0) >= rank.get(previous_status, 0):
+                    existing_hits[existing_index] = {**previous, **dict(hit)}
+                    candidate["retail_hits"] = existing_hits
+                    updated += int(existing_hits[existing_index] != previous)
+            if status == CONFIRMED:
                 candidate["approved"] = True
                 candidate["status"] = f"販売・抽選情報 {len(existing_hits)}件"
                 approved = dict(candidate)
                 approved["retail_hits"] = [
                     value for value in existing_hits
-                    if str(value.get("verification_status", "confirmed")) != "candidate"
+                    if verification_bucket(value.get("verification_status", "confirmed"))
+                    in {CONFIRMED, UNVERIFIED_RESTRICTED}
                 ]
                 promoted[str(candidate.get("id", ""))] = approved
+            elif status == UNVERIFIED_RESTRICTED:
+                has_confirmed = any(
+                    verification_bucket(value.get("verification_status")) == CONFIRMED
+                    for value in existing_hits
+                )
+                candidate["approved"] = has_confirmed
+                candidate["status"] = (
+                    f"販売・抽選情報 {len(existing_hits)}件"
+                    if has_confirmed else f"要公式確認 {len(existing_hits)}件"
+                )
+                restricted = dict(candidate)
+                restricted["retail_hits"] = [value for value in existing_hits
+                    if verification_bucket(value.get("verification_status"))
+                    in {CONFIRMED, UNVERIFIED_RESTRICTED}]
+                promoted[str(candidate.get("id", ""))] = restricted
         if created or updated:
             self.save_candidates(candidates)
             for candidate in promoted.values():
                 self._upsert_product_from_candidate(candidate)
         return {"created": created, "updated": updated, "ambiguous": ambiguous}
+
+    def _remove_product_hit(
+        self, candidate: dict[str, Any], hit: dict[str, Any]
+    ) -> None:
+        """Remove only a rejected discovered site; user state/history is untouched."""
+        from core.product_store import ProductStore
+
+        store = ProductStore(self.root)
+        products = store._load_product_file()
+        product_id = f"retail_{candidate.get('id', '')}"
+        changed = False
+        target_key = (str(hit.get("site_key", "")), str(hit.get("url", "")))
+        for product in products:
+            if str(product.get("id") or product.get("product_id") or "") != product_id:
+                continue
+            sites = [site for site in product.get("sites", []) if not (
+                isinstance(site, dict) and target_key == (
+                    str(site.get("site_key", "")), str(site.get("url", ""))
+                )
+            )]
+            if len(sites) != len(product.get("sites", [])):
+                product["sites"] = sites
+                changed = True
+        if changed:
+            store._save_product_file(products)
 
     def approve_candidate(
         self,

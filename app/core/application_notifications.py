@@ -14,10 +14,11 @@ from core.application_site import sales_mode_from_evidence
 from core.config_manager import ConfigManager
 from core.product_categories import normalize_product_category
 from core.tcg_categories import normalize_key
+from core.restricted_application import UNVERIFIED_RESTRICTED, verification_bucket
 
 
 class ApplicationNotificationService:
-    """Build notification events from saved confirmed applications only."""
+    """Build distinct confirmed/restricted events from saved applications."""
 
     FINAL_RESULTS = {"当選", "落選", "予約完了", "注文受付", "キャンセル"}
     BLOCKED_VERIFICATION = {"candidate", "pending", "confirming", "確認中", "rejected"}
@@ -46,7 +47,7 @@ class ApplicationNotificationService:
             category = normalize_product_category(product)
             tcg_key = normalize_key(product.get("tcg_key"), product.get("tcg"))[0]
             for site in product.get("sites", []):
-                if not isinstance(site, dict) or not self._confirmed(product, site):
+                if not isinstance(site, dict) or not self._notifiable(product, site, settings):
                     continue
                 if self._suppressed(site, settings):
                     continue
@@ -65,6 +66,16 @@ class ApplicationNotificationService:
                 ):
                     continue
                 event_type = self._event_type(site)
+                verification = verification_bucket(site.get(
+                    "verification_status", product.get("verification_status", "confirmed")
+                ))
+                application_url = str(
+                    site.get("official_detail_url")
+                    if verification == UNVERIFIED_RESTRICTED and site.get("official_detail_url")
+                    else site.get("discovery_source_url")
+                    if verification == UNVERIFIED_RESTRICTED and site.get("discovery_source_url")
+                    else site.get("application_url") or site.get("url") or ""
+                )
                 application_id = self._application_id(product, site)
                 source_event_id = str(
                     site.get("source_event_id") or site.get("x_post_id") or site.get("id") or ""
@@ -88,20 +99,42 @@ class ApplicationNotificationService:
                         "prefecture": prefecture,
                         "region": region,
                         "store_key": store_key,
-                        "application_url": str(site.get("application_url") or site.get("url") or ""),
+                        "application_url": application_url,
+                        "application_action_label": (
+                            "公式情報を確認する"
+                            if verification == UNVERIFIED_RESTRICTED and site.get("official_detail_url")
+                            else "情報元を確認する"
+                            if verification == UNVERIFIED_RESTRICTED
+                            else "応募ページを開く"
+                        ),
+                        "verification_status": verification,
+                        "verification_label": (
+                            "⚠ 要公式確認"
+                            if verification == UNVERIFIED_RESTRICTED
+                            else "✅ 公式確認済み"
+                        ),
                         "detected_at": detected_at.isoformat(),
                     }
                 )
         return events
 
     @classmethod
-    def _confirmed(cls, product: dict[str, Any], site: dict[str, Any]) -> bool:
+    def _notifiable(
+        cls, product: dict[str, Any], site: dict[str, Any], settings: dict[str, Any]
+    ) -> bool:
         verification = str(
             site.get("verification_status", product.get("verification_status", "confirmed"))
         ).strip().casefold()
+        if verification == UNVERIFIED_RESTRICTED:
+            return bool(settings.get("include_unverified_restricted", True))
         if verification in cls.BLOCKED_VERIFICATION:
             return False
         return site.get("confirmed") is not False and product.get("confirmed") is not False
+
+    @classmethod
+    def _confirmed(cls, product: dict[str, Any], site: dict[str, Any]) -> bool:
+        """Compatibility helper retained for deadline reminders and tests."""
+        return cls._notifiable(product, site, {"include_unverified_restricted": False})
 
     @classmethod
     def _suppressed(cls, site: dict[str, Any], settings: dict[str, Any]) -> bool:

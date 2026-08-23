@@ -18,6 +18,9 @@ from core.generic_official_application_parser import (
     canonical_url,
 )
 from core.safe_discovery_fetcher import RequestBudget, SafeDiscoveryFetcher
+from core.restricted_application import (
+    UNVERIFIED_RESTRICTED, restrict_discovery,
+)
 
 
 OFFICIAL_STATES = {"KNOWN_ACTIVE", "VERIFIED_OFFICIAL", "MONITORABLE"}
@@ -65,6 +68,7 @@ class AutonomousApplicationSourceDiscovery:
         self.metrics = Counter()
         self.rejections = Counter()
         self.source_results: list[dict[str, Any]] = []
+        self._restricted_source_ids: set[str] = set()
 
     def run(self, enabled_tcg: set[str] | None = None) -> dict[str, Any]:
         enabled = set(enabled_tcg or {
@@ -188,6 +192,22 @@ class AutonomousApplicationSourceDiscovery:
                     promoted = self._verify_external_source(candidate, enabled, checked_hosts)
                     if promoted:
                         applications.extend(promoted)
+                    elif (
+                        str(candidate.get("id", "")) in self._restricted_source_ids
+                        and analysis.get("is_application")
+                        and applications
+                    ):
+                        restricted = restrict_discovery(
+                            application,
+                            official_url=str(candidate.get("base_url") or link_url),
+                            reason="ROBOTS_BLOCKED",
+                        )
+                        application.clear()
+                        application.update(restricted)
+                        if application.get("hit", {}).get(
+                            "verification_status"
+                        ) == UNVERIFIED_RESTRICTED:
+                            self.metrics["restricted_applications"] += 1
         health = self.registry.observe_parser(
             source_id, fetch_ok=source_fetch_ok, application_count=len(applications)
         )
@@ -272,6 +292,8 @@ class AutonomousApplicationSourceDiscovery:
             "product_code": str(analysis.get("product_code", "")),
             "tcg_key": tcg,
             "application_evidence": True,
+            "trust_tier": str(source.get("trust_tier") or ""),
+            "provenance": str(source.get("provenance") or ""),
             "evidence": evidence,
         }
         return {"record": record, "hit": hit}
@@ -339,6 +361,7 @@ class AutonomousApplicationSourceDiscovery:
             })
             if updated.get("source_state") == "BLOCKED_ROBOTS":
                 self.metrics["blocked_robots"] += 1
+                self._restricted_source_ids.add(str(candidate["id"]))
             return []
         analysis = self.parser.parse(
             str(result.get("html") or ""), str(result.get("url") or url),

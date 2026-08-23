@@ -570,6 +570,13 @@ class ProductMasterManager:
             )
             for site in target_sites
         }
+        known_site_indexes = {
+            (
+                str(site.get("site_key", "")),
+                str(site.get("url") or site.get("application_url") or site.get("product_url") or ""),
+            ): index
+            for index, site in enumerate(target_sites)
+        }
         for raw_site in incoming.get("sites", []):
             if not isinstance(raw_site, dict):
                 continue
@@ -581,6 +588,27 @@ class ProductMasterManager:
             if key not in known_sites:
                 target_sites.append(site)
                 known_sites.add(key)
+                known_site_indexes[key] = len(target_sites) - 1
+                continue
+            from core.restricted_application import verification_bucket
+
+            index = known_site_indexes[key]
+            current_site = target_sites[index]
+            current_status = verification_bucket(current_site.get("verification_status"))
+            incoming_status = verification_bucket(site.get("verification_status"))
+            rank = {"candidate": 0, "unverified_restricted": 1, "confirmed": 2}
+            if incoming_status == "rejected":
+                continue
+            if rank.get(incoming_status, 0) < rank.get(current_status, 0):
+                continue
+            replacement = dict(current_site)
+            replacement.update({
+                field: value for field, value in site.items()
+                if value not in (None, "", []) or field in {
+                    "confirmed", "verification_status", "verification_details",
+                }
+            })
+            target_sites[index] = replacement
         target["sites"] = target_sites
 
         if target != current:

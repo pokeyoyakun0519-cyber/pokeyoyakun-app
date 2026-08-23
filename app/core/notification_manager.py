@@ -112,6 +112,8 @@ class NotificationManager:
         event_type = str(event.get("event_type", "NEW_CONFIRMED"))
         title = labels.get(event_type, "新しい応募情報")
         message = (
+            (f'{event.get("verification_label")}\n' if event.get("verification_label") else "")
+            +
             f'{event.get("product_name", "商品名未設定")}\n'
             f'{event.get("site_name", "店舗名未設定")} / '
             f'{event.get("sales_mode", "UNKNOWN")} / '
@@ -122,7 +124,7 @@ class NotificationManager:
             message,
             "応募情報",
             action_url=str(event.get("application_url", "")),
-            action_label="応募ページを開く",
+            action_label=str(event.get("application_action_label") or "応募ページを開く"),
             metadata={
                 "tcg_key": event.get("tcg_key", ""),
                 "product_category": event.get("product_category", "CARD"),

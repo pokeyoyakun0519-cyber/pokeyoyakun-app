@@ -89,7 +89,8 @@ class ApplicationRow(QFrame):
         title.setWordWrap(True)
 
         display_state = (
-            "確認中" if row.get("is_candidate")
+            "⚠ 要公式確認" if row.get("is_restricted")
+            else "確認中" if row.get("is_candidate")
             else "当選" if row.get("dashboard_state") == "当選"
             else "落選" if row.get("dashboard_state") == "落選"
             else "応募期間終了" if row.get("period_ended")
@@ -150,6 +151,19 @@ class ApplicationRow(QFrame):
         )
         store_info.setObjectName("MutedText")
         layout.addWidget(store_info)
+
+        verification_notice = QLabel(
+            "⚠ 自動確認できない情報です。応募前に必ず公式ページをご確認ください。"
+            if row.get("is_restricted")
+            else "確認中（公式確認が完了していません）"
+            if row.get("is_candidate")
+            else "✅ 公式確認済み"
+        )
+        verification_notice.setObjectName(
+            "StatusLottery" if row.get("is_candidate") else "StatusOpen"
+        )
+        verification_notice.setWordWrap(True)
+        layout.addWidget(verification_notice)
 
         path_guidance = QLabel(str(row.get("application_action_guidance") or ""))
         path_guidance.setObjectName("StatusLottery" if row.get("application_path_type") in {
@@ -227,6 +241,8 @@ class ApplicationRow(QFrame):
             f'verification：{row.get("verification_status") or "未登録"}\n'
             f'evidence：{self._evidence_text(row.get("evidence"))}　'
             f'details：{row.get("verification_details") or "未登録"}'
+            + (f'\n最終確認：{row.get("last_checked_at") or "未取得"}'
+               if row.get("is_restricted") else "")
         )
         technical.setObjectName("MutedText")
         technical.setWordWrap(True)
@@ -329,7 +345,7 @@ class ApplicationRow(QFrame):
     def _status_object_name(
         status: str,
     ) -> str:
-        if status == "確認中":
+        if status in {"確認中", "⚠ 要公式確認"}:
             return "StatusLottery"
         if status in {
             "当選",
@@ -726,6 +742,17 @@ class ApplicationDashboardPage(QFrame):
         self.application_state_filter.currentIndexChanged.connect(self._apply_filters)
         filter_row2.addWidget(self.application_state_filter)
 
+        filter_row2.addWidget(QLabel("確認状態："))
+        self.verification_filter = QComboBox()
+        for label, value in (
+            ("すべて", "all"),
+            ("✅ 公式確認済み", "confirmed"),
+            ("⚠ 要公式確認", "restricted"),
+        ):
+            self.verification_filter.addItem(label, value)
+        self.verification_filter.currentIndexChanged.connect(self._apply_filters)
+        filter_row2.addWidget(self.verification_filter)
+
         self.keyword = QLineEdit()
         self.keyword.setPlaceholderText("商品名・店舗名で検索")
         self.keyword.textChanged.connect(self._apply_filters)
@@ -1013,6 +1040,14 @@ class ApplicationDashboardPage(QFrame):
             rows_before_sales = [
                 row for row in rows_before_sales if row.get("is_candidate")
             ]
+        verification_filter = str(self.verification_filter.currentData() or "all")
+        if verification_filter == "confirmed":
+            rows_before_sales = [
+                row for row in rows_before_sales
+                if not row.get("is_candidate") and not row.get("is_restricted")
+            ]
+        elif verification_filter == "restricted":
+            rows_before_sales = [row for row in rows_before_sales if row.get("is_restricted")]
         sales_counts = {
             key: sum(sales_channel_matches(row.get("sales_mode"), key) for row in rows_before_sales)
             for key in ("all", "online", "store")
@@ -1039,10 +1074,16 @@ class ApplicationDashboardPage(QFrame):
 
         state_counts = {state: sum(row.get("dashboard_state") == state for row in all_rows)
                         for state in ("未応募", "応募済み", "当選", "落選")}
+        confirmed_count = sum(
+            not row.get("is_candidate") and not row.get("is_restricted")
+            for row in all_rows
+        )
+        restricted_count = sum(bool(row.get("is_restricted")) for row in all_rows)
         self.summary.setText(
             f'受付中 {active_count}　終了 {ended_count}　'
             f'未応募 {state_counts["未応募"]}　応募済み {state_counts["応募済み"]}　'
             f'当選 {state_counts["当選"]}　落選 {state_counts["落選"]}　'
+            f'✅ 公式確認済み {confirmed_count}　⚠ 要公式確認 {restricted_count}　'
             f'表示 {len(rows)}'
         )
 
