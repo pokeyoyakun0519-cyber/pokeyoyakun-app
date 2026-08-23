@@ -79,10 +79,6 @@ class ApplicationRow(QFrame):
         )
         layout.setSpacing(8)
 
-        header = QGridLayout()
-        header.setHorizontalSpacing(8)
-        header.setVerticalSpacing(6)
-
         title = QLabel(
             row.get(
                 "product_name",
@@ -91,6 +87,7 @@ class ApplicationRow(QFrame):
         )
         title.setObjectName("ProductName")
         title.setWordWrap(True)
+        layout.addWidget(title)
 
         display_state = (
             "⚠ 要公式確認" if row.get("is_restricted")
@@ -104,6 +101,7 @@ class ApplicationRow(QFrame):
         state.setObjectName(
             self._status_object_name(display_state)
         )
+        state.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
 
         product_button = QPushButton("商品ページを開く")
         product_button.setObjectName("SmallButton")
@@ -117,37 +115,39 @@ class ApplicationRow(QFrame):
         application_button.setEnabled(
             bool(row.get("application_action_enabled"))
         )
+        application_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         if row.get("application_action_guidance"):
             application_button.setToolTip(str(row["application_action_guidance"]))
         application_button.clicked.connect(self._open_application_page)
 
-        header.addWidget(title, 0, 0, 1, 7)
-        badge_column = 0
+        badges = QHBoxLayout()
+        badges.setContentsMargins(0, 0, 0, 0)
+        badges.setSpacing(6)
+        has_badges = False
         if row.get("is_new"):
             new_label = QLabel("NEW")
             new_label.setObjectName("StatusOpen")
-            header.addWidget(new_label, 1, badge_column)
-            badge_column += 1
+            badges.addWidget(new_label)
+            has_badges = True
         if row.get("changes"):
             changed_label = QLabel("更新あり")
             changed_label.setObjectName("StatusLottery")
-            header.addWidget(changed_label, 1, badge_column)
-            badge_column += 1
+            badges.addWidget(changed_label)
+            has_badges = True
+        if has_badges:
+            badges.addStretch()
+            layout.addLayout(badges)
+
         favorite_button = QPushButton(
             "★ お気に入り店舗" if row.get("store_key") in self.favorite_store_keys
             else "☆ お気に入り店舗"
         )
         favorite_button.setObjectName("SmallButton")
+        favorite_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         favorite_button.setEnabled(bool(row.get("store_key")) and favorite_callback is not None)
         favorite_button.clicked.connect(
             lambda: favorite_callback(row) if favorite_callback is not None else None
         )
-        header.setColumnStretch(3, 1)
-        header.addWidget(favorite_button, 1, 4)
-        header.addWidget(state, 1, 5)
-        header.addWidget(application_button, 1, 6)
-        layout.addLayout(header)
-
         store_info = QLabel(
             f'店舗：{row.get("site_name", "店舗名未設定")}　'
             f'受付開始：{row.get("application_start_at") or "未取得"}　'
@@ -158,6 +158,7 @@ class ApplicationRow(QFrame):
             f'応募状態：{"確認中" if row.get("is_candidate") else row.get("application_state", "未応募")}'
         )
         store_info.setObjectName("MutedText")
+        store_info.setWordWrap(True)
         layout.addWidget(store_info)
 
         verification_notice = QLabel(
@@ -177,8 +178,32 @@ class ApplicationRow(QFrame):
         path_guidance.setObjectName("StatusLottery" if row.get("application_path_type") in {
             "APP_REQUIRED", "SNS_REQUIRED"
         } else "MutedText")
+        path_guidance.setWordWrap(True)
         path_guidance.setVisible(bool(row.get("application_action_guidance")))
         layout.addWidget(path_guidance)
+
+        action_area = QWidget()
+        action_area.setObjectName("ApplicationActionArea")
+        action_layout = QVBoxLayout(action_area)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(6)
+
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(0, 0, 0, 0)
+        status_row.addWidget(state)
+        status_row.addStretch()
+        status_row.addWidget(favorite_button)
+        action_layout.addLayout(status_row)
+
+        primary_action_row = QHBoxLayout()
+        primary_action_row.setContentsMargins(0, 0, 0, 0)
+        primary_action_row.addStretch()
+        primary_action_row.addWidget(application_button)
+        action_layout.addLayout(primary_action_row)
+        layout.addWidget(action_area)
+
+        self.action_area = action_area
+        self.action_widgets = [state, favorite_button, application_button]
 
         warnings = row.get("condition_warnings", [])
         warning_label = QLabel(

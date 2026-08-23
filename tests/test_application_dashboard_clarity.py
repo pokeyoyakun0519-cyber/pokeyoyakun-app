@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from PySide6.QtWidgets import QApplication, QComboBox, QPushButton
+from PySide6.QtCore import QPoint
+from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton
 
 from core.application_dashboard import ApplicationDashboard
 from core.application_status import JST
@@ -157,6 +158,79 @@ class DashboardUiTest(unittest.TestCase):
         self.assertFalse(card.detail_widgets[0].isHidden())
         self.assertFalse(card.findChildren(QComboBox)[0].isEnabled())
         card.close()
+
+    def test_application_card_actions_fit_common_window_widths(self):
+        base = {
+            "product_name": "ポケモンカードゲーム MEGA 拡張パック " + "非常に長い商品名" * 8,
+            "site_name": "非常に長い店舗名 ショッピングセンターオンライン対象店舗",
+            "site_key": "long-store", "store_key": "long-store",
+            "application_state": "未応募", "dashboard_state": "未応募",
+            "application_start_at": "2026-08-20T10:00:00+09:00",
+            "application_end_at": "2026-08-30T23:59:00+09:00",
+            "remaining_text": "残り7日", "sales_mode": "HYBRID",
+            "prefecture": "UNKNOWN", "verification_status": "confirmed",
+            "application_url": "https://example.com/application",
+            "product_url": "https://example.com/product", "evidence": [],
+            "condition_warnings": [], "changes": {},
+        }
+        variants = [
+            {**base, "sales_mode": "ONLINE"},
+            {**base, "sales_mode": "STORE"},
+            {**base, "sales_mode": "HYBRID"},
+            {
+                **base,
+                "is_restricted": True,
+                "verification_status": "unverified_restricted",
+                "application_url": "https://select-type.com/e/?id=test",
+                "application_action_guidance": "応募前に公式ページで確認してください",
+            },
+            {
+                **base,
+                "application_path_type": "APP_REQUIRED",
+                "application_url": "",
+                "official_url": "https://example.com/official-app-notice",
+                "application_action_guidance": "応募は公式アプリが必要です",
+            },
+        ]
+
+        # Main navigation and page margins leave less width than the screen.
+        card_widths = {
+            (1280, 720): 920,
+            (1280, 800): 920,
+            (1366, 768): 1000,
+            (1920, 1080): 1500,
+        }
+        for resolution, card_width in card_widths.items():
+            for row in variants:
+                with self.subTest(
+                    resolution=resolution,
+                    sales_mode=row.get("sales_mode"),
+                    restricted=row.get("is_restricted"),
+                    path_type=row.get("application_path_type"),
+                ):
+                    card = ApplicationRow(
+                        row, Mock(), Mock(), Mock(),
+                        favorite_callback=Mock(), favorite_store_keys=set(),
+                    )
+                    card.resize(card_width, card.sizeHint().height())
+                    card.show()
+                    self.app.processEvents()
+                    card.adjustSize()
+                    self.app.processEvents()
+
+                    self.assertLessEqual(card.minimumSizeHint().width(), card_width)
+                    action_rect = card.action_area.rect()
+                    for widget in card.action_widgets:
+                        top_left = widget.mapTo(card.action_area, QPoint(0, 0))
+                        self.assertGreaterEqual(top_left.x(), action_rect.left())
+                        self.assertGreaterEqual(top_left.y(), action_rect.top())
+                        self.assertLessEqual(top_left.x() + widget.width(), action_rect.right() + 1)
+                        self.assertLessEqual(top_left.y() + widget.height(), action_rect.bottom() + 1)
+                        self.assertGreaterEqual(widget.width(), widget.sizeHint().width())
+
+                    labels = [item for item in card.findChildren(QLabel) if item.isVisible()]
+                    self.assertTrue(any(item.wordWrap() for item in labels if "店舗：" in item.text()))
+                    card.close()
 
 
 if __name__ == "__main__":
