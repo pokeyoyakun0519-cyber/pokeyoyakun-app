@@ -4,8 +4,8 @@ import sys
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtCore import QEvent, QObject, QTimer
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
 
 from core.app_setup import configure_application, configure_high_dpi
 from core.behavior_config import BehaviorConfig
@@ -16,6 +16,29 @@ from core.secure_https import create_tls_context
 from core.startup_check import StartupCheck
 from core.startup_diagnostics import StartupDiagnostics
 from core.whats_new_manager import WhatsNewManager
+
+
+class _NavigationTopLevelRecorder(QObject):
+    def __init__(self):
+        super().__init__()
+        self.shows = []
+
+    def eventFilter(self, watched, event):
+        if (
+            event.type() == QEvent.Show
+            and isinstance(watched, QWidget)
+            and watched.isWindow()
+        ):
+            parent = watched.parentWidget()
+            self.shows.append({
+                "class": type(watched).__name__,
+                "title": watched.windowTitle(),
+                "object_name": watched.objectName(),
+                "parent_class": type(parent).__name__ if parent else "",
+                "is_window": watched.isWindow(),
+                "window_flags": int(watched.windowFlags()),
+            })
+        return False
 
 
 def main():
@@ -128,6 +151,10 @@ def main():
         app.setApplicationName("ポケヨヤ君")
         app.setQuitOnLastWindowClosed(False)
         configure_application(app)
+        navigation_window_recorder = None
+        if navigation_smoke:
+            navigation_window_recorder = _NavigationTopLevelRecorder()
+            app.installEventFilter(navigation_window_recorder)
         release_config = ReleaseConfig()
         install_crash_handler()
 
@@ -204,10 +231,16 @@ def main():
                         window.sources_button,
                         window.notification_center_button,
                     )
-                    for _round in range(3):
+                    for _round in range(5):
                         for button in buttons:
                             button.click()
                             app.processEvents()
+                    transient_top_levels = [
+                        item for item in navigation_window_recorder.shows
+                        if item["class"] not in {
+                            type(window).__name__, "SetupWizard",
+                        }
+                    ]
                     visible_auxiliary = [
                         widget for widget in app.topLevelWidgets()
                         if widget is not window and widget.isVisible()
@@ -218,7 +251,7 @@ def main():
                     ).strip()
                     if result_path:
                         Path(result_path).write_text(json.dumps({
-                            "rounds": 3,
+                            "rounds": 5,
                             "page_count": len(buttons),
                             "processes": navigation_processes,
                             "child_process_count": len(navigation_processes),
@@ -229,6 +262,10 @@ def main():
                                 "title": widget.windowTitle(),
                                 "object_name": widget.objectName(),
                             } for widget in visible_auxiliary],
+                            "transient_top_level_window_count": len(
+                                transient_top_levels
+                            ),
+                            "transient_top_level_windows": transient_top_levels,
                             "version": window._version_text(),
                         }, ensure_ascii=False), encoding="utf-8")
                     window.request_application_quit()

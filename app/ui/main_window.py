@@ -707,6 +707,12 @@ class MainWindow(QMainWindow):
         section_layout.setSpacing(5)
         for button in buttons:
             section_layout.addWidget(button)
+
+        # Parent the section through the sidebar layout before making an
+        # expanded section visible.  Showing a parentless QWidget makes it a
+        # transient top-level window on Windows.
+        layout.addWidget(toggle)
+        layout.addWidget(container)
         container.setVisible(expanded)
 
         def set_expanded(checked):
@@ -714,8 +720,6 @@ class MainWindow(QMainWindow):
             toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
 
         toggle.toggled.connect(set_expanded)
-        layout.addWidget(toggle)
-        layout.addWidget(container)
         return toggle, container, section_layout, tuple(buttons)
 
     def _add_developer_menu(self, layout, buttons):
@@ -735,6 +739,9 @@ class MainWindow(QMainWindow):
         detail_layout.setSpacing(5)
         for button in buttons:
             detail_layout.addWidget(button)
+
+        layout.addWidget(toggle)
+        layout.addWidget(container)
         container.setVisible(expanded)
 
         def set_expanded(checked):
@@ -742,8 +749,6 @@ class MainWindow(QMainWindow):
             toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
 
         toggle.toggled.connect(set_expanded)
-        layout.addWidget(toggle)
-        layout.addWidget(container)
         self.developer_menu_button = toggle
         self.developer_menu_container = container
 

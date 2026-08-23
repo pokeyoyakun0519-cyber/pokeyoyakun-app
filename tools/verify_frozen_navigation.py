@@ -34,9 +34,13 @@ def main() -> None:
             env=environment, cwd=PROJECT_ROOT, timeout=60, check=True,
         )
         result = json.loads(result_path.read_text(encoding="utf-8"))
-        if result.get("rounds") != 3 or result.get("page_count") != 8:
+        if result.get("rounds") != 5 or result.get("page_count") != 8:
             raise SystemExit(f"Frozen navigation smokeが未完了です: {result}")
-        if result.get("child_process_count") or result.get("visible_auxiliary_window_count"):
+        if (
+            result.get("child_process_count")
+            or result.get("visible_auxiliary_window_count")
+            or result.get("transient_top_level_window_count")
+        ):
             raise SystemExit(f"画面遷移中に小窓候補を検出しました: {result}")
         subprocess.run(
             [str(settings_exe), "--smoke-test"],
