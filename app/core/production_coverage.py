@@ -22,7 +22,8 @@ from core.web_application_sources import (
 COVERAGE_STATES = {
     "DISCOVERED", "OFFICIAL_VERIFIED", "MONITORABLE", "CURRENT_APPLICATION",
     "RECENTLY_ENDED", "NO_CURRENT_APPLICATION", "APP_REQUIRED", "SNS_ONLY",
-    "ROBOTS_BLOCKED", "PARSER_NEEDED", "UNSUPPORTED",
+    "ROBOTS_BLOCKED", "PARSER_NEEDED", "HTTP_ERROR", "UNSUPPORTED",
+    "VERIFYING", "DISCOVERED_CANDIDATE", "TEMPORARILY_FAILED",
 }
 PREFECTURES = (
     "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
@@ -99,6 +100,8 @@ def _source_state(row: dict[str, Any]) -> str:
         return "ROBOTS_BLOCKED"
     if status in {"PARSER_OUTDATED", "PARSE_EMPTY", "VERIFICATION_FAILED"}:
         return "PARSER_NEEDED"
+    if status in {"HTTP_ERROR", "TEMPORARILY_FAILED"}:
+        return status
     if source_class in {"APP_REQUIRED", "SNS_ONLY", "UNSUPPORTED"}:
         return source_class
     if status == "NO_CURRENT_APPLICATION":
@@ -157,6 +160,8 @@ def build_production_coverage(
                 "last_check": str(observed.get("last_check") or ""),
                 "last_success": str(observed.get("last_success") or ""),
                 "failure_reason": str(observed.get("error_code") or ""),
+                "monitoring_type": str(source.get("source_class") or ""),
+                "discovered_from": "bundled_registry",
                 "gap_checks": {name: checked for name in GAP_CHECKS},
             })
     if autonomous_registry is not None:
@@ -171,7 +176,6 @@ def build_production_coverage(
                 seen.add(key)
                 raw_state = str(source.get("source_state") or "DISCOVERED_CANDIDATE")
                 state = {
-                    "DISCOVERED_CANDIDATE": "DISCOVERED", "VERIFYING": "DISCOVERED",
                     "VERIFIED_OFFICIAL": "OFFICIAL_VERIFIED", "KNOWN_ACTIVE": "MONITORABLE",
                     "MONITORABLE": "MONITORABLE", "BLOCKED_ROBOTS": "ROBOTS_BLOCKED",
                 }.get(raw_state, raw_state if raw_state in COVERAGE_STATES else "UNSUPPORTED")
@@ -183,6 +187,8 @@ def build_production_coverage(
                     "last_check": str(source.get("last_checked") or ""),
                     "last_success": str(source.get("last_success") or ""),
                     "failure_reason": str(source.get("health") or ""),
+                    "monitoring_type": str(source.get("seed_type") or ""),
+                    "discovered_from": str(source.get("seed_type") or ""),
                     "gap_checks": {
                         name: bool(source.get("last_checked")) for name in GAP_CHECKS
                     },

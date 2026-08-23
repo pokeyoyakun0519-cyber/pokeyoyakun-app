@@ -12,6 +12,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
+    QAbstractItemView,
     QTabBar,
     QVBoxLayout,
     QWidget,
@@ -30,6 +33,12 @@ from core.application_filters import (
     REGION_NAMES,
     sales_channel_matches,
 )
+from core.source_inventory_view import (
+    build_source_inventory_view,
+    filter_source_inventory,
+    load_saved_coverage,
+)
+from core.tcg_categories import display_name as tcg_display_name
 from ui.tcg_category_tabs import (
     ALL_CATEGORY_KEY,
     TcgCategoryTabs,
@@ -395,6 +404,188 @@ class ApplicationProductGroup(QFrame):
             )
 
 
+class SourceInventorySection(QFrame):
+    """Saved monitoring inventory shown separately from application cards."""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("SettingsCard")
+        self._view = {"rows": [], "summary": {}}
+        self._filtered_rows: list[dict] = []
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(8)
+
+        title = QLabel("監視候補店舗 / 情報確認状況")
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+        note = QLabel(
+            "ここは応募案件一覧ではありません。保存済み情報から、確認中・現在応募なしを含む監視候補を表示します。"
+        )
+        note.setObjectName("MutedText")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        self.summary = QLabel("")
+        self.summary.setObjectName("PageText")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+
+        filters = QGridLayout()
+        self.state_filter = QComboBox()
+        for label, value in (
+            ("すべて", "all"), ("応募受付中", "current"), ("最近終了", "recent"),
+            ("現在応募なし", "none"), ("確認中", "verifying"),
+            ("アプリ必須", "app"), ("SNSのみ", "sns"),
+            ("自動確認制限", "restricted"), ("未対応", "unsupported"),
+        ):
+            self.state_filter.addItem(label, value)
+        self.tcg_filter = QComboBox()
+        self.region_filter = QComboBox()
+        self.prefecture_filter = QComboBox()
+        self.chain_filter = QComboBox()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("店舗名・chain・支店名で検索")
+        for index, (label, widget) in enumerate((
+            ("状態", self.state_filter), ("TCG", self.tcg_filter),
+            ("地方", self.region_filter), ("都道府県", self.prefecture_filter),
+            ("chain", self.chain_filter),
+        )):
+            row, column = divmod(index, 3)
+            filters.addWidget(QLabel(label + "："), row, column * 2)
+            filters.addWidget(widget, row, column * 2 + 1)
+        filters.addWidget(QLabel("検索："), 2, 0)
+        filters.addWidget(self.search, 2, 1, 1, 5)
+        layout.addLayout(filters)
+
+        self.table = QTableWidget(0, 8)
+        self.table.setHorizontalHeaderLabels([
+            "店舗/chain", "支店", "TCG", "都道府県", "状態",
+            "最終確認", "発見元", "Dashboard",
+        ])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setMinimumHeight(280)
+        self.table.itemSelectionChanged.connect(self._show_selected_detail)
+        layout.addWidget(self.table)
+
+        self.detail = QLabel("行を選ぶと、公式情報と未掲載理由を確認できます。")
+        self.detail.setObjectName("MutedText")
+        self.detail.setWordWrap(True)
+        layout.addWidget(self.detail)
+        self.official_button = QPushButton("公式情報を開く")
+        self.official_button.setObjectName("SmallButton")
+        self.official_button.setEnabled(False)
+        self.official_button.clicked.connect(self._open_selected_official)
+        layout.addWidget(self.official_button)
+
+        for widget in (
+            self.state_filter, self.tcg_filter, self.region_filter,
+            self.prefecture_filter, self.chain_filter,
+        ):
+            widget.currentIndexChanged.connect(self._apply_filters)
+        self.search.textChanged.connect(self._apply_filters)
+        self.reload()
+
+    def reload(self, report: dict | None = None):
+        self._view = build_source_inventory_view(
+            report if report is not None else load_saved_coverage()
+        )
+        self._populate_filter(self.tcg_filter, [
+            (tcg_display_name(value), value)
+            for value in sorted({str(row.get("tcg")) for row in self._view["rows"]})
+        ])
+        self._populate_filter(self.region_filter, [
+            (value, value) for value in sorted({str(row.get("region")) for row in self._view["rows"]})
+        ])
+        self._populate_filter(self.prefecture_filter, [
+            ("地域不明" if value == "UNKNOWN" else value, value)
+            for value in sorted({str(row.get("prefecture")) for row in self._view["rows"]})
+        ])
+        self._populate_filter(self.chain_filter, [
+            (str(next((row.get("display_name") for row in self._view["rows"] if row.get("chain") == value), value)), value)
+            for value in sorted({str(row.get("chain")) for row in self._view["rows"]})
+        ])
+        self._set_summary()
+        self._apply_filters()
+
+    @staticmethod
+    def _populate_filter(combo: QComboBox, values: list[tuple[str, str]]):
+        current = combo.currentData() or "all"
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("すべて", "all")
+        for label, value in values:
+            if value and value != "all":
+                combo.addItem(label, value)
+        combo.setCurrentIndex(max(0, combo.findData(current)))
+        combo.blockSignals(False)
+
+    def _set_summary(self):
+        value = self._view.get("summary", {})
+        self.summary.setText(
+            f'監視候補店舗 {value.get("branch_store_count", 0)}　'
+            f'chain {value.get("chain_count", 0)}　source {value.get("source_count", 0)}\n'
+            f'応募受付中 {value.get("current", 0)}　最近終了 {value.get("recent", 0)}　'
+            f'現在応募なし {value.get("no_current", 0)}　公式確認中 {value.get("verifying", 0)}　'
+            f'アプリ必須 {value.get("app_required", 0)}　SNSのみ {value.get("sns_only", 0)}　'
+            f'自動確認制限 {value.get("restricted", 0)}　解析待ち {value.get("parser_needed", 0)}　'
+            f'未対応 {value.get("unsupported", 0)}'
+        )
+
+    def _apply_filters(self, *_args):
+        self._filtered_rows = filter_source_inventory(
+            self._view.get("rows", []),
+            state_filter=str(self.state_filter.currentData() or "all"),
+            tcg=str(self.tcg_filter.currentData() or "all"),
+            region=str(self.region_filter.currentData() or "all"),
+            prefecture=str(self.prefecture_filter.currentData() or "all"),
+            chain=str(self.chain_filter.currentData() or "all"),
+            keyword=self.search.text(),
+        )
+        self.table.setRowCount(len(self._filtered_rows))
+        for index, row in enumerate(self._filtered_rows):
+            values = (
+                row.get("display_name"), row.get("branch"), row.get("tcg_label"),
+                "地域不明" if row.get("prefecture") == "UNKNOWN" else row.get("prefecture"),
+                row.get("status_label"), row.get("last_check"), row.get("discovered_from"),
+                "掲載" if row.get("dashboard_listed") else "未掲載",
+            )
+            for column, value in enumerate(values):
+                self.table.setItem(index, column, QTableWidgetItem(str(value or "未確認")))
+        self.table.resizeColumnsToContents()
+        self.detail.setText(
+            "該当する監視候補はありません。" if not self._filtered_rows
+            else f"表示 {len(self._filtered_rows)}件。行を選ぶと詳細を確認できます。"
+        )
+        self.official_button.setEnabled(False)
+
+    def _selected_row(self) -> dict | None:
+        index = self.table.currentRow()
+        return self._filtered_rows[index] if 0 <= index < len(self._filtered_rows) else None
+
+    def _show_selected_detail(self):
+        row = self._selected_row()
+        if row is None:
+            return
+        self.detail.setText(
+            f'店舗：{row["display_name"]}　支店：{row["branch"]}　TCG：{row["tcg_label"]}\n'
+            f'状態：{row["status_label"]}　Dashboard：{row["application_status"]}\n'
+            f'理由：{row["reason"]}\n'
+            f'最終確認：{row["last_check"]}　発見元：{row["discovered_from"]}\n'
+            f'監視方式：{row["monitoring_type"]}　公式確認：{"確認済み" if row["verified_official"] else "確認中"}　'
+            f'情報解析：{row["parser_status"]}\n'
+            f'受付中案件：{row["current_application_count"]}　最近終了：{row["recently_ended_count"]}'
+        )
+        self.official_button.setEnabled(bool(row.get("official_url_safe")))
+
+    def _open_selected_official(self):
+        row = self._selected_row()
+        if row is not None and row.get("official_url_safe"):
+            open_product_url(row.get("official_url"))
+
+
 class ApplicationDashboardPage(QFrame):
     open_lottery_page = Signal()
 
@@ -601,6 +792,9 @@ class ApplicationDashboardPage(QFrame):
         self.scroll.setFrameShape(QFrame.NoFrame)
         layout.addWidget(self.scroll, 1)
 
+        self.source_inventory = SourceInventorySection()
+        layout.addWidget(self.source_inventory)
+
         self._snapshot = None
         self._reload_favorites()
         self.reload(force=True)
@@ -711,6 +905,7 @@ class ApplicationDashboardPage(QFrame):
             self._snapshot = self.dashboard.build(state_filter="すべて", show_ended=True)
             self._refresh_prefectures(self._snapshot.get("rows", []))
             self._write_diagnostics(self._snapshot)
+            self.source_inventory.reload()
         self._apply_filters()
 
     def _write_diagnostics(self, data: dict):
