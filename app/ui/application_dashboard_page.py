@@ -1,4 +1,5 @@
 import re
+import webbrowser
 
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
@@ -22,6 +23,7 @@ from core.startup_diagnostics import StartupDiagnostics
 from core.lottery_manager import LotteryManager
 from core.product_store import ProductStore
 from core.safe_product_url import can_open_product_url, open_product_url
+from core.application_action import application_action, safe_application_action_url
 from core.tcg_categories import categories
 from core.product_categories import PRODUCT_CATEGORY_LABELS
 from core.application_filters import (
@@ -47,6 +49,8 @@ class ApplicationRow(QFrame):
         favorite_store_keys=None,
     ):
         super().__init__()
+        row = dict(row)
+        row.update(application_action(row))
         self.row = row
         self.store = store
         self.reload_callback = reload_callback
@@ -92,13 +96,15 @@ class ApplicationRow(QFrame):
         product_button.setEnabled(can_open_product_url(row.get("product_url")))
         product_button.clicked.connect(self._open_product_page)
 
-        application_button = QPushButton("応募ページを開く")
+        application_button = QPushButton(
+            row.get("application_action_label") or "公式情報を開く"
+        )
         application_button.setObjectName("AccentButton")
         application_button.setEnabled(
-            can_open_product_url(row.get("application_url")) and not row.get("is_candidate")
+            bool(row.get("application_action_enabled"))
         )
-        if row.get("is_candidate"):
-            application_button.setToolTip("公式確認が完了するまで応募操作は利用できません")
+        if row.get("application_action_guidance"):
+            application_button.setToolTip(str(row["application_action_guidance"]))
         application_button.clicked.connect(self._open_application_page)
 
         header.addWidget(title, 1)
@@ -135,6 +141,13 @@ class ApplicationRow(QFrame):
         )
         store_info.setObjectName("MutedText")
         layout.addWidget(store_info)
+
+        path_guidance = QLabel(str(row.get("application_action_guidance") or ""))
+        path_guidance.setObjectName("StatusLottery" if row.get("application_path_type") in {
+            "APP_REQUIRED", "SNS_REQUIRED"
+        } else "MutedText")
+        path_guidance.setVisible(bool(row.get("application_action_guidance")))
+        layout.addWidget(path_guidance)
 
         warnings = row.get("condition_warnings", [])
         warning_label = QLabel(
@@ -298,7 +311,10 @@ class ApplicationRow(QFrame):
         open_product_url(self.row.get("product_url", ""))
 
     def _open_application_page(self):
-        open_product_url(self.row.get("application_url", ""))
+        url = self.row.get("application_action_url", "")
+        if not safe_application_action_url(str(url), self.row):
+            return
+        webbrowser.open(str(url))
 
     @staticmethod
     def _status_object_name(

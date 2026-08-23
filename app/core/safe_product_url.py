@@ -13,6 +13,7 @@ ALLOWED_PRODUCT_HOSTS = {
     "7net.omni7.jp", "books.rakuten.co.jp", "search.books.rakuten.co.jp",
     "www.lawson.co.jp", "p-bandai.jp", "www.edion.com",
     "www.sanyodo.co.jp", "www.toysrus.co.jp",
+    "otakarasouko.com",
     "www.pokemoncenter-online.com", "www.pokemon-card.com",
     "www.onepiece-cardgame.com", "www.yugioh-card.com",
     "www.gundam-gcg.com", "www.kidsrepublic.jp", "www.aeon-kyushu.info",

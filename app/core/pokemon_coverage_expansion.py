@@ -250,6 +250,10 @@ class PokemonCoverageExpansionMonitor:
             "application_status": status,
             "application_type": "LOTTERY",
             "application_method": application_method,
+            "application_path_type": (
+                "DIRECT_APPLICATION" if host == "livepocket.jp" else "APP_REQUIRED"
+            ),
+            "official_detail_url": canonical if host != "livepocket.jp" else "",
             "application_period": period_text,
             "application_start_at": start_at,
             "application_end_at": end_at,
@@ -263,6 +267,8 @@ class PokemonCoverageExpansionMonitor:
             "source_evidence": [official_evidence, discovery_evidence],
             "evidence": [official_evidence, discovery_evidence],
             "tcg_key": "pokemon",
+            "detected_at": observed,
+            "last_verified_at": observed,
         }
         record = {
             "source_id": f"phase1_{chain}",

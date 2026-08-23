@@ -26,6 +26,8 @@ from core.product_store import ProductStore
 from core.phase3_dashboard import is_new
 from core.tcg_categories import categories, display_name, normalize_key
 from core.product_categories import normalize_product_category
+from core.application_action import application_action
+from core.application_freshness import assess_unknown_deadline
 
 
 class ApplicationDashboard:
@@ -93,6 +95,7 @@ class ApplicationDashboard:
                     continue
                 diagnostics["application_evidence"] += 1
                 period = evaluate_application_period(site, now=now)
+                freshness = assess_unknown_deadline(site, product=product, now=now)
                 state = self._display_state(str(
                     site.get(
                         "application_state",
@@ -131,6 +134,10 @@ class ApplicationDashboard:
                     ),
                     "site_url": site.get("url", ""),
                     "application_url": site.get("application_url", ""),
+                    "official_detail_url": site.get("official_detail_url", ""),
+                    "application_path_type": site.get(
+                        "application_path_type", site.get("application_path", "")
+                    ),
                     "product_url": site.get(
                         "product_url", product.get("official_url", "")
                     ),
@@ -231,6 +238,7 @@ class ApplicationDashboard:
                     ),
                     "product_category": normalize_product_category(product),
                     "verification_details": site.get("verification_details", ""),
+                    **freshness,
                 }
                 row["is_candidate"] = str(row["verification_status"]).casefold() in {
                     "candidate", "pending", "confirming", "確認中",
@@ -239,6 +247,7 @@ class ApplicationDashboard:
                 row["store_key"] = stable_store_key(row)
                 row["deadline_state"] = deadline_state(row, now=now)
                 row["deadline_soon"] = is_deadline_soon(row)
+                row.update(application_action(row))
                 rows.append(row)
                 if row["period_ended"]:
                     row_diagnostics["ended_rows"] += 1
@@ -247,7 +256,22 @@ class ApplicationDashboard:
         rows = self._dedupe_rows(rows)
         diagnostics["duplicate_rows_merged"] = before_dedupe - len(rows)
         eligible_rows = []
+        stale_exclusions = []
         for row in rows:
+            if row.get("stale_unknown"):
+                diagnostics["excluded_stale_unknown"] += 1
+                diagnostics_by_tcg.setdefault(
+                    row["tcg_key"], Counter()
+                )["excluded_stale_unknown"] += 1
+                stale_exclusions.append({
+                    "tcg_key": row.get("tcg_key", ""),
+                    "site_key": row.get("site_key", ""),
+                    "product_name": row.get("product_name", ""),
+                    "site_name": row.get("site_name", ""),
+                    "reason": row.get("freshness_reason", ""),
+                    "reference_at": row.get("freshness_reference_at", ""),
+                })
+                continue
             if row["period_ended"]:
                 if not self._within_ended_retention(row, now):
                     diagnostics["excluded_ended_retention"] += 1
@@ -363,6 +387,7 @@ class ApplicationDashboard:
                 for item in categories()
             },
             "coverage_by_tcg": coverage_by_tcg,
+            "stale_exclusions": stale_exclusions,
         }
 
     @classmethod
