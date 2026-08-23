@@ -52,6 +52,7 @@ from core.chain_application_extractors import (
 from core.bandai_official_applications import BandaiOfficialApplicationMonitor
 from core.nationwide_web_monitor import NationwideWebApplicationMonitor
 from core.pokemon_coverage_expansion import PokemonCoverageExpansionMonitor
+from core.pokemon_official_campaigns import PokemonOfficialCampaignMonitor
 from core.production_coverage import build_production_coverage, save_production_coverage
 
 
@@ -161,6 +162,9 @@ class RetailSearchManager:
             app_root()
         )
         self.pokemon_coverage_expansion = PokemonCoverageExpansionMonitor(
+            app_root()
+        )
+        self.pokemon_official_campaigns = PokemonOfficialCampaignMonitor(
             app_root()
         )
         self.chain_application_extractors = {
@@ -390,6 +394,26 @@ class RetailSearchManager:
         discoveries: list[dict[str, Any]] = []
         external_results: dict[str, dict[str, Any]] = {}
         if "pokemon" in enabled:
+            official_campaigns = self.pokemon_official_campaigns.scan()
+            discoveries.extend(official_campaigns)
+            official_diagnostics = dict(
+                self.pokemon_official_campaigns.diagnostics
+            )
+            self.last_diagnostics["pokemon_official_campaigns"] = (
+                official_diagnostics
+            )
+            external_results["pokemon_official_campaigns"] = {
+                "checked": True,
+                "success": official_diagnostics.get("status") == "OK",
+                "candidate": len(official_campaigns),
+                "official_verified": len(official_campaigns),
+                "confirmed": len(official_campaigns),
+                "ended": sum(
+                    NationwideWebApplicationMonitor._discovery_ended(item)
+                    for item in official_campaigns
+                ),
+                "discoveries": official_campaigns,
+            }
             pokemon_discoveries = self.pokemon_coverage_expansion.scan()
             discoveries.extend(pokemon_discoveries)
             expansion_diagnostics = dict(

@@ -15,7 +15,9 @@ APPLICATION_PATH_TYPES = {
     "STORE_ONLY",
     "UNKNOWN",
 }
-_EXTERNAL_APPLICATION_HOSTS = {"livepocket.jp", "t.livepocket.jp"}
+_EXTERNAL_APPLICATION_HOSTS = {
+    "livepocket.jp", "t.livepocket.jp", "miniapp.line.me",
+}
 _TRUSTED_DISCOVERY_HOSTS = {"nyuka-now.com", "www.nyuka-now.com"}
 
 
@@ -144,7 +146,10 @@ def _has_verified_external_evidence(url: str, evidence: Any) -> bool:
             extracted.get("application_url") if isinstance(extracted, dict) else ""
         ).strip()
         if (
-            source_type in {"OFFICIAL_APPLICATION_PAGE", "OFFICIAL_APPLICATION_FORM"}
+            source_type in {
+                "OFFICIAL_APPLICATION_PAGE", "OFFICIAL_APPLICATION_FORM",
+                "OFFICIAL_STORE_PAGE",
+            }
             and status == "confirmed"
             and trust >= 80
             and url in {source_url, extracted_url}

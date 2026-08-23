@@ -100,15 +100,67 @@ def run(output_json: Path, output_csv: Path) -> dict:
         "production_coverage": production_coverage,
         "source_gaps": gaps,
     })
+    phase2_rows = []
+    for application in production_coverage.get("applications", []):
+        if not isinstance(application, dict):
+            continue
+        phase2_rows.append({
+            "chain": application.get("chain", ""),
+            "branch": application.get("branch", ""),
+            "tcg": application.get("tcg", ""),
+            "product": application.get("product", ""),
+            "status": application.get("state", ""),
+            "dashboard_status": "DASHBOARD_VISIBLE",
+            "verification": application.get("verification_status", ""),
+            "source_type": "OFFICIAL_OR_VERIFIED_APPLICATION",
+            "reason": "",
+            "last_checked": report["generated_at"],
+            "application_url": application.get("application_url", ""),
+            "official_url": application.get("official_url", ""),
+        })
+    application_chains = {
+        (str(row.get("tcg", "")), str(row.get("chain", "")))
+        for row in phase2_rows
+    }
+    for source in production_coverage.get("inventory", []):
+        if not isinstance(source, dict):
+            continue
+        key = (str(source.get("tcg", "")), str(source.get("chain", "")))
+        if key in application_chains:
+            continue
+        state = str(source.get("state") or "NOT_EVALUATED")
+        phase2_rows.append({
+            "chain": source.get("chain", ""), "branch": "",
+            "tcg": source.get("tcg", ""), "product": "", "status": state,
+            "dashboard_status": "CANDIDATE_INVENTORY",
+            "verification": "candidate",
+            "source_type": source.get("monitoring_type", ""),
+            "reason": source.get("failure_reason") or state,
+            "last_checked": source.get("last_check", ""),
+            "application_url": "", "official_url": source.get("official_url", ""),
+        })
+    state_counts = {}
+    for row in phase2_rows:
+        state = str(row.get("status") or "NOT_EVALUATED")
+        state_counts[state] = state_counts.get(state, 0) + 1
+    report["coverage_phase2_rows"] = phase2_rows
+    report["candidate_evaluation"] = {
+        "row_count": len(phase2_rows),
+        "state_counts": state_counts,
+        "not_evaluated_count": state_counts.get("NOT_EVALUATED", 0),
+        "scope": "application_branches_plus_unique_monitoring_sources",
+    }
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_json.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    fields = ["tcg", "product", "chain", "branch", "source", "state", "confirmed",
-              "dashboard_visible", "failure_reason", "official_url", "application_url",
-              "application_route", "deadline"]
+    fields = [
+        "chain", "branch", "tcg", "product", "status", "dashboard_status",
+        "verification", "source_type", "reason", "last_checked",
+        "application_url", "official_url",
+    ]
     with output_csv.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
-        writer.writerows({key: row.get(key, "") for key in fields} for row in report["rows"])
+        writer.writerows({key: row.get(key, "") for key in fields} for row in phase2_rows)
     os.chdir(original_cwd)
     isolated.cleanup()
     return report
