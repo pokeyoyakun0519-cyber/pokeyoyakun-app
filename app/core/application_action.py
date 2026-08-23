@@ -16,7 +16,7 @@ APPLICATION_PATH_TYPES = {
     "UNKNOWN",
 }
 _EXTERNAL_APPLICATION_HOSTS = {
-    "livepocket.jp", "t.livepocket.jp", "miniapp.line.me",
+    "livepocket.jp", "t.livepocket.jp", "miniapp.line.me", "select-type.com",
 }
 _TRUSTED_DISCOVERY_HOSTS = {"nyuka-now.com", "www.nyuka-now.com"}
 
@@ -116,6 +116,14 @@ def safe_application_action_url(url: str, row: dict[str, Any]) -> bool:
         return True
     except ValueError:
         pass
+    if (
+        verification_bucket(row.get("verification_status")) == UNVERIFIED_RESTRICTED
+        and url == str(row.get("official_detail_url") or "").strip()
+        and _host(url) in _EXTERNAL_APPLICATION_HOSTS
+    ):
+        # Opening a known application-provider page for manual verification is
+        # not confirmation and does not enable any in-app application action.
+        return True
     if (
         verification_bucket(row.get("verification_status")) == UNVERIFIED_RESTRICTED
         and url == str(row.get("discovery_source_url") or "").strip()

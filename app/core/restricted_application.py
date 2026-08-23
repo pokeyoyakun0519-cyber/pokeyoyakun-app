@@ -65,7 +65,12 @@ def restrict_discovery(
     if not (trusted and product and store and application):
         return output
 
-    discovery_url = str(record.get("article_url") or hit.get("source_url") or "").strip()
+    discovery_url = str(
+        record.get("discovery_source_url")
+        or record.get("article_url")
+        or hit.get("source_url")
+        or ""
+    ).strip()
     official_url = str(official_url or "").strip()
     hit.update({
         "verification_status": UNVERIFIED_RESTRICTED,

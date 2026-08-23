@@ -53,6 +53,7 @@ from core.bandai_official_applications import BandaiOfficialApplicationMonitor
 from core.nationwide_web_monitor import NationwideWebApplicationMonitor
 from core.pokemon_coverage_expansion import PokemonCoverageExpansionMonitor
 from core.pokemon_official_campaigns import PokemonOfficialCampaignMonitor
+from core.pokemon_restricted_campaigns import PokemonRestrictedCampaignMonitor
 from core.production_coverage import build_production_coverage, save_production_coverage
 
 
@@ -165,6 +166,9 @@ class RetailSearchManager:
             app_root()
         )
         self.pokemon_official_campaigns = PokemonOfficialCampaignMonitor(
+            app_root()
+        )
+        self.pokemon_restricted_campaigns = PokemonRestrictedCampaignMonitor(
             app_root()
         )
         self.chain_application_extractors = {
@@ -438,6 +442,36 @@ class RetailSearchManager:
                     for item in pokemon_discoveries
                 ),
                 "discoveries": pokemon_discoveries,
+            }
+            restricted_discoveries = self.pokemon_restricted_campaigns.scan()
+            discoveries.extend(restricted_discoveries)
+            restricted_diagnostics = dict(
+                self.pokemon_restricted_campaigns.diagnostics
+            )
+            self.last_diagnostics["pokemon_restricted_campaigns"] = (
+                restricted_diagnostics
+            )
+            restricted_confirmed = sum(
+                str(item.get("hit", {}).get("verification_status"))
+                == "confirmed"
+                for item in restricted_discoveries
+            )
+            external_results["pokemon_restricted_campaigns"] = {
+                "checked": True,
+                "success": restricted_diagnostics.get("status") == "OK",
+                "candidate": len(restricted_discoveries),
+                "official_verified": restricted_confirmed,
+                "confirmed": restricted_confirmed,
+                "restricted": sum(
+                    str(item.get("hit", {}).get("verification_status"))
+                    == "unverified_restricted"
+                    for item in restricted_discoveries
+                ),
+                "ended": sum(
+                    NationwideWebApplicationMonitor._discovery_ended(item)
+                    for item in restricted_discoveries
+                ),
+                "discoveries": restricted_discoveries,
             }
         if any(tcg in enabled for tcg in {"onepiece", "dragon_ball_fusion_world"}):
             bandai_monitor = BandaiOfficialApplicationMonitor(self._fetch)

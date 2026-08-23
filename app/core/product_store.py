@@ -22,6 +22,7 @@ from core.retail_price_policy import RetailPricePolicy
 from core.runtime_paths import app_root
 from core.tcg_categories import display_name, normalize_key, normalize_record
 from core.product_categories import normalize_product_category
+from core.restricted_application import UNVERIFIED_RESTRICTED, verification_bucket
 
 
 class DuplicateProductIdError(ValueError):
@@ -733,6 +734,18 @@ class ProductStore:
             if not isinstance(raw, dict):
                 continue
             site = dict(raw)
+            if verification_bucket(site.get("verification_status")) == UNVERIFIED_RESTRICTED:
+                # A restricted application is useful as a warning-backed lead,
+                # but must never become verified price/retailer evidence.
+                site.update({
+                    "exclusion_reason": "",
+                    "price_status": "要公式確認",
+                    "usable_for_price": False,
+                    "seller": str(site.get("name") or site.get("site_name") or ""),
+                    "shipped_by": "",
+                })
+                output.append(site)
+                continue
             site.setdefault(
                 "retailer_verified", site.get("site_key") in verified_site_keys
             )
