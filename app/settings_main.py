@@ -1,5 +1,6 @@
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from core.app_setup import configure_application, configure_high_dpi
@@ -31,6 +32,8 @@ def main():
         window = SettingsWindow()
         window.show()
         diagnostics.write("設定ソフトの表示に成功")
+        if "--smoke-test" in sys.argv:
+            QTimer.singleShot(1200, window.close)
         sys.exit(app.exec())
 
     except Exception as error:

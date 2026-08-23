@@ -1,4 +1,3 @@
-import platform
 import sys
 from pathlib import Path
 from core.runtime_paths import install_root, is_frozen
@@ -11,7 +10,10 @@ class AutoStartError(Exception):
 
 class AutoStartManager:
     def is_enabled(self):
-        if platform.system() != "Windows":
+        # platform.system() may execute ``ver`` through cmd.exe on Windows.
+        # This check runs while the GUI is being built, so use the interpreter
+        # platform flag and never create a console child process.
+        if not sys.platform.startswith("win"):
             return False
         try:
             import winreg
@@ -24,7 +26,7 @@ class AutoStartManager:
             return False
 
     def set_enabled(self, enabled):
-        if platform.system() != "Windows":
+        if not sys.platform.startswith("win"):
             raise AutoStartError("Windows以外では自動起動を設定できません。")
         try:
             import winreg

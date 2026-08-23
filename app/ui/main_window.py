@@ -1,4 +1,3 @@
-import subprocess
 import sys
 import threading
 import time
@@ -26,6 +25,7 @@ from core.runtime_paths import is_frozen
 from core.startup_diagnostics import StartupDiagnostics
 from core.tcg_categories import categories
 from core.version import APP_CHANNEL, APP_VERSION
+from core.windows_process import popen_hidden
 from ui.about_page import AboutPage
 from ui.application_dashboard_page import ApplicationDashboardPage
 from ui.backup_page import BackupPage
@@ -974,12 +974,12 @@ class MainWindow(QMainWindow):
                     f"{self.SETTINGS_EXECUTABLE}が同じフォルダーにありません。",
                 )
                 return
-            subprocess.Popen([str(settings_exe)])
+            popen_hidden([str(settings_exe)])
             return
 
         app_folder = Path(__file__).resolve().parents[1]
         settings_script = app_folder / "settings_main.py"
-        subprocess.Popen(
+        popen_hidden(
             [sys.executable, str(settings_script)],
             cwd=str(app_folder.parent),
         )

@@ -20,6 +20,15 @@ from core.whats_new_manager import WhatsNewManager
 
 def main():
     configure_high_dpi()
+    navigation_smoke = "--navigation-smoke-test" in sys.argv
+    navigation_processes = []
+    if navigation_smoke:
+        def record_process(event, args):
+            if event == "subprocess.Popen":
+                executable = str(args[0] if args else "")
+                navigation_processes.append(Path(executable).name or executable)
+
+        sys.addaudithook(record_process)
     if "--tls-ca-self-test" in sys.argv:
         try:
             create_tls_context()
@@ -132,7 +141,7 @@ def main():
         if repaired:
             diagnostics.write("起動時補修: " + " / ".join(repaired))
 
-        smoke_test = "--smoke-test" in sys.argv
+        smoke_test = "--smoke-test" in sys.argv or navigation_smoke
 
         if not smoke_test:
             from ui.license_dialog import LicenseDialog
@@ -179,10 +188,46 @@ def main():
             diagnostics.write(
                 "スモークテスト: メイン画面生成成功"
             )
-            QTimer.singleShot(
-                1200,
-                window.request_application_quit,
-            )
+            if navigation_smoke:
+                def run_navigation_smoke():
+                    buttons = (
+                        window.home_button,
+                        window.product_button,
+                        window.application_dashboard_button,
+                        window.monitoring_candidates_button,
+                        window.calendar_button,
+                        window.scheduler_button,
+                        window.sources_button,
+                        window.notification_center_button,
+                    )
+                    for _round in range(3):
+                        for button in buttons:
+                            button.click()
+                            app.processEvents()
+                    visible_auxiliary = [
+                        widget for widget in app.topLevelWidgets()
+                        if widget is not window and widget.isVisible()
+                    ]
+                    result_path = os.environ.get(
+                        "POKEYOYA_NAVIGATION_SMOKE_RESULT", ""
+                    ).strip()
+                    if result_path:
+                        Path(result_path).write_text(json.dumps({
+                            "rounds": 3,
+                            "page_count": len(buttons),
+                            "processes": navigation_processes,
+                            "child_process_count": len(navigation_processes),
+                            "visible_auxiliary_window_count": len(visible_auxiliary),
+                            "version": window._version_text(),
+                        }, ensure_ascii=False), encoding="utf-8")
+                    window.request_application_quit()
+
+                QTimer.singleShot(0, run_navigation_smoke)
+            else:
+                QTimer.singleShot(
+                    1200,
+                    window.request_application_quit,
+                )
         elif start_minimized:
             window.hide()
         else:

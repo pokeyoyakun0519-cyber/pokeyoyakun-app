@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from threading import Event
@@ -10,6 +9,7 @@ from threading import Event
 from core.release_update import ReleaseUpdateClient, UpdateError
 from core.runtime_paths import app_root, install_root, is_frozen
 from core.version import APP_RELEASE_CHANNEL, APP_VERSION
+from core.windows_process import popen_hidden
 
 
 def current_tag() -> str:
@@ -82,7 +82,7 @@ class BaseUpdateManager:
         return command, status_file
 
     def launch_apply_command(self, command: list[str]) -> None:
-        subprocess.Popen(command, cwd=str(self.temp_dir), close_fds=True)
+        popen_hidden(command, cwd=str(self.temp_dir), close_fds=True)
 
     def read_last_result(self) -> dict | None:
         path = self.temp_dir / "update_result.json"

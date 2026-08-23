@@ -10,6 +10,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from core.windows_process import popen_hidden
+
 
 EDITION_RULES = {
     "user": re.compile(
@@ -81,7 +83,7 @@ def run(expected_edition: str) -> int:
         try:
             command = json.loads(args.launch_json)
             if isinstance(command, list) and command:
-                subprocess.Popen(command, cwd=str(target), close_fds=True)
+                popen_hidden(command, cwd=str(target), close_fds=True)
         except Exception:
             pass
     return 0 if result["success"] else 1

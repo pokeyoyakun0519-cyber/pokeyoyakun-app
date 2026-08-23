@@ -50,7 +50,7 @@ class StableBridgeUpdaterTest(unittest.TestCase):
     def test_staged_updater_is_launched_from_staging_directory(self):
         manager = BaseUpdateManager.__new__(BaseUpdateManager)
         manager.temp_dir = Path("staging")
-        with patch("core.update_manager_base.subprocess.Popen") as launcher:
+        with patch("core.update_manager_base.popen_hidden") as launcher:
             manager.launch_apply_command(["staging/updater.exe"])
         launcher.assert_called_once_with(
             ["staging/updater.exe"], cwd=str(manager.temp_dir), close_fds=True
@@ -90,7 +90,7 @@ class SafeLaunchFailureTest(unittest.TestCase):
                 else patch("tools.apply_update.subprocess.run", return_value=installer_result)
             )
             with patch.object(sys, "argv", arguments), run_patch as launcher, patch(
-                "tools.apply_update.subprocess.Popen"
+                "tools.apply_update.popen_hidden"
             ) as relaunch:
                 result = apply_update.run("user")
             relaunch.assert_not_called()
