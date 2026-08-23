@@ -52,6 +52,7 @@ from core.chain_application_extractors import (
 from core.bandai_official_applications import BandaiOfficialApplicationMonitor
 from core.nationwide_web_monitor import NationwideWebApplicationMonitor
 from core.pokemon_coverage_expansion import PokemonCoverageExpansionMonitor
+from core.production_coverage import build_production_coverage, save_production_coverage
 
 
 POKEMON_CENTER_LOTTERY_INDEX = (
@@ -383,7 +384,8 @@ class RetailSearchManager:
         self, enabled_tcg_keys: set[str] | None = None
     ) -> list[dict[str, Any]]:
         enabled = enabled_tcg_keys or {
-            "pokemon", "onepiece", "dragon_ball_fusion_world"
+            "pokemon", "onepiece", "dragon_ball_fusion_world", "yugioh",
+            "gundam", "union_arena", "duelmasters", "weiss",
         }
         discoveries: list[dict[str, Any]] = []
         external_results: dict[str, dict[str, Any]] = {}
@@ -489,6 +491,24 @@ class RetailSearchManager:
             ) not in known
         )
         self.last_diagnostics["nationwide_web_monitor"] = nationwide.diagnostics
+        try:
+            coverage = build_production_coverage(
+                discoveries,
+                registry=self.web_source_registry,
+                autonomous_registry=self.autonomous_discovery.registry,
+                nationwide_diagnostics=nationwide.diagnostics,
+            )
+            save_production_coverage(coverage)
+            self.last_diagnostics["production_coverage"] = {
+                "generated_at": coverage["generated_at"],
+                **coverage["totals"],
+                "by_tcg": coverage["by_tcg"],
+            }
+        except (OSError, TypeError, ValueError) as error:
+            # Coverage diagnostics must never interrupt application discovery.
+            self.last_diagnostics["production_coverage"] = {
+                "status": "AUDIT_WRITE_FAILED", "error": type(error).__name__,
+            }
         return discoveries
 
     @staticmethod

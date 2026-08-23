@@ -353,6 +353,10 @@ class AutonomousApplicationSourceDiscovery:
             "redirect_safe": True,
             "tcg_confidence": float(analysis.get("tcg_confidence", 0)),
             "application_relevance": float(analysis.get("application_relevance", 0)),
+            # A verified official news/category/index remains useful between
+            # application campaigns.  Current application relevance is a
+            # health result, not a reason to forget the source.
+            "source_monitorable": bool(analysis.get("discovery_links")),
         })
         if updated.get("source_state") != "MONITORABLE":
             return []

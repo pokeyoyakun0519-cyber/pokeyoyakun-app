@@ -20,6 +20,7 @@ def run(output_json: Path, output_csv: Path) -> dict:
     output_csv = output_csv.resolve()
     isolated = tempfile.TemporaryDirectory(prefix="pokeyoya_coverage_")
     os.environ["LOCALAPPDATA"] = isolated.name
+    os.environ["POKEYOYA_DATA_ROOT"] = str(Path(isolated.name) / "PokeyoyaKun")
     original_cwd = Path.cwd()
     os.chdir(isolated.name)
     from core.application_coverage_report import build_application_coverage
@@ -36,6 +37,12 @@ def run(output_json: Path, output_csv: Path) -> dict:
         *web.get("verified_discoveries", []), *dedicated,
     ])
     root = Path(isolated.name) / "PokeyoyaKun"
+    try:
+        production_coverage = json.loads(
+            (root / "data" / "production_coverage.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, TypeError):
+        production_coverage = {}
     candidates = CandidateManager(root)
     merge = candidates.merge_application_discoveries(
         discoveries, matcher=manager.card_labo._matches_candidate,
@@ -90,6 +97,7 @@ def run(output_json: Path, output_csv: Path) -> dict:
         "autonomous_source_candidates": list(learned_candidates.values()),
         "discovery_diagnostics": diagnostics,
         "dedicated_diagnostics": manager.last_diagnostics,
+        "production_coverage": production_coverage,
         "source_gaps": gaps,
     })
     output_json.parent.mkdir(parents=True, exist_ok=True)

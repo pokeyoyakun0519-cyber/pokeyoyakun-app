@@ -11,7 +11,35 @@ SOURCE_CLASSES = (
     "WEB_DIRECT", "WEB_FORM", "WEB_TO_STORE", "STORE_DIRECT",
     "APP_REQUIRED", "SNS_ONLY", "UNSUPPORTED",
 )
-PRIORITY_TCG = ("pokemon", "onepiece", "dragon_ball_fusion_world")
+SUPPORTED_APPLICATION_TCG = (
+    "pokemon", "onepiece", "dragon_ball_fusion_world", "yugioh",
+    "gundam", "union_arena", "duelmasters", "weiss",
+)
+# Kept as a compatibility alias for callers and third-party plugins.
+PRIORITY_TCG = SUPPORTED_APPLICATION_TCG
+
+OFFICIAL_ALTERNATIVE_PATHS: dict[str, tuple[dict[str, str], ...]] = {
+    "joshin": ({
+        "url": "https://joshinweb.jp/toy/48712.html?SRT=10",
+        "kind": "official_public_category",
+        "status": "ROBOTS_BLOCKED",
+    },),
+    "biccamera": ({
+        "url": "https://www.biccamera.com/bc/c/sale/special/lottery/order_lottery.jsp",
+        "kind": "official_application_index",
+        "status": "ROBOTS_BLOCKED",
+    },),
+    "rakuten": ({
+        "url": "https://books.rakuten.co.jp/event/game/card/entry/",
+        "kind": "official_application_index",
+        "status": "ROBOTS_BLOCKED",
+    },),
+    "dragon_star": ({
+        "url": "https://www.dragonstar.co.jp/news",
+        "kind": "official_news_index",
+        "status": "ROBOTS_BLOCKED",
+    },),
+}
 
 # Official pages checked during the WebMonitor v2 audit.  These entries are
 # deliberately conservative: an official store list alone does not make an
@@ -117,6 +145,12 @@ class WebApplicationSourceRegistry:
                     str(plugin.get("id")) if plugin.get("mode") == "dedicated"
                     else "safe_public_html" if record.get("monitoring_supported")
                     else "none"
+                ),
+                "official_alternative_paths": list(
+                    OFFICIAL_ALTERNATIVE_PATHS.get(
+                        str(record.get("store_group_id") or record.get("canonical_store_id")),
+                        (),
+                    )
                 ),
             })
             output.append(record)

@@ -138,6 +138,8 @@ class NationwideWebApplicationMonitor:
                 "status": "UNSUPPORTED",
                 "error_code": "",
                 "error_message": "",
+                "attempted_alternative_paths": [],
+                "selected_monitor_url": url,
             }
             if source_class in SKIPPED_CLASSES:
                 base["status"] = source_class
@@ -200,18 +202,30 @@ class NationwideWebApplicationMonitor:
                 inventory_rows.append(base)
                 continue
 
-            if not self.robots_allowed(url):
-                base.update({
-                    "status": "ACCESS_RESTRICTED", "error_code": "ROBOTS_DISALLOWED",
-                    "error_message": "robots policyで自動取得不可",
-                })
-                inventory_rows.append(base)
-                continue
+            monitor_url = url
+            if not self.robots_allowed(monitor_url):
+                alternatives = records[0].get("official_alternative_paths", [])
+                for alternative in alternatives:
+                    alternative_url = str(alternative.get("url") or "")
+                    if not alternative_url:
+                        continue
+                    base["attempted_alternative_paths"].append(alternative_url)
+                    if self.robots_allowed(alternative_url):
+                        monitor_url = alternative_url
+                        base["selected_monitor_url"] = monitor_url
+                        break
+                else:
+                    base.update({
+                        "status": "ACCESS_RESTRICTED", "error_code": "ROBOTS_DISALLOWED",
+                        "error_message": "robots policyで自動取得不可（公式代替導線も未確立）",
+                    })
+                    inventory_rows.append(base)
+                    continue
 
-            canonical_parent = canonical_application_url(url) or url
+            canonical_parent = canonical_application_url(monitor_url) or monitor_url
             base["parent_urls_checked"] = 1
             fetched_urls.add(canonical_parent)
-            response = self.fetch(url)
+            response = self.fetch(monitor_url)
             base["last_http"] = str(response.get("status") or "")
             if not response.get("ok"):
                 status_text = str(response.get("status") or "HTTP error")
@@ -228,8 +242,8 @@ class NationwideWebApplicationMonitor:
                 inventory_rows.append(base)
                 continue
             try:
-                extractor = _OfficialHostExtractor(chain, url)
-                parsed = extractor.extract_index(html, url)
+                extractor = _OfficialHostExtractor(chain, monitor_url)
+                parsed = extractor.extract_index(html, monitor_url)
             except Exception as error:
                 base.update({
                     "status": "PARSER_OUTDATED", "parser_result": "error",

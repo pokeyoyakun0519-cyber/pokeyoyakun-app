@@ -136,9 +136,13 @@ class OfficialSourceCandidateStore:
         elif all(bool(checks.get(name)) for name in (
             "official_provenance", "https", "robots_allowed", "fetch_success",
             "parser_success", "redirect_safe",
-        )) and float(checks.get("tcg_confidence", 0)) >= 0.7 and float(
-            checks.get("application_relevance", 0)
-        ) >= 0.7:
+        )) and (
+            (
+                float(checks.get("tcg_confidence", 0)) >= 0.7
+                and float(checks.get("application_relevance", 0)) >= 0.7
+            )
+            or bool(checks.get("source_monitorable"))
+        ):
             record.update({
                 "source_state": "MONITORABLE", "enabled": True,
                 "robots_status": "allowed", "last_success": now,

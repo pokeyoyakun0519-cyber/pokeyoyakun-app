@@ -149,6 +149,29 @@ class Test5NationwideWebMonitorTest(unittest.TestCase):
         self.assertEqual([], self.fetches)
         self.assertEqual(1, monitor.diagnostics["status_counts"]["ACCESS_RESTRICTED"])
 
+    def test_blocked_primary_uses_allowed_official_alternative(self):
+        registry = _Registry()
+        registry.records["pokemon"] = [{
+            "chain": "retailer", "display_name": "Retailer",
+            "source_class": "WEB_DIRECT", "official_url": "https://blocked.test/",
+            "official_alternative_paths": [{
+                "url": "https://public.test/lottery/", "kind": "official_application_index",
+                "status": "MONITORABLE",
+            }],
+            "branch_count": 1, "extractor": "safe_public_html",
+        }]
+        monitor = NationwideWebApplicationMonitor(
+            self._fetch, registry=registry,
+            robots_allowed=lambda url: url.startswith("https://public.test/"),
+            state_path=self.state_path,
+            now=lambda: datetime(2026, 8, 22, 12, 0, tzinfo=JST),
+        )
+        monitor.scan({"pokemon"})
+        self.assertEqual(["https://public.test/lottery/"], self.fetches)
+        source = monitor.diagnostics["sources"][0]
+        self.assertEqual("https://public.test/lottery/", source["selected_monitor_url"])
+        self.assertEqual(["https://public.test/lottery/"], source["attempted_alternative_paths"])
+
     def test_bandai_parent_results_are_assigned_to_matching_tcg(self):
         registry = _Registry()
         registry.records = {
