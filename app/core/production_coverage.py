@@ -25,7 +25,7 @@ COVERAGE_STATES = {
     "RECENTLY_ENDED", "NO_CURRENT_APPLICATION", "APP_REQUIRED", "SNS_ONLY",
     "ROBOTS_BLOCKED", "PARSER_NEEDED", "HTTP_ERROR", "UNSUPPORTED",
     "VERIFYING", "DISCOVERED_CANDIDATE", "TEMPORARILY_FAILED",
-    "UNVERIFIED_RESTRICTED",
+    "UNVERIFIED_RESTRICTED", "TERMS_RESTRICTED",
 }
 PREFECTURES = (
     "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
@@ -278,7 +278,7 @@ def build_production_coverage(
         },
         "by_tcg": by_tcg, "by_prefecture": prefectures,
         "inventory": inventory, "applications": applications,
-        "unresolved": [row for row in inventory if row["state"] in {"APP_REQUIRED", "SNS_ONLY", "ROBOTS_BLOCKED", "PARSER_NEEDED", "UNSUPPORTED"}],
+        "unresolved": [row for row in inventory if row["state"] in {"APP_REQUIRED", "SNS_ONLY", "ROBOTS_BLOCKED", "TERMS_RESTRICTED", "PARSER_NEEDED", "UNSUPPORTED"}],
     }
 
 

@@ -232,6 +232,10 @@ def deduplicate_applications(items: list[dict[str, Any]]) -> list[dict[str, Any]
         matched["evidence"] = _deduplicate_evidence(
             [*matched.get("evidence", []), *item.get("evidence", [])]
         )
+        matched["evidence_sources"] = list(dict.fromkeys([
+            *matched.get("evidence_sources", []),
+            *item.get("evidence_sources", []),
+        ]))
         for key in (
             "application_url", "application_start_at", "application_end_at",
             "result_announcement_at", "purchase_period", "product_id", "store_id", "branch",

@@ -71,6 +71,13 @@ DISCOVERY_SOURCES = (
         TIER_B_DISCOVERY, ("pokemon", "onepiece"), False, "AUDITED_NOT_ENABLED",
         "更新中の構造化一覧を確認。専用parser/robots確認前は自動取得しない。",
     ),
+    DiscoverySourceDefinition(
+        "cardchusen", "カード抽選まとめ", "https://www.cardchusen.com/",
+        TIER_B_DISCOVERY,
+        ("pokemon", "onepiece", "yugioh", "dragon_ball_fusion_world"),
+        False, "TERMS_RESTRICTED",
+        "利用規約で機械的取得を禁止。登録・純粋parserのみで自動取得しない。",
+    ),
 )
 
 
@@ -79,6 +86,8 @@ _OFFICIAL_DESTINATION_DOMAINS = (
     "onepiece-cardgame.com", "bandainamco-am.co.jp", "p-bandai.jp",
     "livepocket.jp", "cardlabo.com", "hbst.net", "hobby-station.com",
     "amazon.co.jp", "books.rakuten.co.jp", "7net.omni7.jp",
+    "shoplottery.e-starbox.com", "docs.google.com", "c-labo.jp",
+    "select-type.com", "membercard.jp", "thebase.in", "base.shop",
 )
 _CHAIN_PATTERNS = (
     "カードラボ", "ホビーステーション", "バトロコ", "プレイズ",

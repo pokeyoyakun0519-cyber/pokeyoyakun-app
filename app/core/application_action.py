@@ -17,8 +17,13 @@ APPLICATION_PATH_TYPES = {
 }
 _EXTERNAL_APPLICATION_HOSTS = {
     "livepocket.jp", "t.livepocket.jp", "miniapp.line.me", "select-type.com",
+    "shoplottery.e-starbox.com", "docs.google.com", "tcg-master.membercard.jp",
+    "thebase.in", "base.shop",
 }
-_TRUSTED_DISCOVERY_HOSTS = {"nyuka-now.com", "www.nyuka-now.com"}
+_TRUSTED_DISCOVERY_HOSTS = {
+    "nyuka-now.com", "www.nyuka-now.com",
+    "cardchusen.com", "www.cardchusen.com",
+}
 
 
 def application_action(row: dict[str, Any]) -> dict[str, Any]:
@@ -119,7 +124,7 @@ def safe_application_action_url(url: str, row: dict[str, Any]) -> bool:
     if (
         verification_bucket(row.get("verification_status")) == UNVERIFIED_RESTRICTED
         and url == str(row.get("official_detail_url") or "").strip()
-        and _host(url) in _EXTERNAL_APPLICATION_HOSTS
+        and _is_external_application_host(_host(url))
     ):
         # Opening a known application-provider page for manual verification is
         # not confirmation and does not enable any in-app application action.
@@ -130,7 +135,7 @@ def safe_application_action_url(url: str, row: dict[str, Any]) -> bool:
         and _host(url) in _TRUSTED_DISCOVERY_HOSTS
     ):
         return True
-    if _host(url) not in _EXTERNAL_APPLICATION_HOSTS:
+    if not _is_external_application_host(_host(url)):
         return False
     if str(row.get("verification_status") or "").strip().casefold() != "confirmed":
         return False
@@ -164,6 +169,12 @@ def _has_verified_external_evidence(url: str, evidence: Any) -> bool:
         ):
             return True
     return False
+
+
+def _is_external_application_host(host: str) -> bool:
+    return host in _EXTERNAL_APPLICATION_HOSTS or host.endswith(
+        (".membercard.jp", ".thebase.in", ".base.shop")
+    )
 
 
 def _evidence_has_source_type(evidence: Any, expected: str) -> bool:

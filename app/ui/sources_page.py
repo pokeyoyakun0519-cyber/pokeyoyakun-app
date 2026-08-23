@@ -639,7 +639,10 @@ class SourcesPage(QFrame):
         verifying = int(source_states.get("VERIFYING", 0))
         difficult = sum(
             int(source_states.get(name, 0))
-            for name in ("BLOCKED_ROBOTS", "APP_REQUIRED", "SNS_ONLY", "UNSUPPORTED")
+            for name in (
+                "BLOCKED_ROBOTS", "APP_REQUIRED", "SNS_ONLY",
+                "TERMS_RESTRICTED", "UNSUPPORTED",
+            )
         )
         self.web_monitoring_summary.setText(
             f"状態: {state}  /  最終確認: {last_success}\n"

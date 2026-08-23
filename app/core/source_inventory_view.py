@@ -24,6 +24,7 @@ STATUS_LABELS = {
     "APP_REQUIRED": "公式アプリ必須",
     "SNS_ONLY": "SNS情報のみ",
     "ROBOTS_BLOCKED": "自動確認に制限あり",
+    "TERMS_RESTRICTED": "利用条件により自動確認停止",
     "PARSER_NEEDED": "情報解析対応待ち",
     "HTTP_ERROR": "一時的に確認失敗",
     "UNSUPPORTED": "現在自動監視未対応",
@@ -45,6 +46,7 @@ STATUS_REASONS = {
     "APP_REQUIRED": "応募には公式アプリが必要です",
     "SNS_ONLY": "SNSのみで告知されています。公式Web情報も確認しています",
     "ROBOTS_BLOCKED": "このサイトは自動取得に制限があるため、別の公式情報源を探索中です",
+    "TERMS_RESTRICTED": "利用条件により自動取得せず、別の公式情報源を探索中です",
     "PARSER_NEEDED": "公式ページの情報解析に対応中です",
     "HTTP_ERROR": "一時的に公式ページを確認できませんでした。次回再確認します",
     "UNSUPPORTED": "現在は自動監視に対応していません",
@@ -59,7 +61,7 @@ FILTER_STATES = {
     "verifying": {"VERIFYING", "DISCOVERED_CANDIDATE", "DISCOVERED"},
     "app": {"APP_REQUIRED"},
     "sns": {"SNS_ONLY"},
-    "restricted": {"UNVERIFIED_RESTRICTED", "ROBOTS_BLOCKED", "HTTP_ERROR", "TEMPORARILY_FAILED", "PARSER_NEEDED"},
+    "restricted": {"UNVERIFIED_RESTRICTED", "ROBOTS_BLOCKED", "TERMS_RESTRICTED", "HTTP_ERROR", "TEMPORARILY_FAILED", "PARSER_NEEDED"},
     "unsupported": {"UNSUPPORTED"},
 }
 
@@ -146,7 +148,7 @@ def build_source_inventory_view(report: dict[str, Any]) -> dict[str, Any]:
         "app_required": state_counts["APP_REQUIRED"],
         "sns_only": state_counts["SNS_ONLY"],
         "restricted": sum(state_counts[name] for name in (
-            "UNVERIFIED_RESTRICTED", "ROBOTS_BLOCKED", "HTTP_ERROR", "TEMPORARILY_FAILED"
+            "UNVERIFIED_RESTRICTED", "ROBOTS_BLOCKED", "TERMS_RESTRICTED", "HTTP_ERROR", "TEMPORARILY_FAILED"
         )),
         "parser_needed": state_counts["PARSER_NEEDED"],
         "unsupported": state_counts["UNSUPPORTED"],
@@ -214,7 +216,7 @@ def _present_row(source: dict[str, Any], application: dict[str, Any] | None) -> 
             source.get("monitoring_type") or source.get("source_class")
             or source.get("monitor_type")
         ),
-        "monitoring_restriction": state in {"ROBOTS_BLOCKED", "UNVERIFIED_RESTRICTED"},
+        "monitoring_restriction": state in {"ROBOTS_BLOCKED", "TERMS_RESTRICTED", "UNVERIFIED_RESTRICTED"},
         "parser_status": "対応待ち" if state == "PARSER_NEEDED" else "確認済み" if state in {"CURRENT_APPLICATION", "RECENTLY_ENDED", "NO_CURRENT_APPLICATION"} else "確認中",
         "application_status": "掲載" if is_application else "未掲載",
     }
@@ -227,7 +229,7 @@ def _discovery_label(source: dict[str, Any]) -> str:
     if value in {"RETAILER", "CARD_SHOP", "MALL"}:
         return "公式店舗情報"
     if value == "DISCOVERY":
-        return "公開情報から発見"
+        return str(source.get("display_name") or "公開情報から発見")
     return "登録済み監視候補"
 
 
@@ -240,6 +242,7 @@ def _state_priority(state: str) -> int:
         "CURRENT_APPLICATION": 100, "UNVERIFIED_RESTRICTED": 95, "RECENTLY_ENDED": 90,
         "VERIFYING": 80, "DISCOVERED_CANDIDATE": 75, "DISCOVERED": 75,
         "APP_REQUIRED": 70, "SNS_ONLY": 65, "ROBOTS_BLOCKED": 60,
+        "TERMS_RESTRICTED": 60,
         "PARSER_NEEDED": 55, "HTTP_ERROR": 50, "TEMPORARILY_FAILED": 50,
         "NO_CURRENT_APPLICATION": 40, "MONITORABLE": 35,
         "OFFICIAL_VERIFIED": 30, "UNSUPPORTED": 10,
