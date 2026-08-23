@@ -25,6 +25,12 @@ def test_page_navigation_three_rounds_does_not_spawn_child_processes():
         "os.environ", {"POKEYOYA_DATA_ROOT": directory}, clear=False,
     ), patch("core.windows_process.subprocess.Popen") as launcher:
         window = MainWindow()
+        window.show()
+        app.processEvents()
+        baseline_windows = {
+            id(widget) for widget in app.topLevelWidgets()
+            if widget is not window and widget.isVisible()
+        }
         buttons = (
             window.home_button,
             window.product_button,
@@ -41,5 +47,12 @@ def test_page_navigation_three_rounds_does_not_spawn_child_processes():
                 app.processEvents()
 
         assert launcher.call_count == 0, launcher.mock_calls
+        visible_auxiliary = [
+            (type(widget).__name__, widget.windowTitle(), widget.objectName())
+            for widget in app.topLevelWidgets()
+            if widget is not window and widget.isVisible()
+            and id(widget) not in baseline_windows
+        ]
+        assert visible_auxiliary == []
         assert window.pages.currentWidget() is window.notification_center_page
         window.close()

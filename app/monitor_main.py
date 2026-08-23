@@ -190,6 +190,10 @@ def main():
             )
             if navigation_smoke:
                 def run_navigation_smoke():
+                    baseline_windows = {
+                        id(widget) for widget in app.topLevelWidgets()
+                        if widget is not window and widget.isVisible()
+                    }
                     buttons = (
                         window.home_button,
                         window.product_button,
@@ -207,6 +211,7 @@ def main():
                     visible_auxiliary = [
                         widget for widget in app.topLevelWidgets()
                         if widget is not window and widget.isVisible()
+                        and id(widget) not in baseline_windows
                     ]
                     result_path = os.environ.get(
                         "POKEYOYA_NAVIGATION_SMOKE_RESULT", ""
@@ -218,6 +223,12 @@ def main():
                             "processes": navigation_processes,
                             "child_process_count": len(navigation_processes),
                             "visible_auxiliary_window_count": len(visible_auxiliary),
+                            "baseline_auxiliary_window_count": len(baseline_windows),
+                            "visible_auxiliary_windows": [{
+                                "class": type(widget).__name__,
+                                "title": widget.windowTitle(),
+                                "object_name": widget.objectName(),
+                            } for widget in visible_auxiliary],
                             "version": window._version_text(),
                         }, ensure_ascii=False), encoding="utf-8")
                     window.request_application_quit()
