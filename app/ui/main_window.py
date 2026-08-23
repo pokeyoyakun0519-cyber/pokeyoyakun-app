@@ -40,6 +40,7 @@ from ui.global_search_widget import GlobalSearchWidget
 from ui.log_viewer_page import LogViewerPage
 from ui.lottery_page import LotteryPage
 from ui.migration_page import MigrationPage
+from ui.monitoring_candidate_page import MonitoringCandidatePage
 from ui.notification_center_page import NotificationCenterPage
 from ui.notification_page import NotificationPage
 from ui.plugin_page import PluginPage
@@ -331,6 +332,7 @@ class MainWindow(QMainWindow):
         self.product_page.reload_saved_products()
         self.candidates_page.reload_candidates()
         self.sources_page.reload_sources()
+        self.monitoring_candidate_page.reload()
         if result.get("retail_candidate_count", 0):
             self.product_page.result_label.setText(
                 "公式商品を読み込みました。応募・予約情報を"
@@ -351,6 +353,7 @@ class MainWindow(QMainWindow):
         self.product_page.reload_saved_products()
         self.application_dashboard_page.reload()
         self.candidates_page.reload_candidates()
+        self.monitoring_candidate_page.reload()
         self.product_page.result_label.setText(
             f"応募・予約情報を確認中です（{searched}/{total}件）。"
         )
@@ -373,6 +376,7 @@ class MainWindow(QMainWindow):
         self.product_page.reload_saved_products()
         self.application_dashboard_page.reload()
         self.candidates_page.reload_candidates()
+        self.monitoring_candidate_page.reload()
         self.product_page.result_label.setText(
             "初回の商品・応募情報の確認が完了しました。"
         )
@@ -456,12 +460,14 @@ class MainWindow(QMainWindow):
             self.candidates_page.reload_candidates()
         if "sources" in pending:
             self.sources_page.reload_sources()
+            self.monitoring_candidate_page.reload()
 
     def _navigation_labels(self):
         return [
             ("home_button", "ホーム"),
             ("product_button", "商品一覧"),
             ("application_dashboard_button", "応募ダッシュボード"),
+            ("monitoring_candidates_button", "監視候補店舗"),
             ("calendar_button", "カレンダー"),
             ("statistics_button", "応募統計"),
             ("candidates_button", "新弾候補"),
@@ -567,6 +573,7 @@ class MainWindow(QMainWindow):
             [
                 self.product_button,
                 self.application_dashboard_button,
+                self.monitoring_candidates_button,
                 self.calendar_button,
                 self.statistics_button,
                 self.candidates_button,
@@ -640,6 +647,7 @@ class MainWindow(QMainWindow):
             self.home_button,
             self.product_button,
             self.application_dashboard_button,
+            self.monitoring_candidates_button,
             self.calendar_button,
             self.notification_center_button,
             self.email_accounts_button,
@@ -808,6 +816,7 @@ class MainWindow(QMainWindow):
         self.home_page = HomePage(self.monitor_scheduler)
         self.product_page = ProductPage()
         self.application_dashboard_page = ApplicationDashboardPage()
+        self.monitoring_candidate_page = MonitoringCandidatePage()
         self.calendar_page = CalendarPage()
         self.statistics_page = StatisticsPage()
         self.home_page.navigate_requested.connect(self._navigate_to)
@@ -848,6 +857,7 @@ class MainWindow(QMainWindow):
             self.home_button: self.home_page,
             self.product_button: self.product_page,
             self.application_dashboard_button: self.application_dashboard_page,
+            self.monitoring_candidates_button: self.monitoring_candidate_page,
             self.calendar_button: self.calendar_page,
             self.statistics_button: self.statistics_page,
             self.candidates_button: self.candidates_page,
@@ -901,6 +911,9 @@ class MainWindow(QMainWindow):
                 lambda checked=False, target=page:
                 self.pages.setCurrentWidget(target)
             )
+        self.monitoring_candidates_button.clicked.connect(
+            lambda _checked=False: self.monitoring_candidate_page.reload()
+        )
         self.open_settings_button.clicked.connect(self.open_settings_app)
         self.exit_button.clicked.connect(self.close)
 
@@ -909,6 +922,7 @@ class MainWindow(QMainWindow):
             "home": self.home_button,
             "product": self.product_button,
             "application": self.application_dashboard_button,
+            "monitoring_candidates": self.monitoring_candidates_button,
             "calendar": self.calendar_button,
             "statistics": self.statistics_button,
             "site_master": self.site_master_button,
@@ -933,6 +947,8 @@ class MainWindow(QMainWindow):
                 self.product_page.open_product_detail(product)
         elif target == "application":
             self.application_dashboard_page.reload()
+        elif target == "monitoring_candidates":
+            self.monitoring_candidate_page.reload()
 
 
     def _show_lottery_page(self):

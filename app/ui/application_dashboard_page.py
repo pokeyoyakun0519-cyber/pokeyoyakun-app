@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QAbstractItemView,
+    QHeaderView,
+    QSizePolicy,
     QTabBar,
     QVBoxLayout,
     QWidget,
@@ -77,7 +79,9 @@ class ApplicationRow(QFrame):
         )
         layout.setSpacing(8)
 
-        header = QHBoxLayout()
+        header = QGridLayout()
+        header.setHorizontalSpacing(8)
+        header.setVerticalSpacing(6)
 
         title = QLabel(
             row.get(
@@ -117,15 +121,18 @@ class ApplicationRow(QFrame):
             application_button.setToolTip(str(row["application_action_guidance"]))
         application_button.clicked.connect(self._open_application_page)
 
-        header.addWidget(title, 1)
+        header.addWidget(title, 0, 0, 1, 7)
+        badge_column = 0
         if row.get("is_new"):
             new_label = QLabel("NEW")
             new_label.setObjectName("StatusOpen")
-            header.addWidget(new_label)
+            header.addWidget(new_label, 1, badge_column)
+            badge_column += 1
         if row.get("changes"):
             changed_label = QLabel("更新あり")
             changed_label.setObjectName("StatusLottery")
-            header.addWidget(changed_label)
+            header.addWidget(changed_label, 1, badge_column)
+            badge_column += 1
         favorite_button = QPushButton(
             "★ お気に入り店舗" if row.get("store_key") in self.favorite_store_keys
             else "☆ お気に入り店舗"
@@ -135,9 +142,10 @@ class ApplicationRow(QFrame):
         favorite_button.clicked.connect(
             lambda: favorite_callback(row) if favorite_callback is not None else None
         )
-        header.addWidget(favorite_button)
-        header.addWidget(state)
-        header.addWidget(application_button)
+        header.setColumnStretch(3, 1)
+        header.addWidget(favorite_button, 1, 4)
+        header.addWidget(state, 1, 5)
+        header.addWidget(application_button, 1, 6)
         layout.addLayout(header)
 
         store_info = QLabel(
@@ -423,7 +431,7 @@ class ApplicationProductGroup(QFrame):
 class SourceInventorySection(QFrame):
     """Saved monitoring inventory shown separately from application cards."""
 
-    def __init__(self):
+    def __init__(self, *, show_heading: bool = True):
         super().__init__()
         self.setObjectName("SettingsCard")
         self._view = {"rows": [], "summary": {}}
@@ -432,15 +440,16 @@ class SourceInventorySection(QFrame):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(8)
 
-        title = QLabel("監視候補店舗 / 情報確認状況")
-        title.setObjectName("SectionTitle")
-        layout.addWidget(title)
-        note = QLabel(
-            "ここは応募案件一覧ではありません。保存済み情報から、確認中・現在応募なしを含む監視候補を表示します。"
-        )
-        note.setObjectName("MutedText")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        if show_heading:
+            title = QLabel("監視候補店舗 / 情報確認状況")
+            title.setObjectName("SectionTitle")
+            layout.addWidget(title)
+            note = QLabel(
+                "ここは応募案件一覧ではありません。保存済み情報から、確認中・現在応募なしを含む監視候補を表示します。"
+            )
+            note.setObjectName("MutedText")
+            note.setWordWrap(True)
+            layout.addWidget(note)
         self.summary = QLabel("")
         self.summary.setObjectName("PageText")
         self.summary.setWordWrap(True)
@@ -469,6 +478,11 @@ class SourceInventorySection(QFrame):
             row, column = divmod(index, 3)
             filters.addWidget(QLabel(label + "："), row, column * 2)
             filters.addWidget(widget, row, column * 2 + 1)
+            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            widget.setMinimumContentsLength(8)
+            widget.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        for column in (1, 3, 5):
+            filters.setColumnStretch(column, 1)
         filters.addWidget(QLabel("検索："), 2, 0)
         filters.addWidget(self.search, 2, 1, 1, 5)
         layout.addLayout(filters)
@@ -482,7 +496,16 @@ class SourceInventorySection(QFrame):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
-        self.table.setMinimumHeight(280)
+        self.table.setMinimumHeight(210)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        for column in (2, 3, 4, 7):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        self.table.setColumnWidth(5, 145)
+        self.table.setColumnWidth(6, 120)
         self.table.itemSelectionChanged.connect(self._show_selected_detail)
         layout.addWidget(self.table)
 
@@ -544,7 +567,8 @@ class SourceInventorySection(QFrame):
             f'監視候補店舗 {value.get("branch_store_count", 0)}　'
             f'chain {value.get("chain_count", 0)}　source {value.get("source_count", 0)}\n'
             f'応募受付中 {value.get("current", 0)}　最近終了 {value.get("recent", 0)}　'
-            f'現在応募なし {value.get("no_current", 0)}　公式確認中 {value.get("verifying", 0)}　'
+            f'現在応募なし {value.get("no_current", 0)}\n'
+            f'公式確認中 {value.get("verifying", 0)}　'
             f'アプリ必須 {value.get("app_required", 0)}　SNSのみ {value.get("sns_only", 0)}　'
             f'自動確認制限 {value.get("restricted", 0)}　解析待ち {value.get("parser_needed", 0)}　'
             f'未対応 {value.get("unsupported", 0)}'
@@ -570,7 +594,11 @@ class SourceInventorySection(QFrame):
             )
             for column, value in enumerate(values):
                 self.table.setItem(index, column, QTableWidgetItem(str(value or "未確認")))
-        self.table.resizeColumnsToContents()
+        for row_index in range(self.table.rowCount()):
+            for column in range(self.table.columnCount()):
+                item = self.table.item(row_index, column)
+                if item is not None:
+                    item.setToolTip(item.text())
         self.detail.setText(
             "該当する監視候補はありません。" if not self._filtered_rows
             else f"表示 {len(self._filtered_rows)}件。行を選ぶと詳細を確認できます。"
@@ -699,7 +727,7 @@ class ApplicationDashboardPage(QFrame):
         filter_layout.setContentsMargins(0, 0, 0, 0)
         filter_layout.setSpacing(8)
 
-        filter_row = QHBoxLayout()
+        filter_row = QGridLayout()
         # 過去のUIテスト・内部操作との互換用。画面上の選択は常設タブへ集約する。
         self.tcg_filter = QComboBox()
         self.tcg_filter.addItem("すべて", "all")
@@ -717,32 +745,34 @@ class ApplicationDashboardPage(QFrame):
         self.sales_mode_filter.currentIndexChanged.connect(self._apply_filters)
         self.sales_mode_filter.setVisible(False)
 
-        filter_row.addWidget(QLabel("都道府県："))
+        filter_row.addWidget(QLabel("都道府県："), 0, 0)
         self.prefecture_filter = QComboBox()
         self.prefecture_filter.addItem("すべて", "all")
         self.prefecture_filter.addItem("地域不明", "UNKNOWN")
         self.prefecture_filter.currentIndexChanged.connect(self._apply_filters)
-        filter_row.addWidget(self.prefecture_filter)
-        filter_row.addStretch()
-        filter_layout.addLayout(filter_row)
+        filter_row.addWidget(self.prefecture_filter, 0, 1)
 
-        filter_row2 = QHBoxLayout()
-        filter_row2.addWidget(QLabel("商品カテゴリ："))
+        filter_row.addWidget(QLabel("商品カテゴリ："), 0, 2)
         self.product_category_filter = QComboBox()
         self.product_category_filter.addItem("すべて", "all")
         for value, label in PRODUCT_CATEGORY_LABELS.items():
             self.product_category_filter.addItem(label, value)
         self.product_category_filter.currentIndexChanged.connect(self._apply_filters)
-        filter_row2.addWidget(self.product_category_filter)
+        filter_row.addWidget(self.product_category_filter, 0, 3)
 
-        filter_row2.addWidget(QLabel("応募状態："))
+        filter_row.addWidget(QLabel("応募状態："), 0, 4)
         self.application_state_filter = QComboBox()
         for state in ("すべて", "未応募", "応募済み", "結果待ち", "当選", "落選", "確認中"):
             self.application_state_filter.addItem(state, state)
         self.application_state_filter.currentIndexChanged.connect(self._apply_filters)
-        filter_row2.addWidget(self.application_state_filter)
+        filter_row.addWidget(self.application_state_filter, 0, 5)
+        for column in (1, 3, 5):
+            filter_row.setColumnStretch(column, 1)
+        filter_layout.addLayout(filter_row)
 
-        filter_row2.addWidget(QLabel("確認状態："))
+        filter_row2 = QGridLayout()
+
+        filter_row2.addWidget(QLabel("確認状態："), 0, 0)
         self.verification_filter = QComboBox()
         for label, value in (
             ("すべて", "all"),
@@ -751,14 +781,15 @@ class ApplicationDashboardPage(QFrame):
         ):
             self.verification_filter.addItem(label, value)
         self.verification_filter.currentIndexChanged.connect(self._apply_filters)
-        filter_row2.addWidget(self.verification_filter)
+        filter_row2.addWidget(self.verification_filter, 0, 1)
 
         self.keyword = QLineEdit()
         self.keyword.setPlaceholderText("商品名・店舗名で検索")
         self.keyword.textChanged.connect(self._apply_filters)
-        filter_row2.addWidget(self.keyword, 1)
+        filter_row2.addWidget(QLabel("検索："), 1, 0)
+        filter_row2.addWidget(self.keyword, 1, 1, 1, 4)
 
-        filter_row2.addWidget(QLabel("並び順："))
+        filter_row2.addWidget(QLabel("並び順："), 0, 2)
         self.sort_mode = QComboBox()
         self.sort_mode.addItems(
             [
@@ -773,7 +804,7 @@ class ApplicationDashboardPage(QFrame):
         self.sort_mode.currentTextChanged.connect(
             self._apply_filters
         )
-        filter_row2.addWidget(self.sort_mode)
+        filter_row2.addWidget(self.sort_mode, 0, 3)
 
         self.group_by_product = QCheckBox("商品ごとにまとめる")
         self.group_by_product.setChecked(bool(
@@ -782,7 +813,9 @@ class ApplicationDashboardPage(QFrame):
             )
         ))
         self.group_by_product.toggled.connect(self._toggle_group_by_product)
-        filter_row2.addWidget(self.group_by_product)
+        filter_row2.addWidget(self.group_by_product, 0, 4)
+        filter_row2.setColumnStretch(1, 1)
+        filter_row2.setColumnStretch(3, 1)
         filter_layout.addLayout(filter_row2)
 
         favorites_input_row = QHBoxLayout()
@@ -817,10 +850,8 @@ class ApplicationDashboardPage(QFrame):
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.scroll, 1)
-
-        self.source_inventory = SourceInventorySection()
-        layout.addWidget(self.source_inventory)
 
         self._snapshot = None
         self._reload_favorites()
@@ -932,7 +963,6 @@ class ApplicationDashboardPage(QFrame):
             self._snapshot = self.dashboard.build(state_filter="すべて", show_ended=True)
             self._refresh_prefectures(self._snapshot.get("rows", []))
             self._write_diagnostics(self._snapshot)
-            self.source_inventory.reload()
         self._apply_filters()
 
     def _write_diagnostics(self, data: dict):
@@ -1083,8 +1113,8 @@ class ApplicationDashboardPage(QFrame):
             f'受付中 {active_count}　終了 {ended_count}　'
             f'未応募 {state_counts["未応募"]}　応募済み {state_counts["応募済み"]}　'
             f'当選 {state_counts["当選"]}　落選 {state_counts["落選"]}　'
-            f'✅ 公式確認済み {confirmed_count}　⚠ 要公式確認 {restricted_count}　'
-            f'表示 {len(rows)}'
+            f'保存済み公式確認済み {confirmed_count}　保存済み要公式確認 {restricted_count}　'
+            f'現在の条件で表示 {len(rows)}'
         )
 
         container = QWidget()
@@ -1099,9 +1129,9 @@ class ApplicationDashboardPage(QFrame):
 
         if not rows:
             empty = QLabel(
-                "応募管理できる販売・抽選情報がありません。"
+                "現在表示できる応募情報はありません。"
             )
-            empty.setAlignment(Qt.AlignCenter)
+            empty.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
             empty.setObjectName("PageText")
             list_layout.addWidget(empty)
         elif self.group_by_product.isChecked():
@@ -1127,3 +1157,11 @@ class ApplicationDashboardPage(QFrame):
 
         list_layout.addStretch()
         self.scroll.setWidget(container)
+        if rows:
+            self.scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.scroll.setMinimumHeight(220)
+            self.scroll.setMaximumHeight(16_777_215)
+        else:
+            self.scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self.scroll.setMinimumHeight(84)
+            self.scroll.setMaximumHeight(120)

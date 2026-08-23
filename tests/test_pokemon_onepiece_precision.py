@@ -177,11 +177,13 @@ class PrecisionTests(unittest.TestCase):
         dummy.application_dashboard_page = Mock()
         dummy.candidates_page = Mock()
         dummy.sources_page = Mock()
+        dummy.monitoring_candidate_page = Mock()
         result = {"source_count": 2, "changed_sources": [{}], "candidate_search": {"new_hit_candidates": []}}
         MainWindow._refresh_data_pages_after_monitor(dummy, result)
         MainWindow._refresh_data_pages_after_monitor(dummy, result)
         dummy.product_page.reload_saved_products.assert_not_called()
         MainWindow._flush_monitor_refresh(dummy)
+        dummy.monitoring_candidate_page.reload.assert_called_once_with()
         dummy.product_page.reload_saved_products.assert_called_once_with()
         dummy.candidates_page.reload_candidates.assert_called_once_with()
         dummy.sources_page.reload_sources.assert_called_once_with()

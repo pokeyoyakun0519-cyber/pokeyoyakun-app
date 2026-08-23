@@ -52,6 +52,7 @@ class UiModeTest(unittest.TestCase):
                 window.home_button,
                 window.product_button,
                 window.application_dashboard_button,
+                window.monitoring_candidates_button,
                 window.calendar_button,
                 window.notification_center_button,
                 window.email_accounts_button,
@@ -67,6 +68,23 @@ class UiModeTest(unittest.TestCase):
             self.assertFalse(window.open_settings_button.isHidden())
             self.assertTrue(window.menu_sections["その他"][0].isHidden())
             self.assertTrue(window.developer_menu_button.isHidden())
+
+            product_buttons = window.menu_sections["商品・応募"][3]
+            expected_order = (
+                window.product_button,
+                window.application_dashboard_button,
+                window.monitoring_candidates_button,
+                window.calendar_button,
+            )
+            self.assertEqual(expected_order, product_buttons[:4])
+            window.monitoring_candidates_button.click()
+            self.assertIs(
+                window.pages.currentWidget(), window.monitoring_candidate_page
+            )
+            self.assertTrue(window.monitoring_candidates_button.isChecked())
+            window.calendar_button.click()
+            self.assertIs(window.pages.currentWidget(), window.calendar_page)
+            self.assertTrue(window.calendar_button.isChecked())
 
             manager = ConfigManager(Path(directory))
             config = manager.load()
