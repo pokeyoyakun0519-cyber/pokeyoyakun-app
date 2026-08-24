@@ -13,12 +13,20 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     restricted = json.loads(
         (ROOT / "app" / "resources" / "pokemon_restricted_campaigns.json").read_text(encoding="utf-8")
     )
+    official = json.loads(
+        (ROOT / "app" / "resources" / "official_central_campaigns.json").read_text(encoding="utf-8")
+    )
     feed = build_central_feed(
-        coverage, restricted, now=datetime(2026, 8, 24, 12, 0, tzinfo=JST),
+        coverage, restricted, official, now=datetime(2026, 8, 24, 12, 0, tzinfo=JST),
     )
     pokemon = [item for item in feed["records"] if item["tcg"] == "pokemon"]
 
     assert len(pokemon) == 38
+    one_piece = [item for item in feed["records"] if item["tcg"] == "one-piece"]
+    assert len(one_piece) == 20
+    assert all(item["application_status"] == "ENDED_WITHIN_14_DAYS" for item in one_piece)
+    assert all(item["verification_state"] == "CONFIRMED" for item in one_piece)
+    assert len({item["branch_name"] for item in one_piece}) == 20
     assert feed["metrics"]["pokemon_unique_branches"] == 30
     assert feed["metrics"]["pokemon_unique_chains"] == 14
     assert feed["metrics"]["confirmed"] >= 22

@@ -31,6 +31,7 @@ CHAIN_LABELS = {
     "sanyodo": "三洋堂書店",
     "hareruya2": "晴れる屋2",
     "pokeca_club": "ポケカ専門店『N』",
+    "onepiece_official_shop": "ONE PIECEカードゲーム 公式ショップ",
 }
 REGIONS = {
     "北海道": "北海道・東北", "青森県": "北海道・東北", "岩手県": "北海道・東北",
@@ -53,6 +54,7 @@ REGIONS = {
 def build_central_feed(
     coverage_payload: dict[str, Any],
     restricted_payload: dict[str, Any],
+    official_payload: dict[str, Any] | None = None,
     *,
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -78,6 +80,13 @@ def build_central_feed(
             records.append(record)
         else:
             rejected[reason or "invalid"] += 1
+    for campaign in (official_payload or {}).get("campaigns", []):
+        for store in campaign.get("stores", []):
+            record, reason = _from_official_campaign(campaign, store, current)
+            if record:
+                records.append(record)
+            else:
+                rejected[reason or "invalid"] += 1
     records = _deduplicate(records)
     pokemon = [item for item in records if item["tcg"] == "pokemon"]
     branches = {(item["chain_key"], item["branch_name"]) for item in pokemon}
@@ -176,6 +185,35 @@ def _from_restricted_campaign(
         verification="UNVERIFIED_RESTRICTED", application_url=application_url,
         official_url=official_url,
         source_label=str(campaign.get("source_type") or "公式再確認対象"),
+        last_verified_at=str(campaign.get("observed_at") or current.isoformat(timespec="seconds")),
+    ), ""
+
+
+def _from_official_campaign(
+    campaign: dict[str, Any], store: list[Any], current: datetime,
+) -> tuple[dict[str, Any] | None, str]:
+    if len(store) != 3:
+        return None, "identity_missing"
+    tcg = TCG_KEYS.get(str(campaign.get("tcg") or "").casefold())
+    start_at, end_at = _iso(campaign.get("application_start_at")), _iso(campaign.get("application_end_at"))
+    if not tcg or not end_at:
+        return None, "tcg_unknown" if not tcg else "deadline_missing"
+    status = _window_status(datetime.fromisoformat(end_at), current)
+    if not status:
+        return None, "stale"
+    official_url = _public_url(campaign.get("official_url"))
+    application_url = _public_url(
+        "https://parks2.bandainamco-am.co.jp/category/ECCL00000054/" + str(store[2])
+    )
+    if not official_url or not application_url:
+        return None, "url_invalid"
+    return _record(
+        tcg=tcg, chain=str(campaign.get("chain") or ""), branch=str(store[0]),
+        product=str(campaign.get("product_name") or ""), prefecture=str(store[1]),
+        sales_mode=str(campaign.get("sales_mode") or "STORE"), start_at=start_at,
+        end_at=end_at, status=status, verification="CONFIRMED",
+        application_url=application_url, official_url=official_url,
+        source_label=str(campaign.get("source_type") or "OFFICIAL_APPLICATION_PAGE"),
         last_verified_at=str(campaign.get("observed_at") or current.isoformat(timespec="seconds")),
     ), ""
 
