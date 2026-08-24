@@ -18,7 +18,7 @@ APPLICATION_PATH_TYPES = {
 _EXTERNAL_APPLICATION_HOSTS = {
     "livepocket.jp", "t.livepocket.jp", "miniapp.line.me", "select-type.com",
     "shoplottery.e-starbox.com", "docs.google.com", "tcg-master.membercard.jp",
-    "thebase.in", "base.shop",
+    "thebase.in", "base.shop", "gamesearch.base.ec",
 }
 _TRUSTED_DISCOVERY_HOSTS = {
     "nyuka-now.com", "www.nyuka-now.com",

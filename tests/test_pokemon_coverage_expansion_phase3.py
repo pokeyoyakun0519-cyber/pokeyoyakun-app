@@ -53,8 +53,8 @@ def test_concrete_robots_limited_campaigns_remain_restricted_and_finite():
     with tempfile.TemporaryDirectory() as folder:
         discoveries, diagnostics = _restricted_scan(Path(folder))
 
-    assert len(discoveries) == 11
-    assert diagnostics["restricted"] == 11
+    assert len(discoveries) == 16
+    assert diagnostics["restricted"] == 16
     assert diagnostics["confirmed"] == 0
     assert all(
         item["hit"]["verification_status"] == "unverified_restricted"
@@ -71,7 +71,12 @@ def test_concrete_robots_limited_campaigns_remain_restricted_and_finite():
         ("fullcomp", "対象店舗"),
         ("sanyodo", "対象店舗"),
         ("hareruya2", "通販"),
+        ("hareruya2", "秋葉原タワー店"),
         ("pokeca_club", "通販"),
+        ("cardbox", "ブックスジュピター店"),
+        ("cardbox", "本の王国大垣店"),
+        ("dandan", "BASE店"),
+        ("kiddyland", "ららぽーと富士見店"),
     }
 
 
@@ -98,7 +103,7 @@ def test_restricted_rows_reach_product_store_with_warning_only_action():
         merged = CandidateManager(root).merge_application_discoveries(
             discoveries, matcher=lambda _candidate, _record: False,
         )
-        assert merged["created"] == 11
+        assert merged["created"] == 16
 
         dashboard = ApplicationDashboard(ProductStore(root)).build(
             show_ended=True, now=NOW,
@@ -120,7 +125,7 @@ def test_campaigns_expire_after_normal_fourteen_day_retention():
         discoveries = monitor.scan(force=True)
 
     assert discoveries == []
-    assert monitor.diagnostics["outcome_counts"]["STALE"] == 11
+    assert monitor.diagnostics["outcome_counts"]["STALE"] == 16
 
 
 def test_future_campaign_is_not_mislabeled_as_active(tmp_path: Path):

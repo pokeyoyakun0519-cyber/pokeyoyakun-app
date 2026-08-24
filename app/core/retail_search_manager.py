@@ -39,6 +39,7 @@ from core.nyuka_now_discovery import (
     discovery_source_diagnostics,
 )
 from core.cardchusen_discovery import CardchusenDiscovery
+from core.gamenv_discovery import GamenvDiscovery
 from core.runtime_paths import app_root
 from core.chain_application_extractors import (
     BandaiOfficialShopApplicationExtractor,
@@ -160,6 +161,7 @@ class RetailSearchManager:
         self.web_source_registry = WebApplicationSourceRegistry()
         self.nyuka_now_discovery = NyukaNowDiscovery(app_root())
         self.cardchusen_discovery = CardchusenDiscovery()
+        self.gamenv_discovery = GamenvDiscovery()
         self.official_verification_queue = OfficialVerificationQueue()
         self.autonomous_discovery = AutonomousApplicationSourceDiscovery(
             app_root()
@@ -197,6 +199,7 @@ class RetailSearchManager:
         diagnostics = self.nyuka_now_discovery.diagnostics()
         diagnostics.update({
             "cardchusen": self.cardchusen_discovery.diagnostics(),
+            "gamenv": self.gamenv_discovery.diagnostics(),
             "verification_queue_size": len(queued),
             "verification_priority": {
                 level: sum(
