@@ -34,6 +34,36 @@
         ["沖縄店", "沖縄県", "ECCL00000054_20260822_25_015.html"],
         ["東京秋葉原店", "東京都", "ECCL00000054_20260822_25_007.html"]
       ]
+    },
+    {
+      "id": "dbfw_st01_premium_bandai",
+      "tcg": "dbfw",
+      "chain": "premium_bandai",
+      "product_name": "ドラゴンボールスーパーカードゲーム FW STORY BOOSTER01[ST01]",
+      "official_url": "https://p-bandai.jp/item/item-1000255641/",
+      "application_start_at": "2026-08-07T11:00:00+09:00",
+      "application_end_at": "2026-08-20T23:00:00+09:00",
+      "source_type": "PREMIUM_BANDAI_OFFICIAL_APPLICATION",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-08-24T16:00:00+09:00",
+      "stores": [
+        ["オンライン", "全国", "https://p-bandai.jp/item/item-1000255641/"]
+      ]
+    },
+    {
+      "id": "gundam_pb03_third_premium_bandai",
+      "tcg": "gundam",
+      "chain": "premium_bandai",
+      "product_name": "ガンダムカードゲーム 1st Anniversary Set [PB03]【3次】",
+      "official_url": "https://p-bandai.jp/item/item-1000256054/",
+      "application_start_at": "2026-08-18T12:00:00+09:00",
+      "application_end_at": "2026-09-02T23:00:00+09:00",
+      "source_type": "PREMIUM_BANDAI_OFFICIAL_APPLICATION",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-08-24T16:00:00+09:00",
+      "stores": [
+        ["オンライン", "全国", "https://p-bandai.jp/item/item-1000256054/"]
+      ]
     }
   ]
 }

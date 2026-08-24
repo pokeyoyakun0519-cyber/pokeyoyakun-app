@@ -27,11 +27,50 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     assert all(item["application_status"] == "ENDED_WITHIN_14_DAYS" for item in one_piece)
     assert all(item["verification_state"] == "CONFIRMED" for item in one_piece)
     assert len({item["branch_name"] for item in one_piece}) == 20
+    dbfw = [item for item in feed["records"] if item["tcg"] == "dbfw"]
+    assert len(dbfw) == 1
+    assert dbfw[0]["application_status"] == "ENDED_WITHIN_14_DAYS"
+    assert dbfw[0]["verification_state"] == "CONFIRMED"
+    assert dbfw[0]["application_url"] == "https://p-bandai.jp/item/item-1000255641/"
+    gundam = [item for item in feed["records"] if item["tcg"] == "gundam"]
+    assert len(gundam) == 1
+    assert gundam[0]["application_status"] == "ACTIVE"
+    assert gundam[0]["sales_mode"] == "ONLINE"
+    assert gundam[0]["verification_state"] == "CONFIRMED"
     assert feed["metrics"]["pokemon_unique_branches"] == 30
     assert feed["metrics"]["pokemon_unique_chains"] == 14
     assert feed["metrics"]["confirmed"] >= 22
     assert feed["metrics"]["restricted"] == 16
     assert all(item["application_end_at"] for item in feed["records"])
+    assert len({item["id"] for item in feed["records"]}) == len(feed["records"])
+
+
+def test_official_campaign_provider_url_is_not_onepiece_specific():
+    official = {"campaigns": [{
+        "tcg": "gundam", "chain": "provider", "product_name": "Official product",
+        "official_url": "https://official.example/news", "application_start_at": "2026-08-20T00:00:00+09:00",
+        "application_end_at": "2026-08-30T23:59:00+09:00", "sales_mode": "ONLINE",
+        "stores": [["オンライン", "全国", "https://provider.example/apply"]],
+    }]}
+    feed = build_central_feed(
+        {"generated_at": "2026-08-24T12:00:00+09:00", "rows": []},
+        {"campaigns": []}, official, now=datetime(2026, 8, 24, 12, 0, tzinfo=JST),
+    )
+    assert feed["records"][0]["application_url"] == "https://provider.example/apply"
+
+
+def test_one_piece_official_campaign_expires_after_fourteen_days():
+    coverage = json.loads((ROOT / "reports" / "coverage_phase2.json").read_text(encoding="utf-8"))
+    restricted = json.loads(
+        (ROOT / "app" / "resources" / "pokemon_restricted_campaigns.json").read_text(encoding="utf-8")
+    )
+    official = json.loads(
+        (ROOT / "app" / "resources" / "official_central_campaigns.json").read_text(encoding="utf-8")
+    )
+    feed = build_central_feed(
+        coverage, restricted, official, now=datetime(2026, 8, 31, 0, 0, tzinfo=JST),
+    )
+    assert not [item for item in feed["records"] if item["tcg"] == "one-piece"]
 
 
 def test_feed_excludes_deadline_missing_and_stale_rows():

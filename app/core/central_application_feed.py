@@ -32,6 +32,7 @@ CHAIN_LABELS = {
     "hareruya2": "晴れる屋2",
     "pokeca_club": "ポケカ専門店『N』",
     "onepiece_official_shop": "ONE PIECEカードゲーム 公式ショップ",
+    "premium_bandai": "プレミアムバンダイ",
 }
 REGIONS = {
     "北海道": "北海道・東北", "青森県": "北海道・東北", "岩手県": "北海道・東北",
@@ -202,9 +203,12 @@ def _from_official_campaign(
     if not status:
         return None, "stale"
     official_url = _public_url(campaign.get("official_url"))
-    application_url = _public_url(
-        "https://parks2.bandainamco-am.co.jp/category/ECCL00000054/" + str(store[2])
-    )
+    application_value = str(store[2])
+    if application_value.startswith("https://"):
+        application_url = _public_url(application_value)
+    else:
+        base = str(campaign.get("application_url_base") or "https://parks2.bandainamco-am.co.jp/category/ECCL00000054/")
+        application_url = _public_url(base + application_value)
     if not official_url or not application_url:
         return None, "url_invalid"
     return _record(
