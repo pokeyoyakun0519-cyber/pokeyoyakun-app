@@ -64,6 +64,123 @@
       "stores": [
         ["オンライン", "全国", "https://p-bandai.jp/item/item-1000256054/"]
       ]
+    },
+    {
+      "id": "pokemon_furuichi_shinnyuzen_eevee",
+      "tcg": "pokemon",
+      "chain": "furuichi",
+      "product_name": "ポケモンカードゲーム MEGA スターターセットex イーブイex",
+      "official_url": "https://furu1.net/news/news_campaign/news_opensale_shin",
+      "application_start_at": "2026-08-21T00:00:00+09:00",
+      "application_end_at": "2026-08-23T23:59:59+09:00",
+      "source_type": "OFFICIAL_STORE_APPLICATION_NOTICE",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["ふるいちトップブックス新入善店", "富山県", "https://furu1.net/news/news_campaign/news_opensale_shin"]]
+    },
+    {
+      "id": "pokemon_furuichi_shinnyuzen_zoroark",
+      "tcg": "pokemon",
+      "chain": "furuichi",
+      "product_name": "ポケモンカードゲーム MEGA スターターセットex ゾロア＆ゾロアークex",
+      "official_url": "https://furu1.net/news/news_campaign/news_opensale_shin",
+      "application_start_at": "2026-08-21T00:00:00+09:00",
+      "application_end_at": "2026-08-23T23:59:59+09:00",
+      "source_type": "OFFICIAL_STORE_APPLICATION_NOTICE",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["ふるいちトップブックス新入善店", "富山県", "https://furu1.net/news/news_campaign/news_opensale_shin"]]
+    },
+    {
+      "id": "pokemon_furuichi_shinnyuzen_meowscarada",
+      "tcg": "pokemon",
+      "chain": "furuichi",
+      "product_name": "ポケモンカードゲーム MEGA スターターセットex ニャオハ＆マスカーニャex",
+      "official_url": "https://furu1.net/news/news_campaign/news_opensale_shin",
+      "application_start_at": "2026-08-21T00:00:00+09:00",
+      "application_end_at": "2026-08-23T23:59:59+09:00",
+      "source_type": "OFFICIAL_STORE_APPLICATION_NOTICE",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["ふるいちトップブックス新入善店", "富山県", "https://furu1.net/news/news_campaign/news_opensale_shin"]]
+    },
+    {
+      "id": "onepiece_day26_premium_bandai",
+      "tcg": "ONE PIECE",
+      "chain": "premium_bandai",
+      "product_name": "ONE PIECEカードゲーム プレミアムカードコレクション -ONE PIECE DAY'26-",
+      "official_url": "https://p-bandai.jp/item/item-1000256592/",
+      "application_start_at": "2026-08-22T13:00:00+09:00",
+      "application_end_at": "2026-09-07T23:00:00+09:00",
+      "source_type": "PREMIUM_BANDAI_OFFICIAL_APPLICATION",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["オンライン", "全国", "https://p-bandai.jp/item/item-1000256592/"]]
+    },
+    {
+      "id": "onepiece_op17_second_premium_bandai",
+      "tcg": "one_piece",
+      "chain": "premium_bandai",
+      "product_name": "ONE PIECEカードゲーム ブースターパック 世界最強の戦士[OP-17]（2次）",
+      "official_url": "https://p-bandai.jp/item/item-1000255803/",
+      "application_start_at": "2026-08-07T17:00:00+09:00",
+      "application_end_at": "2026-08-18T23:00:00+09:00",
+      "source_type": "PREMIUM_BANDAI_OFFICIAL_APPLICATION",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["オンライン", "全国", "https://p-bandai.jp/item/item-1000255803/"]]
+    },
+    {
+      "id": "onepiece_fourth_anniversary_premium_bandai",
+      "tcg": "onepiece",
+      "chain": "premium_bandai",
+      "product_name": "ONE PIECEカードゲーム 4th Anniversary Set",
+      "official_url": "https://p-bandai.jp/item/item-1000255670/",
+      "application_start_at": "2026-08-03T11:00:00+09:00",
+      "application_end_at": "2026-09-02T23:00:00+09:00",
+      "source_type": "PREMIUM_BANDAI_OFFICIAL_APPLICATION",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["オンライン", "全国", "https://p-bandai.jp/item/item-1000255670/"]]
+    },
+    {
+      "id": "gundam_pb03_first_premium_bandai",
+      "tcg": "gundam",
+      "chain": "premium_bandai",
+      "product_name": "ガンダムカードゲーム 1st Anniversary Set [PB03]",
+      "official_url": "https://p-bandai.jp/item/item-1000254999/",
+      "application_start_at": "2026-07-27T12:00:00+09:00",
+      "application_end_at": "2026-08-31T23:00:00+09:00",
+      "source_type": "PREMIUM_BANDAI_OFFICIAL_RESERVATION",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["オンライン", "全国", "https://p-bandai.jp/item/item-1000254999/"]]
+    },
+    {
+      "id": "gundam_pb03_second_premium_bandai",
+      "tcg": "gundam",
+      "chain": "premium_bandai",
+      "product_name": "ガンダムカードゲーム 1st Anniversary Set [PB03]（2次）",
+      "official_url": "https://p-bandai.jp/item/item-1000255470/",
+      "application_start_at": "2026-07-31T12:00:00+09:00",
+      "application_end_at": "2026-08-16T23:00:00+09:00",
+      "source_type": "PREMIUM_BANDAI_OFFICIAL_APPLICATION",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["オンライン", "全国", "https://p-bandai.jp/item/item-1000255470/"]]
+    },
+    {
+      "id": "union_arena_cinderella_supply_premium_bandai",
+      "tcg": "UNION ARENA",
+      "chain": "premium_bandai",
+      "product_name": "UNION ARENA アイドルマスター シンデレラガールズ スペシャルカードサプライセット",
+      "official_url": "https://p-bandai.jp/item/item-1000255167/",
+      "application_start_at": "2026-08-07T11:00:00+09:00",
+      "application_end_at": "2026-08-31T23:00:00+09:00",
+      "source_type": "PREMIUM_BANDAI_OFFICIAL_RESERVATION",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-08-24T18:00:00+09:00",
+      "stores": [["オンライン", "全国", "https://p-bandai.jp/item/item-1000255167/"]]
     }
   ]
 }

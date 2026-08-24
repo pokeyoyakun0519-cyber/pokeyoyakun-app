@@ -13,11 +13,14 @@ TCG_KEYS = {
     "pokemon": "pokemon",
     "onepiece": "one-piece",
     "one_piece": "one-piece",
+    "one piece": "one-piece",
     "dragon_ball_fusion_world": "dbfw",
+    "dragon ball fusion world": "dbfw",
     "dbfw": "dbfw",
     "yugioh": "yugioh",
     "gundam": "gundam",
     "union_arena": "union-arena",
+    "union arena": "union-arena",
 }
 CHAIN_LABELS = {
     "pokemon_card_store": "ポケモンカードストア",
@@ -33,6 +36,7 @@ CHAIN_LABELS = {
     "pokeca_club": "ポケカ専門店『N』",
     "onepiece_official_shop": "ONE PIECEカードゲーム 公式ショップ",
     "premium_bandai": "プレミアムバンダイ",
+    "furuichi": "ふるいち／古本市場",
 }
 REGIONS = {
     "北海道": "北海道・東北", "青森県": "北海道・東北", "岩手県": "北海道・東北",
@@ -199,6 +203,9 @@ def _from_official_campaign(
     start_at, end_at = _iso(campaign.get("application_start_at")), _iso(campaign.get("application_end_at"))
     if not tcg or not end_at:
         return None, "tcg_unknown" if not tcg else "deadline_missing"
+    start = datetime.fromisoformat(start_at) if start_at else None
+    if start and current < start:
+        return None, "future"
     status = _window_status(datetime.fromisoformat(end_at), current)
     if not status:
         return None, "stale"
