@@ -181,6 +181,45 @@
       "sales_mode": "ONLINE",
       "observed_at": "2026-08-24T18:00:00+09:00",
       "stores": [["オンライン", "全国", "https://p-bandai.jp/item/item-1000255167/"]]
+    },
+    {
+      "id": "pokemon_geo_20260831_storm_emerald",
+      "tcg": "pokemon",
+      "chain": "geo",
+      "product_name": "ポケモンカードゲーム MEGA 拡張パック ストームエメラルダ（5パック）",
+      "official_url": "https://geo-online.co.jp/news/781",
+      "application_start_at": "2026-08-31T11:00:00+09:00",
+      "application_end_at": "2026-09-03T17:59:00+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PAGE",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-25T12:00:00+09:00",
+      "stores": [["対象店舗", "地域不明", "https://draw.geo-online.co.jp/lottery/"]]
+    },
+    {
+      "id": "pokemon_geo_20260831_battle_collection",
+      "tcg": "pokemon",
+      "chain": "geo",
+      "product_name": "ポケモンカードゲーム MEGA スタートデッキ１００バトルコレクション",
+      "official_url": "https://geo-online.co.jp/news/781",
+      "application_start_at": "2026-08-31T11:00:00+09:00",
+      "application_end_at": "2026-09-03T17:59:00+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PAGE",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-25T12:00:00+09:00",
+      "stores": [["対象店舗", "地域不明", "https://draw.geo-online.co.jp/lottery/"]]
+    },
+    {
+      "id": "onepiece_geo_20260831_op17",
+      "tcg": "onepiece",
+      "chain": "geo",
+      "product_name": "ONE PIECEカードゲーム ブースターパック 世界最強の戦士（6パック）",
+      "official_url": "https://geo-online.co.jp/news/781",
+      "application_start_at": "2026-08-31T11:00:00+09:00",
+      "application_end_at": "2026-09-03T17:59:00+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PAGE",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-25T12:00:00+09:00",
+      "stores": [["対象店舗", "地域不明", "https://draw.geo-online.co.jp/lottery/"]]
     }
   ]
 }

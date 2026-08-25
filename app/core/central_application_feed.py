@@ -36,6 +36,7 @@ CHAIN_LABELS = {
     "pokeca_club": "ポケカ専門店『N』",
     "onepiece_official_shop": "ONE PIECEカードゲーム 公式ショップ",
     "premium_bandai": "プレミアムバンダイ",
+    "geo": "GEO",
     "furuichi": "ふるいち／古本市場",
 }
 REGIONS = {
@@ -106,6 +107,7 @@ def build_central_feed(
         "records": records,
         "metrics": {
             "application_count": len(records),
+            "upcoming": sum(item["application_status"] == "UPCOMING" for item in records),
             "active": sum(item["application_status"] == "ACTIVE" for item in records),
             "ended_within_14_days": sum(
                 item["application_status"] == "ENDED_WITHIN_14_DAYS" for item in records
@@ -125,13 +127,16 @@ def build_central_feed(
 def _from_coverage_row(
     row: dict[str, Any], current: datetime, generated_at: str,
 ) -> tuple[dict[str, Any] | None, str]:
+    start_at = _iso(row.get("application_start_at"))
     if not row.get("confirmed"):
+        if start_at and datetime.fromisoformat(start_at) > current:
+            return None, "future_candidate"
         return None, "not_confirmed"
     deadline = _iso(row.get("deadline"))
     if not deadline:
         return None, "deadline_missing"
     end = datetime.fromisoformat(deadline)
-    status = _window_status(end, current)
+    status = _window_status(end, current, datetime.fromisoformat(start_at) if start_at else None)
     if not status:
         return None, "stale"
     official_url = _public_url(row.get("official_url"))
@@ -152,7 +157,7 @@ def _from_coverage_row(
     return _record(
         tcg=tcg, chain=chain, branch=branch, product=product,
         prefecture=prefecture, sales_mode=sales_mode,
-        start_at="", end_at=deadline, status=status,
+        start_at=start_at, end_at=deadline, status=status,
         verification="CONFIRMED", application_url=application_url,
         official_url=official_url, source_label=str(row.get("source") or chain),
         last_verified_at=generated_at,
@@ -168,9 +173,7 @@ def _from_restricted_campaign(
         return None, "deadline_missing"
     start = datetime.fromisoformat(start_at) if start_at else None
     end = datetime.fromisoformat(end_at)
-    if start and current < start:
-        return None, "future"
-    status = _window_status(end, current)
+    status = _window_status(end, current, start)
     if not status:
         return None, "stale"
     official_url = _public_url(campaign.get("official_url"))
@@ -182,9 +185,13 @@ def _from_restricted_campaign(
     product = str(campaign.get("product_name") or "").strip()
     if not chain or not branch or not product:
         return None, "identity_missing"
+    tcg = TCG_KEYS.get(str(campaign.get("tcg") or "pokemon").casefold())
+    if not tcg:
+        return None, "tcg_unknown"
     prefecture = str(campaign.get("prefecture") or "地域不明").strip() or "地域不明"
     return _record(
-        tcg="pokemon", chain=chain, branch=branch, product=product,
+        tcg=tcg,
+        chain=chain, branch=branch, product=product,
         prefecture=prefecture, sales_mode=str(campaign.get("sales_mode") or "STORE").upper(),
         start_at=start_at, end_at=end_at, status=status,
         verification="UNVERIFIED_RESTRICTED", application_url=application_url,
@@ -204,9 +211,7 @@ def _from_official_campaign(
     if not tcg or not end_at:
         return None, "tcg_unknown" if not tcg else "deadline_missing"
     start = datetime.fromisoformat(start_at) if start_at else None
-    if start and current < start:
-        return None, "future"
-    status = _window_status(datetime.fromisoformat(end_at), current)
+    status = _window_status(datetime.fromisoformat(end_at), current, start)
     if not status:
         return None, "stale"
     official_url = _public_url(campaign.get("official_url"))
@@ -257,7 +262,9 @@ def _record(**values: Any) -> dict[str, Any]:
     }
 
 
-def _window_status(end: datetime, current: datetime) -> str:
+def _window_status(end: datetime, current: datetime, start: datetime | None = None) -> str:
+    if start and current < start.astimezone(JST):
+        return "UPCOMING"
     end = end.astimezone(JST)
     if current <= end:
         return "ACTIVE"

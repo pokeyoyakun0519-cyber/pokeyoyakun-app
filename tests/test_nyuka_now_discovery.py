@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from email.message import Message
 
@@ -145,6 +145,7 @@ class NyukaNowDiscoveryTest(unittest.TestCase):
         self.assertFalse(candidate["confirmed"])
 
     def test_official_evidence_can_confirm_after_verification(self):
+        application_end_at = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
         candidate = self.sensor.parse_article(
             _article("ポケモンカード"), "https://nyuka-now.com/archives/303"
         )
@@ -153,14 +154,14 @@ class NyukaNowDiscoveryTest(unittest.TestCase):
         verified = queue.verify_next(lambda _item: {
             "application_type": "LOTTERY",
             "application_url": "https://www.cardlabo.com/lottery/303",
-            "application_end_at": "2026-08-24T23:59:00+09:00",
+            "application_end_at": application_end_at,
             "sales_mode": "STORE",
             "evidence": [{
                 "source_type": "OFFICIAL_STORE",
                 "source_url": "https://www.cardlabo.com/lottery/303",
                 "trust": 100,
                 "verification_status": CONFIRMED,
-                "extracted_fields": {"application_end_at": "2026-08-24T23:59:00+09:00"},
+                "extracted_fields": {"application_end_at": application_end_at},
             }],
         })
         self.assertEqual(CONFIRMED, verified["verification_status"])
