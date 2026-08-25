@@ -21,9 +21,9 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     )
     pokemon = [item for item in feed["records"] if item["tcg"] == "pokemon"]
 
-    assert len(pokemon) == 43
-    assert len({(item["chain_key"], item["branch_name"]) for item in pokemon}) == 31
-    assert sum(item["application_status"] == "UPCOMING" for item in pokemon) == 2
+    assert len(pokemon) == 68
+    assert len({(item["chain_key"], item["branch_name"]) for item in pokemon}) == 47
+    assert sum(item["application_status"] == "UPCOMING" for item in pokemon) == 9
     assert len([item for item in pokemon if item["chain_key"] == "furuichi"]) == 4
     one_piece = [item for item in feed["records"] if item["tcg"] == "one-piece"]
     assert len(one_piece) == 24
@@ -44,14 +44,22 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     union_arena = [item for item in feed["records"] if item["tcg"] == "union-arena"]
     assert len(union_arena) == 1
     assert union_arena[0]["application_status"] == "ACTIVE"
-    assert feed["metrics"]["application_count"] == 73
-    assert feed["metrics"]["upcoming"] == 3
-    assert feed["metrics"]["pokemon_unique_branches"] == 31
-    assert feed["metrics"]["pokemon_unique_chains"] == 15
-    assert feed["metrics"]["confirmed"] >= 22
-    assert feed["metrics"]["restricted"] == 16
+    assert feed["metrics"]["application_count"] == 100
+    assert feed["metrics"]["upcoming"] == 11
+    assert feed["metrics"]["unique_applications"] == 98
+    assert feed["metrics"]["unique_campaigns"] == 71
+    assert feed["metrics"]["unique_branches"] == 69
+    assert feed["metrics"]["unique_chains"] == 23
+    assert feed["metrics"]["pokemon_unique_branches"] == 47
+    assert feed["metrics"]["pokemon_unique_chains"] == 20
+    assert feed["metrics"]["confirmed"] == 73
+    assert feed["metrics"]["restricted"] == 27
+    assert feed["metrics"]["by_tcg"]["yugioh"]["total"] == 3
     assert all(item["application_end_at"] for item in feed["records"])
     assert len({item["id"] for item in feed["records"]}) == len(feed["records"])
+    assert all(item["campaign_id"] for item in feed["records"])
+    assert all(item["application_id"] for item in feed["records"])
+    assert all(item["source_tier"] == "TIER_A" for item in feed["records"])
 
 
 def test_official_campaign_provider_url_is_not_onepiece_specific():
@@ -99,6 +107,32 @@ def test_verified_future_campaign_is_exported_as_upcoming():
     assert feed["records"][0]["application_status"] == "UPCOMING"
     assert feed["records"][0]["application_start_at"] == "2026-08-28T00:00:00+09:00"
     assert feed["metrics"]["upcoming"] == 1
+
+
+def test_campaign_application_and_branch_identity_are_distinct():
+    official = {"campaigns": [{
+        "id": "shared-campaign", "tcg": "pokemon", "chain": "official",
+        "product_name": "Shared form", "official_url": "https://official.example/notice",
+        "application_start_at": "2026-08-20T00:00:00+09:00",
+        "application_end_at": "2026-08-30T23:59:00+09:00",
+        "application_method": "公式アプリ抽選", "eligibility_conditions": {"app_required": True},
+        "stores": [
+            ["A店", "東京都", "https://official.example/apply"],
+            ["B店", "神奈川県", "https://official.example/apply"],
+        ],
+    }]}
+    feed = build_central_feed(
+        {"generated_at": "2026-08-24T12:00:00+09:00", "rows": []},
+        {"campaigns": []}, official, now=datetime(2026, 8, 24, 12, 0, tzinfo=JST),
+    )
+
+    assert len(feed["records"]) == 2
+    assert len({item["id"] for item in feed["records"]}) == 2
+    assert len({item["campaign_id"] for item in feed["records"]}) == 1
+    assert len({item["application_id"] for item in feed["records"]}) == 1
+    assert feed["metrics"]["unique_branches"] == 2
+    assert feed["records"][0]["eligibility_conditions"] == {"app_required": True}
+    assert feed["records"][0]["application_method"] == "公式アプリ抽選"
 
 
 def test_future_restricted_is_upcoming_but_future_candidate_is_rejected():

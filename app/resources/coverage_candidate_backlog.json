@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-25T14:00:00+09:00",
+  "source_policy": "TIER_B/Cは候補発見専用。一次情報で期間・商品・応募導線を確認するまでCentral Feedへ出さない。",
+  "candidates": [
+    {
+      "candidate_shop": "Japan TCG Center",
+      "reason": "EARLY_CLOSED_NO_EXACT_CLOSURE_AT",
+      "missing_evidence": ["実際の受付終了日時"],
+      "possible_official_source": "https://livepocket.jp/e/tn698",
+      "next_action": "公式応募ページの再開または新規募集を確認する"
+    },
+    {
+      "candidate_shop": "TSUTAYA各店",
+      "reason": "STORE_QR_ONLY",
+      "missing_evidence": ["公開された公式応募URL", "店舗別の開始・終了日時"],
+      "possible_official_source": "各店舗公式ページまたは店頭QR",
+      "next_action": "店舗公式サイトに同内容が公開された場合のみ支店単位で昇格する"
+    },
+    {
+      "candidate_shop": "BOOKOFF各店",
+      "reason": "APP_OR_OFFICIAL_X_ONLY",
+      "missing_evidence": ["公開Web上の応募期間", "応募URL"],
+      "possible_official_source": "BOOKOFF公式アプリまたは公式X API",
+      "next_action": "公式アプリ告知ページかX API Evidenceを保存してrestricted判定する"
+    },
+    {
+      "candidate_shop": "ドン・キホーテ対象店舗",
+      "reason": "APP_REQUIRED_PUBLIC_BRANCH_LIST_MISSING",
+      "missing_evidence": ["対象店舗一覧", "公開された応募導線"],
+      "possible_official_source": "majicaアプリ公式告知",
+      "next_action": "公式Web告知と対象店舗一覧が揃うまでFeedへ出さない"
+    },
+    {
+      "candidate_shop": "ホビーゾーン",
+      "reason": "FUTURE_STORE_NOTICE_NOT_PUBLICLY_VERIFIED",
+      "missing_evidence": ["公式応募期間", "対象店舗", "応募方法"],
+      "possible_official_source": "ホビーゾーン公式サイト・店舗告知",
+      "next_action": "9月開始予定案件の公式ページ公開を再確認する"
+    },
+    {
+      "candidate_shop": "ABCパレード博多店",
+      "reason": "STORE_NOTICE_ONLY",
+      "missing_evidence": ["公式応募ページ", "終了日時"],
+      "possible_official_source": "ゆめタウン博多または店舗公式ページ",
+      "next_action": "商業施設公式または店舗公式告知を確認する"
+    },
+    {
+      "candidate_shop": "カードボックス通販（CBトレコロ）",
+      "reason": "OFFICIAL_PAGE_NOT_YET_VERIFIED",
+      "missing_evidence": ["応募ページの運営主体", "応募条件"],
+      "possible_official_source": "カードボックス／トレコロ公式通販",
+      "next_action": "公式ドメイン上の応募ページと受付期間を照合する"
+    },
+    {
+      "candidate_shop": "駿河屋通販",
+      "reason": "DISCOVERY_ONLY",
+      "missing_evidence": ["現在受付中の公式応募ページ", "締切"],
+      "possible_official_source": "駿河屋公式通販・公式ブログ",
+      "next_action": "公式抽選ページを発見できた時点で再評価する"
+    },
+    {
+      "candidate_shop": "マックスゲーム浜松町店",
+      "reason": "OFFICIAL_CHANNEL_WITHOUT_CAMPAIGN_DETAIL",
+      "missing_evidence": ["公式告知上の商品・締切", "応募方法"],
+      "possible_official_source": "https://page.line.me/239usael",
+      "next_action": "公式LINEの公開投稿または公式サイト告知を確認する"
+    },
+    {
+      "candidate_shop": "ホビーステーション",
+      "reason": "NO_CURRENT_WINDOW",
+      "missing_evidence": ["8月25日時点で受付中または今後開始の公式案件"],
+      "possible_official_source": "https://www.hbst.net/news/",
+      "next_action": "既存parserは維持し、新規公式告知の公開を監視する"
+    }
+  ]
+}

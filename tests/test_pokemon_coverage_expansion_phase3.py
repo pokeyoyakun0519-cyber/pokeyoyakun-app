@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.application_dashboard import ApplicationDashboard
@@ -14,6 +15,16 @@ from core.pokemon_restricted_campaigns import (
 
 
 NOW = datetime(2026, 8, 23, 12, 0, tzinfo=JST)
+DEFINITIONS = Path(__file__).resolve().parents[1] / "app" / "resources" / "pokemon_restricted_campaigns.json"
+
+
+def _campaign_count_at(now: datetime) -> int:
+    payload = json.loads(DEFINITIONS.read_text(encoding="utf-8"))
+    return sum(
+        datetime.fromisoformat(item["application_start_at"]) <= now
+        <= datetime.fromisoformat(item["application_end_at"]) + timedelta(days=14)
+        for item in payload["campaigns"]
+    )
 
 
 class _RobotsFetcher:
@@ -53,8 +64,9 @@ def test_concrete_robots_limited_campaigns_remain_restricted_and_finite():
     with tempfile.TemporaryDirectory() as folder:
         discoveries, diagnostics = _restricted_scan(Path(folder))
 
-    assert len(discoveries) == 16
-    assert diagnostics["restricted"] == 16
+    expected = _campaign_count_at(NOW)
+    assert len(discoveries) == expected
+    assert diagnostics["restricted"] == expected
     assert diagnostics["confirmed"] == 0
     assert all(
         item["hit"]["verification_status"] == "unverified_restricted"
@@ -103,7 +115,7 @@ def test_restricted_rows_reach_product_store_with_warning_only_action():
         merged = CandidateManager(root).merge_application_discoveries(
             discoveries, matcher=lambda _candidate, _record: False,
         )
-        assert merged["created"] == 16
+        assert merged["created"] == _campaign_count_at(NOW)
 
         dashboard = ApplicationDashboard(ProductStore(root)).build(
             show_ended=True, now=NOW,
@@ -125,7 +137,8 @@ def test_campaigns_expire_after_normal_fourteen_day_retention():
         discoveries = monitor.scan(force=True)
 
     assert discoveries == []
-    assert monitor.diagnostics["outcome_counts"]["STALE"] == 16
+    total_definitions = len(json.loads(DEFINITIONS.read_text(encoding="utf-8"))["campaigns"])
+    assert monitor.diagnostics["outcome_counts"]["STALE"] == total_definitions
 
 
 def test_future_campaign_is_not_mislabeled_as_active(tmp_path: Path):

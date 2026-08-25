@@ -37,6 +37,12 @@ CHAIN_LABELS = {
     "onepiece_official_shop": "ONE PIECEカードゲーム 公式ショップ",
     "premium_bandai": "プレミアムバンダイ",
     "geo": "GEO",
+    "aeon_kyushu": "イオン九州",
+    "kids_republic": "キッズリパブリック",
+    "sana": "サンエー",
+    "magi": "magi",
+    "gangi": "ガンギ HOBBYSHOP",
+    "kanabell": "カーナベル",
     "furuichi": "ふるいち／古本市場",
 }
 REGIONS = {
@@ -99,6 +105,19 @@ def build_central_feed(
     chains = {item["chain_key"] for item in pokemon}
     branch_counts = Counter(chain for chain, _branch in branches)
     dominant = max(branch_counts.values(), default=0) / len(branches) if branches else 0.0
+    all_branches = {(item["chain_key"], item["branch_name"]) for item in records}
+    all_chains = {item["chain_key"] for item in records}
+    by_tcg = {}
+    for tcg in sorted({item["tcg"] for item in records}):
+        items = [item for item in records if item["tcg"] == tcg]
+        by_tcg[tcg] = {
+            "total": len(items),
+            "upcoming": sum(item["application_status"] == "UPCOMING" for item in items),
+            "active": sum(item["application_status"] == "ACTIVE" for item in items),
+            "ended_within_14_days": sum(
+                item["application_status"] == "ENDED_WITHIN_14_DAYS" for item in items
+            ),
+        }
     return {
         "schema_version": 1,
         "feed_type": "CENTRAL_APPLICATION_FEED",
@@ -116,6 +135,11 @@ def build_central_feed(
             "restricted": sum(
                 item["verification_state"] == "UNVERIFIED_RESTRICTED" for item in records
             ),
+            "unique_applications": len({item["application_id"] for item in records}),
+            "unique_campaigns": len({item["campaign_id"] for item in records}),
+            "unique_branches": len(all_branches),
+            "unique_chains": len(all_chains),
+            "by_tcg": by_tcg,
             "pokemon_unique_branches": len(branches),
             "pokemon_unique_chains": len(chains),
             "pokemon_dominant_chain_ratio": round(dominant, 3),
@@ -161,6 +185,10 @@ def _from_coverage_row(
         verification="CONFIRMED", application_url=application_url,
         official_url=official_url, source_label=str(row.get("source") or chain),
         last_verified_at=generated_at,
+        campaign_id=str(row.get("campaign_id") or row.get("id") or ""),
+        source_tier=str(row.get("source_tier") or "TIER_A"),
+        application_method=str(row.get("application_method") or row.get("application_route") or ""),
+        eligibility_conditions=row.get("eligibility_conditions"),
     ), ""
 
 
@@ -198,6 +226,10 @@ def _from_restricted_campaign(
         official_url=official_url,
         source_label=str(campaign.get("source_type") or "公式再確認対象"),
         last_verified_at=str(campaign.get("observed_at") or current.isoformat(timespec="seconds")),
+        campaign_id=str(campaign.get("campaign_id") or campaign.get("id") or ""),
+        source_tier=str(campaign.get("source_tier") or "TIER_A"),
+        application_method=str(campaign.get("application_method") or ""),
+        eligibility_conditions=campaign.get("eligibility_conditions"),
     ), ""
 
 
@@ -231,6 +263,10 @@ def _from_official_campaign(
         application_url=application_url, official_url=official_url,
         source_label=str(campaign.get("source_type") or "OFFICIAL_APPLICATION_PAGE"),
         last_verified_at=str(campaign.get("observed_at") or current.isoformat(timespec="seconds")),
+        campaign_id=str(campaign.get("campaign_id") or campaign.get("id") or ""),
+        source_tier=str(campaign.get("source_tier") or "TIER_A"),
+        application_method=str(campaign.get("application_method") or ""),
+        eligibility_conditions=campaign.get("eligibility_conditions"),
     ), ""
 
 
@@ -239,9 +275,23 @@ def _record(**values: Any) -> dict[str, Any]:
         "tcg", "chain", "branch", "product", "end_at", "application_url",
     ))
     record_id = "app-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+    campaign_id = str(values.get("campaign_id") or "").strip()
+    if not campaign_id:
+        campaign_identity = "|".join(str(values[key]) for key in (
+            "tcg", "chain", "product", "start_at", "end_at", "official_url",
+        ))
+        campaign_id = "campaign-" + hashlib.sha256(
+            campaign_identity.encode("utf-8")
+        ).hexdigest()[:20]
+    application_identity = "|".join((campaign_id, str(values["application_url"])))
+    application_id = "application-" + hashlib.sha256(
+        application_identity.encode("utf-8")
+    ).hexdigest()[:20]
     prefecture = str(values["prefecture"])
     return {
         "id": record_id,
+        "campaign_id": campaign_id,
+        "application_id": application_id,
         "tcg": values["tcg"],
         "product_name": values["product"],
         "chain_key": values["chain"],
@@ -257,6 +307,9 @@ def _record(**values: Any) -> dict[str, Any]:
         "application_url": values["application_url"],
         "official_url": values["official_url"],
         "source_label": values["source_label"],
+        "source_tier": values.get("source_tier") or "TIER_A",
+        "application_method": values.get("application_method") or "",
+        "eligibility_conditions": values.get("eligibility_conditions") or {},
         "is_new": True,
         "last_verified_at": values["last_verified_at"],
     }
