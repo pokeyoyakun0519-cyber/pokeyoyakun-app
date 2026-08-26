@@ -411,6 +411,83 @@
       "observed_at": "2026-08-25T14:00:00+09:00",
       "eligibility_conditions": {"membership_required": true, "purchase_history_required": true, "purchase_history_period": "2026-01-01T00:00:00+09:00〜2026-08-31T23:59:00+09:00"},
       "stores": [["オンライン", "全国", "https://forms.gle/i38hGEWULpo4Wbn47"]]
+    },
+    {
+      "id": "yugioh_hobby_station_original_artwork_20260825",
+      "tcg": "yugioh",
+      "chain": "hobby_station",
+      "product_name": "遊☆戯☆王 ORIGINAL ARTWORK COLLECTION",
+      "official_url": "https://www.hbst.net/?p=410875",
+      "application_start_at": "2026-08-25T12:00:00+09:00",
+      "application_end_at": "2026-08-27T23:59:00+09:00",
+      "source_type": "OFFICIAL_STORE_APPLICATION_PAGE",
+      "source_tier": "TIER_A",
+      "application_method": "LivePocket抽選・応募時に対象店舗を1店選択・店舗受取",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-26T14:00:00+09:00",
+      "eligibility_conditions": {
+        "membership_required": true,
+        "identity_verification_required": true,
+        "store_pickup_required": true,
+        "prepayment_required": true,
+        "application_limit": "1人1回、対象店舗から1店を選択",
+        "application_channel": "LivePocket",
+        "result_announcement_method": "LivePocket（2026-09-09予定）",
+        "pickup_period": "2026-09-26〜2026-10-18",
+        "purchase_limit": "当選者1人3BOXまで",
+        "payment_method_requirement": "事前支払いは現金のみ"
+      },
+      "stores": [["対象店舗", "地域不明", "https://livepocket.jp/e/gqgad"]]
+    },
+    {
+      "id": "pokemon_furuichi_shinnyuzen_phase2_20260828",
+      "tcg": "pokemon",
+      "chain": "furuichi",
+      "product_name": "ポケモンカードゲーム（インフェルノX／熱風のアリーナ／バトルパートナーズ）",
+      "official_url": "https://furu1.net/news/news_campaign/news_opensale_shin",
+      "application_start_at": "2026-08-28T00:00:00+09:00",
+      "application_end_at": "2026-08-30T23:59:00+09:00",
+      "source_type": "OFFICIAL_RETAILER_APPLICATION_NOTICE",
+      "source_tier": "TIER_A",
+      "application_method": "店頭掲示QRからLivePocket抽選・店舗受取",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-26T14:00:00+09:00",
+      "eligibility_conditions": {
+        "membership_required": true,
+        "identity_verification_required": true,
+        "store_pickup_required": true,
+        "application_limit": "同一商品への重複応募不可",
+        "public_application_url_unavailable": true,
+        "application_channel": "店頭掲示QR／LivePocket",
+        "result_announcement_method": "LivePocket（2026-09-01予定）",
+        "pickup_period": "2026-09-04〜2026-09-06"
+      },
+      "stores": [["ふるいちトップブックス新入善店", "富山県", "https://furu1.net/news/news_campaign/news_opensale_shin"]]
+    },
+    {
+      "id": "dbfw_furuichi_shinnyuzen_phase3_20260904",
+      "tcg": "dbfw",
+      "chain": "furuichi",
+      "product_name": "ドラゴンボールスーパーカードゲーム フュージョンワールド（STORY BOOSTER 01／CROSS FORCE／MANGA BOOSTER 02）",
+      "official_url": "https://furu1.net/news/news_campaign/news_opensale_shin",
+      "application_start_at": "2026-09-04T00:00:00+09:00",
+      "application_end_at": "2026-09-06T23:59:00+09:00",
+      "source_type": "OFFICIAL_RETAILER_APPLICATION_NOTICE",
+      "source_tier": "TIER_A",
+      "application_method": "店頭掲示QRからLivePocket抽選・店舗受取",
+      "sales_mode": "STORE",
+      "observed_at": "2026-08-26T14:00:00+09:00",
+      "eligibility_conditions": {
+        "membership_required": true,
+        "identity_verification_required": true,
+        "store_pickup_required": true,
+        "application_limit": "同一商品への重複応募不可",
+        "public_application_url_unavailable": true,
+        "application_channel": "店頭掲示QR／LivePocket",
+        "result_announcement_method": "LivePocket（2026-09-08予定）",
+        "pickup_period": "2026-09-11〜2026-09-13"
+      },
+      "stores": [["ふるいちトップブックス新入善店", "富山県", "https://furu1.net/news/news_campaign/news_opensale_shin"]]
     }
   ]
 }

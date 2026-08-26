@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-25T14:00:00+09:00",
+  "generated_at": "2026-08-26T14:00:00+09:00",
   "source_policy": "TIER_B/Cは候補発見専用。一次情報で期間・商品・応募導線を確認するまでCentral Feedへ出さない。",
   "candidates": [
     {
@@ -67,11 +67,20 @@
       "next_action": "公式LINEの公開投稿または公式サイト告知を確認する"
     },
     {
+      "candidate_shop": "Joshin対象店舗",
+      "reason": "APP_NOTICE_WITHOUT_PUBLIC_OFFICIAL_CAMPAIGN_PAGE",
+      "missing_evidence": ["公開公式ページ上の商品・締切", "公開された応募導線"],
+      "possible_official_source": "ジョーシンアプリまたはJoshin webショップ公式ページ",
+      "next_action": "アプリ告知と同内容の公式Webページが公開された時点で再評価する"
+    }
+  ],
+  "resolved_candidates": [
+    {
       "candidate_shop": "ホビーステーション",
-      "reason": "NO_CURRENT_WINDOW",
-      "missing_evidence": ["8月25日時点で受付中または今後開始の公式案件"],
-      "possible_official_source": "https://www.hbst.net/news/",
-      "next_action": "既存parserは維持し、新規公式告知の公開を監視する"
+      "result": "PROMOTED_CONFIRMED",
+      "campaign_id": "yugioh_hobby_station_original_artwork_20260825",
+      "official_source": "https://www.hbst.net/?p=410875",
+      "resolved_at": "2026-08-26T14:00:00+09:00"
     }
   ]
 }

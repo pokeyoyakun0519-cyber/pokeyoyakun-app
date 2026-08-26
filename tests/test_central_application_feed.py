@@ -21,10 +21,10 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     )
     pokemon = [item for item in feed["records"] if item["tcg"] == "pokemon"]
 
-    assert len(pokemon) == 68
-    assert len({(item["chain_key"], item["branch_name"]) for item in pokemon}) == 47
-    assert sum(item["application_status"] == "UPCOMING" for item in pokemon) == 9
-    assert len([item for item in pokemon if item["chain_key"] == "furuichi"]) == 4
+    assert len(pokemon) == 64
+    assert len({(item["chain_key"], item["branch_name"]) for item in pokemon}) == 42
+    assert sum(item["application_status"] == "UPCOMING" for item in pokemon) == 10
+    assert len([item for item in pokemon if item["chain_key"] == "furuichi"]) == 5
     one_piece = [item for item in feed["records"] if item["tcg"] == "one-piece"]
     assert len(one_piece) == 24
     assert sum(item["application_status"] == "UPCOMING" for item in one_piece) == 1
@@ -32,10 +32,10 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     assert all(item["verification_state"] == "CONFIRMED" for item in one_piece)
     assert len({item["branch_name"] for item in one_piece}) == 22
     dbfw = [item for item in feed["records"] if item["tcg"] == "dbfw"]
-    assert len(dbfw) == 1
-    assert dbfw[0]["application_status"] == "ENDED_WITHIN_14_DAYS"
-    assert dbfw[0]["verification_state"] == "CONFIRMED"
-    assert dbfw[0]["application_url"] == "https://p-bandai.jp/item/item-1000255641/"
+    assert len(dbfw) == 2
+    assert {item["application_status"] for item in dbfw} == {"UPCOMING", "ENDED_WITHIN_14_DAYS"}
+    assert all(item["verification_state"] == "CONFIRMED" for item in dbfw)
+    assert any(item["application_url"] == "https://p-bandai.jp/item/item-1000255641/" for item in dbfw)
     gundam = [item for item in feed["records"] if item["tcg"] == "gundam"]
     assert len(gundam) == 3
     assert sum(item["application_status"] == "ACTIVE" for item in gundam) == 2
@@ -44,17 +44,20 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     union_arena = [item for item in feed["records"] if item["tcg"] == "union-arena"]
     assert len(union_arena) == 1
     assert union_arena[0]["application_status"] == "ACTIVE"
-    assert feed["metrics"]["application_count"] == 100
-    assert feed["metrics"]["upcoming"] == 11
-    assert feed["metrics"]["unique_applications"] == 98
-    assert feed["metrics"]["unique_campaigns"] == 71
-    assert feed["metrics"]["unique_branches"] == 69
-    assert feed["metrics"]["unique_chains"] == 23
-    assert feed["metrics"]["pokemon_unique_branches"] == 47
+    assert feed["metrics"]["application_count"] == 98
+    assert feed["metrics"]["upcoming"] == 14
+    assert feed["metrics"]["unique_applications"] == 96
+    assert feed["metrics"]["unique_campaigns"] == 73
+    assert feed["metrics"]["unique_branches"] == 65
+    assert feed["metrics"]["unique_chains"] == 24
+    assert feed["metrics"]["pokemon_unique_branches"] == 42
     assert feed["metrics"]["pokemon_unique_chains"] == 20
-    assert feed["metrics"]["confirmed"] == 73
+    assert feed["metrics"]["confirmed"] == 71
     assert feed["metrics"]["restricted"] == 27
-    assert feed["metrics"]["by_tcg"]["yugioh"]["total"] == 3
+    assert feed["metrics"]["by_tcg"]["yugioh"]["total"] == 4
+    hobby_station = next(item for item in feed["records"] if item["chain_key"] == "hobby_station")
+    assert hobby_station["eligibility_conditions"]["application_channel"] == "LivePocket"
+    assert hobby_station["eligibility_conditions"]["payment_method_requirement"] == "事前支払いは現金のみ"
     assert all(item["application_end_at"] for item in feed["records"])
     assert len({item["id"] for item in feed["records"]}) == len(feed["records"])
     assert all(item["campaign_id"] for item in feed["records"])
@@ -133,6 +136,35 @@ def test_campaign_application_and_branch_identity_are_distinct():
     assert feed["metrics"]["unique_branches"] == 2
     assert feed["records"][0]["eligibility_conditions"] == {"app_required": True}
     assert feed["records"][0]["application_method"] == "公式アプリ抽選"
+
+
+def test_same_application_branch_from_two_sources_is_not_counted_twice():
+    coverage = {"generated_at": "2026-08-24T12:00:00+09:00", "rows": [{
+        "confirmed": True, "tcg": "pokemon", "chain": "pokemon_card_store",
+        "branch": "ポケモンカードストア in ららぽーと沼津", "product": "商品（10パックまで）",
+        "deadline": "2026-09-08T23:59:00+09:00", "prefecture": "静岡県",
+        "official_url": "https://official.example/notice", "application_url": "https://apply.example/event/1",
+        "eligibility_conditions": {"app_required": True},
+    }]}
+    official = {"campaigns": [{
+        "id": "official-campaign", "tcg": "pokemon", "chain": "pokemon_card_store",
+        "product_name": "商品", "official_url": "https://official.example/notice",
+        "application_start_at": "2026-08-21T14:00:00+09:00",
+        "application_end_at": "2026-09-08T23:59:00+09:00",
+        "application_method": "公式LINEミニアプリ抽選",
+        "eligibility_conditions": {"membership_required": True},
+        "stores": [["ららぽーと沼津", "静岡県", "https://apply.example/event/1"]],
+    }]}
+    feed = build_central_feed(
+        coverage, {"campaigns": []}, official, now=datetime(2026, 8, 24, 12, 0, tzinfo=JST),
+    )
+
+    assert len(feed["records"]) == 1
+    assert feed["records"][0]["application_start_at"] == "2026-08-21T14:00:00+09:00"
+    assert feed["records"][0]["application_method"] == "公式LINEミニアプリ抽選"
+    assert feed["records"][0]["eligibility_conditions"] == {
+        "app_required": True, "membership_required": True,
+    }
 
 
 def test_future_restricted_is_upcoming_but_future_candidate_is_rejected():

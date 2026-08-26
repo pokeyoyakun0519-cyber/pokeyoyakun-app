@@ -24,3 +24,5 @@ def test_candidate_backlog_is_not_central_feed_data():
     assert all(item["missing_evidence"] for item in payload["candidates"])
     assert all(item["next_action"] for item in payload["candidates"])
     assert not ({item.get("id") for item in payload["candidates"]} - {None}) & feed_ids
+    assert payload["resolved_candidates"][0]["result"] == "PROMOTED_CONFIRMED"
+    assert payload["resolved_candidates"][0]["campaign_id"] in feed_ids

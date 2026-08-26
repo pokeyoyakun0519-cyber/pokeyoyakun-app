@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
@@ -43,6 +44,7 @@ CHAIN_LABELS = {
     "magi": "magi",
     "gangi": "ガンギ HOBBYSHOP",
     "kanabell": "カーナベル",
+    "hobby_station": "ホビーステーション",
     "furuichi": "ふるいち／古本市場",
 }
 REGIONS = {
@@ -348,12 +350,66 @@ def _public_url(value: Any) -> str:
 
 def _deduplicate(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    indexes: dict[tuple[str, ...], int] = {}
     for record in records:
-        if record["id"] not in seen:
-            seen.add(record["id"])
+        key = _application_branch_key(record)
+        existing_index = indexes.get(key)
+        if existing_index is None:
+            indexes[key] = len(output)
             output.append(record)
+            continue
+        existing = output[existing_index]
+        had_start = bool(existing.get("application_start_at"))
+        for field in (
+            "application_start_at", "application_method",
+        ):
+            if not existing.get(field) and record.get(field):
+                existing[field] = record[field]
+        merged_eligibility = dict(record.get("eligibility_conditions") or {})
+        merged_eligibility.update(existing.get("eligibility_conditions") or {})
+        existing["eligibility_conditions"] = merged_eligibility
+        existing["last_verified_at"] = max(
+            str(existing.get("last_verified_at") or ""),
+            str(record.get("last_verified_at") or ""),
+        )
+        if (
+            existing.get("verification_state") != "CONFIRMED"
+            and record.get("verification_state") == "CONFIRMED"
+        ):
+            for field in ("verification_state", "official_url", "source_label", "source_tier"):
+                existing[field] = record[field]
+        if not had_start and record.get("application_status") == "UPCOMING":
+            existing["application_status"] = "UPCOMING"
     return sorted(output, key=lambda item: (item["application_end_at"], item["id"]))
+
+
+def _application_branch_key(record: dict[str, Any]) -> tuple[str, ...]:
+    """Identify the same branch/application across independently discovered sources.
+
+    A shared form used by different branches remains separate.  Only a matching
+    chain, normalized branch/product, public application URL and deadline is collapsed.
+    This catches label-only variants such as ``ららぽーと沼津`` and
+    ``ポケモンカードストア in ららぽーと沼津`` without product-count padding.
+    """
+    branch = str(record.get("branch_name") or "").casefold()
+    chain_name = str(record.get("chain_name") or "").casefold()
+    chain_key = str(record.get("chain_key") or "").casefold()
+    for prefix in (chain_name, chain_key.replace("_", " ")):
+        if prefix:
+            branch = branch.replace(prefix, "")
+    branch = re.sub(r"(?:^|\s)in(?:\s|$)", "", branch)
+    branch = re.sub(r"[\s\-_/／・『』「」()（）]+", "", branch)
+    product = str(record.get("product_name") or "").casefold()
+    product = re.sub(r"[（(][^）)]*(?:まで|限定|上限)[^）)]*[）)]", "", product)
+    product = re.sub(r"[\s\-_/／・『』「」()（）]+", "", product)
+    return (
+        str(record.get("tcg") or ""),
+        chain_key,
+        branch,
+        product,
+        str(record.get("application_end_at") or ""),
+        str(record.get("application_url") or ""),
+    )
 
 
 def _coverage_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
