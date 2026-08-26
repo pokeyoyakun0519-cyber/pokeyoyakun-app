@@ -222,7 +222,10 @@ class XRecentSearchTests(unittest.TestCase):
 
     def test_queries_are_limited_to_supported_tcg_and_exclude_retweets(self):
         self.assertEqual(
-            {"pokemon", "onepiece", "union_arena", "dragon_ball_fusion_world"},
+            {
+                "pokemon", "onepiece", "union_arena", "dragon_ball_fusion_world",
+                "yugioh", "gundam",
+            },
             set(QUERIES),
         )
         self.assertTrue(all("-is:retweet" in value for value in QUERIES.values()))

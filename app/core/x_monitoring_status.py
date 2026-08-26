@@ -79,7 +79,8 @@ class XMonitoringStatus:
             }
         if not os.environ.get("POKEYOYA_X_BEARER_TOKEN", "").strip():
             return {
-                "state": "未設定", "last_success": "",
+                "state": "未設定", "source_status": "DISABLED_NO_CREDENTIAL",
+                "last_success": "",
                 "message": "X APIトークン未設定のため停止中です。User Editionには秘密情報を同梱しません。",
             }
         return {"state": "更新待ち", "last_success": "", "message": "初回取得を待っています。"}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-26T15:00:00+09:00",
+  "discovery_window": {"before_days": 30, "after_days": 7},
+  "policy": "発売日はDiscovery trigger専用。応募開始・締切へ転用しない。",
+  "tcgs": [
+    {"tcg":"pokemon","official_calendar_url":"https://www.pokemon-card.com/products/index.html","products":[{"product_name":"30th CELEBRATION","release_at":"2026-09-16T00:00:00+09:00","official_product_url":"https://www.30th.pokemon-card.com/product"}]},
+    {"tcg":"one-piece","official_calendar_url":"https://www.onepiece-cardgame.com/products/","calendar_status":"SOURCE_REGISTERED_NO_CURRENT_VERIFIED_PRODUCT","products":[]},
+    {"tcg":"yugioh","official_calendar_url":"https://www.yugioh-card.com/japan/products/","products":[{"product_name":"デッキビルドパック グロリアス・ヴィクターズ","release_at":"2026-09-05T00:00:00+09:00","official_product_url":"https://www.yugioh-card.com/japan/products/dbgv/"},{"product_name":"遊☆戯☆王 ORIGINAL ARTWORK COLLECTION","release_at":"2026-09-26T00:00:00+09:00","official_product_url":"https://www.yugioh-card.com/japan/products/include/information.php?id=cg2133"}]},
+    {"tcg":"dragon-ball-fusion-world","official_calendar_url":"https://www.dbs-cardgame.com/fw/jp/products/","products":[{"product_name":"BRIGHTNESS OF HOPE [FB11]","release_at":"2026-09-12T00:00:00+09:00","official_product_url":"https://www.dbs-cardgame.com/fw/jp/products/01_422.html"}]},
+    {"tcg":"gundam","official_calendar_url":"https://www.gundam-gcg.com/jp/products/list.php","products":[{"product_name":"Aquatic Assault / Raging Onslaught / Silent Barrage / Heavy Dominion","release_at":"2026-09-26T00:00:00+09:00","official_product_url":"https://www.gundam-gcg.com/jp/products/list.php"}]},
+    {"tcg":"union-arena","official_calendar_url":"https://www.unionarena-tcg.com/jp/products/","products":[{"product_name":"天元突破グレンラガン ブースターパック","release_at":"2026-08-28T00:00:00+09:00","official_product_url":"https://www.unionarena-tcg.com/jp/products/"},{"product_name":"BLEACH 千年血戦篇 Vol.3 ブースターパック","release_at":"2026-09-11T00:00:00+09:00","official_product_url":"https://www.unionarena-tcg.com/jp/products/"}]}
+  ]
+}

@@ -1,6 +1,8 @@
 [
   {
     "username": "Pokemon_cojp",
+    "official_source_url": "https://www.pokemon.co.jp/",
+    "verification_status": "VERIFIED_OFFICIAL",
     "display_name": "ポケモン公式",
     "category": "manufacturer_official",
     "source_type": "OFFICIAL_MANUFACTURER",
@@ -14,6 +16,8 @@
   },
   {
     "username": "pokemoncenterPR",
+    "official_source_url": "https://www.pokemoncenter-online.com/",
+    "verification_status": "VERIFIED_OFFICIAL",
     "display_name": "ポケモンセンター公式",
     "category": "official_store",
     "source_type": "OFFICIAL_STORE",
@@ -60,6 +64,8 @@
   },
   {
     "username": "ONEPIECE_tcg",
+    "official_source_url": "https://www.onepiece-cardgame.com/",
+    "verification_status": "VERIFIED_OFFICIAL",
     "display_name": "ONE PIECEカードゲーム公式",
     "category": "manufacturer_official",
     "source_type": "OFFICIAL_MANUFACTURER",
@@ -73,6 +79,8 @@
   },
   {
     "username": "ONEPIECEtcgSHOP",
+    "official_source_url": "https://bandainamco-am.co.jp/official_shop/onepiece-cardgame/",
+    "verification_status": "VERIFIED_OFFICIAL",
     "display_name": "ONE PIECEカードゲーム公式ショップ",
     "category": "official_store",
     "source_type": "OFFICIAL_STORE",
@@ -119,6 +127,8 @@
   },
   {
     "username": "UNION_ARENA_TCG",
+    "official_source_url": "https://www.unionarena-tcg.com/jp/",
+    "verification_status": "VERIFIED_OFFICIAL",
     "display_name": "UNION ARENA公式",
     "category": "manufacturer_official",
     "source_type": "OFFICIAL_MANUFACTURER",
@@ -176,6 +186,8 @@
   },
   {
     "username": "dbfw_cardgameJP",
+    "official_source_url": "https://www.dbs-cardgame.com/fw/jp/",
+    "verification_status": "VERIFIED_OFFICIAL",
     "display_name": "ドラゴンボールスーパーカードゲーム フュージョンワールド公式",
     "category": "manufacturer_official",
     "source_type": "OFFICIAL_MANUFACTURER",
@@ -229,6 +241,32 @@
     "trust_level": "TRUSTED_STORE",
     "trust_score": 88,
     "selection_reason": "TCG専門店公式",
+    "enabled": true
+  },
+  {
+    "username": "YuGiOh_OCG_INFO",
+    "display_name": "遊戯王OCG公式",
+    "source_type": "OFFICIAL_MANUFACTURER",
+    "manual_trust_score": 100,
+    "store_name": "KONAMI",
+    "tcg": "yugioh",
+    "trust_level": "OFFICIAL_TCG",
+    "official_source_url": "https://www.yugioh-card.com/japan/information/ycsjosaka2026cdcp/",
+    "verification_status": "VERIFIED_OFFICIAL",
+    "selection_reason": "公式サイトから公式Xへの言及を確認",
+    "enabled": true
+  },
+  {
+    "username": "GUNDAM_GCG_JP",
+    "display_name": "GUNDAM CARD GAME公式",
+    "source_type": "OFFICIAL_MANUFACTURER",
+    "manual_trust_score": 100,
+    "store_name": "BANDAI",
+    "tcg": "gundam",
+    "trust_level": "OFFICIAL_TCG",
+    "official_source_url": "https://www.gundam-gcg.com/jp/news/01_259.html",
+    "verification_status": "VERIFIED_OFFICIAL",
+    "selection_reason": "公式サイトから公式Xへの言及を確認",
     "enabled": true
   }
 ]

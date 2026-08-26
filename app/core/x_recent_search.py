@@ -5,6 +5,7 @@ import hashlib
 import os
 import random
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -49,12 +50,16 @@ TCG_DEFINITIONS = {
         "label": "Dragon Ball Super Card Game Fusion World",
         "terms": ("FUSION WORLD", "フュージョンワールド", "DBSCG FW", "DBFW"),
     },
+    "yugioh": {"label": "Yu-Gi-Oh!", "terms": ("遊戯王OCG", "遊戯王カード")},
+    "gundam": {"label": "Gundam Card Game", "terms": ("ガンダムカードゲーム", "GUNDAM CARD GAME")},
 }
 QUERIES = {
     "pokemon": '("ポケモンカード" OR ポケカ) (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
     "onepiece": '("ONE PIECEカード" OR "ワンピースカード") (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
     "union_arena": '("UNION ARENA" OR ユニオンアリーナ OR ユニアリ) (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
     "dragon_ball_fusion_world": '("ドラゴンボールスーパーカードゲーム フュージョンワールド" OR "DBSCG FUSION WORLD" OR "DBSCG FW") (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
+    "yugioh": '("遊戯王OCG" OR "遊戯王カード") (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
+    "gundam": '("ガンダムカードゲーム" OR "GUNDAM CARD GAME") (' + " OR ".join(COMMON_TERMS) + ') -is:retweet',
 }
 OFFICIAL_EVIDENCE_TYPES = {
     "official_product_page", "official_store_page", "official_ec",
@@ -65,6 +70,19 @@ CONFIRMING_EVIDENCE_TYPES = {
     "premium_bandai",
 }
 REJECTING_STATUSES = {"rejected", "cancelled", "canceled", "ended", "not_available"}
+
+
+def x_api_execution_allowed() -> bool:
+    """Frozen clients cannot become discovery workers through token injection."""
+    if not getattr(sys, "frozen", False):
+        return True
+    return os.environ.get("POKEYOYA_DISCOVERY_EXECUTION_SCOPE", "").strip().upper() == (
+        "ADMIN_SERVER_SIDE"
+    )
+
+
+def _x_source_disabled_status() -> str:
+    return "DISABLED_NO_CREDENTIAL" if x_api_execution_allowed() else "DISABLED_CLIENT_RUNTIME"
 
 
 class XRecentSearch:
@@ -148,10 +166,14 @@ class XRecentSearch:
         """user timelineをTTL付きで差分取得する。X Webにはアクセスしない。"""
         if tcg not in QUERIES:
             raise ValueError("X検索対象TCGが未対応です。")
-        token = (bearer_token or os.environ.get("POKEYOYA_X_BEARER_TOKEN", "")).strip()
+        token = (
+            (bearer_token or os.environ.get("POKEYOYA_X_BEARER_TOKEN", "")).strip()
+            if x_api_execution_allowed() else ""
+        )
         if not token:
             return {
                 "status": "disabled", "candidates": [], "request_count": 0,
+                "source_status": _x_source_disabled_status(),
                 "cache_hits": 0, "cache_misses": 0,
                 "notice": "X監視が無効のため抽選Discovery範囲が制限されています",
             }
@@ -205,9 +227,15 @@ class XRecentSearch:
         self, account: dict[str, Any], bearer_token: str | None = None
     ) -> dict[str, Any]:
         """Fetch one trusted timeline while preserving legacy TTL/since_id state."""
-        token = (bearer_token or os.environ.get("POKEYOYA_X_BEARER_TOKEN", "")).strip()
+        token = (
+            (bearer_token or os.environ.get("POKEYOYA_X_BEARER_TOKEN", "")).strip()
+            if x_api_execution_allowed() else ""
+        )
         if not token:
-            return {"status": "disabled", "candidates": [], "request_count": 0}
+            return {
+                "status": "disabled", "source_status": _x_source_disabled_status(),
+                "candidates": [], "request_count": 0,
+            }
         username = str(account.get("username", ""))
         tcg = str(account.get("tcg", ""))
         key = f"{username.casefold()}:{tcg}"
@@ -268,9 +296,15 @@ class XRecentSearch:
         monitored_only: bool = False,
         allowed_usernames: set[str] | None = None,
     ) -> dict[str, Any]:
-        token = (bearer_token or os.environ.get("POKEYOYA_X_BEARER_TOKEN", "")).strip()
+        token = (
+            (bearer_token or os.environ.get("POKEYOYA_X_BEARER_TOKEN", "")).strip()
+            if x_api_execution_allowed() else ""
+        )
         if not token:
-            return {"status": "disabled", "candidates": [], "request_count": 0}
+            return {
+                "status": "disabled", "source_status": _x_source_disabled_status(),
+                "candidates": [], "request_count": 0,
+            }
         state = self._load_state()
         item_state = dict(state.get(state_key, {}))
         retry_at = float(item_state.get("retry_at", 0) or 0)

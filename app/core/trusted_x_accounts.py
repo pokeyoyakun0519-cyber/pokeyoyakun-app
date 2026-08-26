@@ -77,7 +77,10 @@ class TrustedXAccountRegistry:
                     observed.get("last_seen_tweet_id", observed.get("latest_tweet_id", ""))
                 ),
                 "last_checked_at": str(
-                    observed.get("last_checked_at", observed.get("last_fetched_at", ""))
+                    observed.get(
+                        "last_checked_at",
+                        observed.get("last_fetched_at", account.get("last_checked_at", "")),
+                    )
                 ),
                 "latest_tweet_id": str(observed.get("latest_tweet_id", "")),
                 "last_fetched_at": str(observed.get("last_fetched_at", "")),
@@ -191,7 +194,8 @@ class TrustedXAccountRegistry:
         username = str(raw.get("username", "")).strip().lstrip("@")
         tcg = str(raw.get("tcg", "")).strip().casefold()
         if not re.fullmatch(r"[A-Za-z0-9_]{1,15}", username) or tcg not in {
-            "pokemon", "onepiece", "union_arena", "dragon_ball_fusion_world"
+            "pokemon", "onepiece", "union_arena", "dragon_ball_fusion_world",
+            "yugioh", "gundam",
         }:
             return None
         source_type = str(raw.get("source_type", "")).strip().upper()
@@ -211,11 +215,24 @@ class TrustedXAccountRegistry:
             trust_level = _DEFAULT_TRUST_LEVELS[source_type]
         return {
             "user_id": str(raw.get("user_id", "")).strip(),
+            "account_id": str(raw.get("account_id", raw.get("user_id", ""))).strip(),
             "username": username,
+            "screen_name": str(raw.get("screen_name", username)).strip().lstrip("@"),
             "display_name": str(raw.get("display_name", "")).strip(),
             "tcg": tcg,
             "source_type": source_type,
             "store_name": str(raw.get("store_name", "")).strip(),
+            "chain": str(raw.get("chain", raw.get("store_name", ""))).strip(),
+            "branch": str(raw.get("branch", raw.get("store_name", ""))).strip()
+            if source_type == OFFICIAL_SHOP_BRANCH else str(raw.get("branch", "")).strip(),
+            "official_source_url": str(raw.get("official_source_url", "")).strip(),
+            "verification_status": str(raw.get("verification_status", "")).strip().upper() or (
+                "VERIFIED_OFFICIAL"
+                if source_type in {OFFICIAL_MANUFACTURER, OFFICIAL_STORE}
+                and str(raw.get("official_source_url", "")).strip()
+                else "PENDING_OFFICIAL_LINK"
+            ),
+            "last_checked_at": str(raw.get("last_checked_at", "")).strip(),
             "manual_trust_score": manual_score,
             "trust_level": trust_level,
             "enabled": bool(raw.get("enabled", True)),

@@ -31,6 +31,9 @@ def test_candidate_backlog_is_not_central_feed_data():
     assert all(item["products_checked"] for item in payload["candidates"])
     assert all(item["official_sources_checked"] for item in payload["candidates"])
     assert all(item["next_action"] for item in payload["candidates"])
+    assert all(item["source_type"] for item in payload["candidates"])
+    assert all(item["how_discovered"] for item in payload["candidates"])
+    assert all(item["missing_fields"] for item in payload["candidates"])
     assert all(
         datetime.fromisoformat(item["next_check_at"]) > datetime.fromisoformat(item["last_checked_at"])
         for item in payload["candidates"]

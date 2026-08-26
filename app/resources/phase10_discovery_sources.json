@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-26T15:00:00+09:00",
+  "policy": "自動scrapeしないsourceは候補発見metadataとしてのみ扱い、公式Evidenceが揃うまでconfirmedにしない。",
+  "sources": [
+    {"id":"bookoff_app","name":"BOOKOFF公式アプリ","source_type":"OFFICIAL_APP_ONLY","source_tier":"TIER_B_DISCOVERY","how_discovered":"OFFICIAL_APP","app_name":"BOOKOFF公式アプリ","source_url":"https://www.bookoff.co.jp/app/","monitor_mode":"METADATA_ONLY"},
+    {"id":"joshin_app","name":"ジョーシンアプリ","source_type":"OFFICIAL_APP_ONLY","source_tier":"TIER_B_DISCOVERY","how_discovered":"OFFICIAL_APP","app_name":"ジョーシンアプリ","source_url":"https://www.joshin.co.jp/app/","monitor_mode":"METADATA_ONLY"},
+    {"id":"majica_app","name":"majica","source_type":"OFFICIAL_APP_ONLY","source_tier":"TIER_B_DISCOVERY","how_discovered":"OFFICIAL_APP","app_name":"majica","source_url":"https://www.majica-net.com/app/","monitor_mode":"METADATA_ONLY"},
+    {"id":"tsutaya_line","name":"TSUTAYA店舗公式LINE","source_type":"OFFICIAL_LINE_ONLY","source_tier":"TIER_B_DISCOVERY","how_discovered":"OFFICIAL_LINE","line_account":"店舗別","source_url":"https://tsutaya.tsite.jp/","monitor_mode":"METADATA_ONLY"},
+    {"id":"maxgame_line","name":"マックスゲーム浜松町店公式LINE","source_type":"OFFICIAL_LINE_ONLY","source_tier":"TIER_B_DISCOVERY","how_discovered":"OFFICIAL_LINE","line_account":"@239usael","source_url":"https://page.line.me/239usael","monitor_mode":"METADATA_ONLY"},
+    {"id":"tsutaya_store_qr","name":"TSUTAYA店舗QR","source_type":"IN_STORE_QR","source_tier":"TIER_C_REFERENCE","how_discovered":"IN_STORE_QR","source_url":"https://tsutaya.tsite.jp/","monitor_mode":"USER_ASSISTED_FUTURE"},
+    {"id":"aeon_mall_news","name":"イオンモール店舗ニュース","source_type":"COMMERCIAL_FACILITY","source_tier":"TIER_B_DISCOVERY","how_discovered":"COMMERCIAL_FACILITY","source_url":"https://www.aeon.jp/sc/","monitor_mode":"PUBLIC_OFFICIAL_WEB"},
+    {"id":"mitsui_mall_news","name":"ららぽーと店舗ニュース","source_type":"COMMERCIAL_FACILITY","source_tier":"TIER_B_DISCOVERY","how_discovered":"COMMERCIAL_FACILITY","source_url":"https://mitsui-shopping-park.com/lalaport/","monitor_mode":"PUBLIC_OFFICIAL_WEB"},
+    {"id":"ario_news","name":"アリオ店舗ニュース","source_type":"COMMERCIAL_FACILITY","source_tier":"TIER_B_DISCOVERY","how_discovered":"COMMERCIAL_FACILITY","source_url":"https://www.ario.jp/","monitor_mode":"PUBLIC_OFFICIAL_WEB"},
+    {"id":"parco_news","name":"PARCO店舗ニュース","source_type":"COMMERCIAL_FACILITY","source_tier":"TIER_B_DISCOVERY","how_discovered":"COMMERCIAL_FACILITY","source_url":"https://parco.jp/","monitor_mode":"PUBLIC_OFFICIAL_WEB"},
+    {"id":"station_mall_news","name":"駅ビル店舗ニュース","source_type":"COMMERCIAL_FACILITY","source_tier":"TIER_B_DISCOVERY","how_discovered":"COMMERCIAL_FACILITY","source_url":"https://www.jreast.co.jp/estation/","monitor_mode":"PUBLIC_OFFICIAL_WEB"}
+  ]
+}

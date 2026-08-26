@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pokeyoyakun.com/schemas/evidence-submission-v1.json",
+  "title": "PokeyoyaKun evidence submission",
+  "type": "object",
+  "required": ["source_type", "submitted_at", "tcg", "store_text", "product_text", "evidence_file_sha256", "verification_status"],
+  "properties": {
+    "source_type": {"enum": ["OFFICIAL_APP_ONLY", "OFFICIAL_LINE_ONLY", "IN_STORE_QR"]},
+    "submitted_at": {"type": "string", "format": "date-time"},
+    "tcg": {"type": "string"},
+    "store_text": {"type": "string"},
+    "product_text": {"type": "string"},
+    "application_start_text": {"type": "string"},
+    "application_end_text": {"type": "string"},
+    "application_method_text": {"type": "string"},
+    "evidence_file_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "verification_status": {"const": "PENDING_ADMIN_REVIEW"},
+    "privacy_confirmed": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}
