@@ -2,7 +2,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 
-from core.central_application_feed import JST, build_central_feed
+from core.central_application_feed import JST, _application_branch_key, build_central_feed
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -174,6 +174,17 @@ def test_same_application_branch_from_two_sources_is_not_counted_twice():
     assert sum(item["candidate_discovered_count"] for item in effectiveness.values()) == 2
     assert sum(item["duplicate_count"] for item in effectiveness.values()) == 1
     assert any(item["duplicate_rate"] > 0 for item in effectiveness.values())
+
+
+def test_application_method_identity_normalizes_width_spacing_and_punctuation():
+    base = {
+        "tcg": "pokemon", "chain_key": "shop", "branch_name": "本店",
+        "product_name": "商品", "application_end_at": "2026-09-08T23:59:00+09:00",
+        "application_url": "",
+    }
+    assert _application_branch_key({**base, "application_method": "公式 ＷＥＢ・抽選"}) == (
+        _application_branch_key({**base, "application_method": "公式web抽選"})
+    )
 
 
 def test_future_restricted_is_upcoming_but_future_candidate_is_rejected():

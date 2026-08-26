@@ -95,7 +95,7 @@
       "products_checked": ["ONE PIECE CARD GAME OP-17", "DBFW MANGA BOOSTER 02"],
       "official_sources_checked": ["https://cardbox.online/", "https://cardbox.online/news/detail/?id=1652"],
       "failure_reason": "確認できた公式抽選は受付終了済みで、現在稼働中の公式応募ページがない",
-      "reason": "OFFICIAL_PAGE_NOT_YET_VERIFIED",
+      "reason": "NO_CURRENT_OFFICIAL_APPLICATION",
       "missing_evidence": ["応募ページの運営主体", "応募条件"],
       "possible_official_source": "カードボックス／トレコロ公式通販",
       "next_action": "公式ドメイン上の応募ページと受付期間を照合する"

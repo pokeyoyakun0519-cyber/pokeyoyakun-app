@@ -407,7 +407,9 @@ def _application_branch_key(record: dict[str, Any]) -> tuple[str, ...]:
     product = re.sub(r"[（(][^）)]*(?:まで|限定|上限)[^）)]*[）)]", "", product)
     product = re.sub(r"[\s\-_/／・『』「」()（）]+", "", product)
     application_url = _identity_url(record.get("application_url"))
-    application_method = "" if application_url else _identity_text(record.get("application_method"))
+    application_method = "" if application_url else _identity_application_method(
+        record.get("application_method")
+    )
     return (
         str(record.get("tcg") or ""),
         chain_key,
@@ -421,6 +423,10 @@ def _application_branch_key(record: dict[str, Any]) -> tuple[str, ...]:
 
 def _identity_text(value: Any) -> str:
     return unicodedata.normalize("NFKC", str(value or "")).casefold().strip()
+
+
+def _identity_application_method(value: Any) -> str:
+    return re.sub(r"[\s\-_/／・『』「」()（）]+", "", _identity_text(value))
 
 
 def _identity_url(value: Any) -> str:
