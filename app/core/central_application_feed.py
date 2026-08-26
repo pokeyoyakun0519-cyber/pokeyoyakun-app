@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 JST = timezone(timedelta(hours=9))
@@ -101,7 +102,8 @@ def build_central_feed(
                 records.append(record)
             else:
                 rejected[reason or "invalid"] += 1
-    records = _deduplicate(records)
+    raw_records = list(records)
+    records = _deduplicate(raw_records)
     pokemon = [item for item in records if item["tcg"] == "pokemon"]
     branches = {(item["chain_key"], item["branch_name"]) for item in pokemon}
     chains = {item["chain_key"] for item in pokemon}
@@ -145,6 +147,8 @@ def build_central_feed(
             "pokemon_unique_branches": len(branches),
             "pokemon_unique_chains": len(chains),
             "pokemon_dominant_chain_ratio": round(dominant, 3),
+            "duplicate_records_removed": len(raw_records) - len(records),
+            "source_effectiveness": _source_effectiveness(raw_records, records),
             "rejected": dict(rejected),
         },
     }
@@ -391,25 +395,81 @@ def _application_branch_key(record: dict[str, Any]) -> tuple[str, ...]:
     This catches label-only variants such as ``ららぽーと沼津`` and
     ``ポケモンカードストア in ららぽーと沼津`` without product-count padding.
     """
-    branch = str(record.get("branch_name") or "").casefold()
-    chain_name = str(record.get("chain_name") or "").casefold()
-    chain_key = str(record.get("chain_key") or "").casefold()
+    branch = _identity_text(record.get("branch_name"))
+    chain_name = _identity_text(record.get("chain_name"))
+    chain_key = _identity_text(record.get("chain_key")).replace("_", "")
     for prefix in (chain_name, chain_key.replace("_", " ")):
         if prefix:
             branch = branch.replace(prefix, "")
     branch = re.sub(r"(?:^|\s)in(?:\s|$)", "", branch)
     branch = re.sub(r"[\s\-_/／・『』「」()（）]+", "", branch)
-    product = str(record.get("product_name") or "").casefold()
+    product = _identity_text(record.get("product_name"))
     product = re.sub(r"[（(][^）)]*(?:まで|限定|上限)[^）)]*[）)]", "", product)
     product = re.sub(r"[\s\-_/／・『』「」()（）]+", "", product)
+    application_url = _identity_url(record.get("application_url"))
+    application_method = "" if application_url else _identity_text(record.get("application_method"))
     return (
         str(record.get("tcg") or ""),
         chain_key,
         branch,
         product,
         str(record.get("application_end_at") or ""),
-        str(record.get("application_url") or ""),
+        application_url,
+        application_method,
     )
+
+
+def _identity_text(value: Any) -> str:
+    return unicodedata.normalize("NFKC", str(value or "")).casefold().strip()
+
+
+def _identity_url(value: Any) -> str:
+    public = _public_url(value)
+    if not public:
+        return ""
+    parsed = urlsplit(public)
+    query = [
+        (key, item)
+        for key, item in parse_qsl(parsed.query, keep_blank_values=True)
+        if not key.casefold().startswith("utm_")
+    ]
+    return urlunsplit((
+        parsed.scheme, parsed.netloc,
+        parsed.path.rstrip("/") or "/",
+        urlencode(sorted(query)), "",
+    ))
+
+
+def _source_effectiveness(
+    raw_records: Iterable[dict[str, Any]], kept_records: Iterable[dict[str, Any]],
+) -> dict[str, dict[str, int | float]]:
+    discovered: Counter[str] = Counter()
+    duplicates: Counter[str] = Counter()
+    seen: set[tuple[str, ...]] = set()
+    for record in raw_records:
+        source = str(record.get("source_label") or "OTHER")
+        discovered[source] += 1
+        key = _application_branch_key(record)
+        if key in seen:
+            duplicates[source] += 1
+        else:
+            seen.add(key)
+    confirmed: Counter[str] = Counter()
+    current: Counter[str] = Counter()
+    for record in kept_records:
+        source = str(record.get("source_label") or "OTHER")
+        confirmed[source] += int(record.get("verification_state") == "CONFIRMED")
+        current[source] += int(record.get("application_status") in {"ACTIVE", "UPCOMING"})
+    return {
+        source: {
+            "candidate_discovered_count": count,
+            "confirmed_promoted_count": confirmed[source],
+            "active_upcoming_count": current[source],
+            "duplicate_count": duplicates[source],
+            "duplicate_rate": round(duplicates[source] / count, 3) if count else 0.0,
+        }
+        for source, count in sorted(discovered.items())
+    }
 
 
 def _coverage_key(row: dict[str, Any]) -> tuple[str, str, str, str]:

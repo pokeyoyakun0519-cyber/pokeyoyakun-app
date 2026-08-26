@@ -54,6 +54,10 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     assert feed["metrics"]["pokemon_unique_chains"] == 20
     assert feed["metrics"]["confirmed"] == 71
     assert feed["metrics"]["restricted"] == 27
+    assert feed["metrics"]["duplicate_records_removed"] == 5
+    assert sum(
+        item["duplicate_count"] for item in feed["metrics"]["source_effectiveness"].values()
+    ) == 5
     assert feed["metrics"]["by_tcg"]["yugioh"]["total"] == 4
     hobby_station = next(item for item in feed["records"] if item["chain_key"] == "hobby_station")
     assert hobby_station["eligibility_conditions"]["application_channel"] == "LivePocket"
@@ -143,7 +147,7 @@ def test_same_application_branch_from_two_sources_is_not_counted_twice():
         "confirmed": True, "tcg": "pokemon", "chain": "pokemon_card_store",
         "branch": "ポケモンカードストア in ららぽーと沼津", "product": "商品（10パックまで）",
         "deadline": "2026-09-08T23:59:00+09:00", "prefecture": "静岡県",
-        "official_url": "https://official.example/notice", "application_url": "https://apply.example/event/1",
+        "official_url": "https://official.example/notice", "application_url": "https://apply.example/event/1/?b=2&utm_source=discovery&a=1",
         "eligibility_conditions": {"app_required": True},
     }]}
     official = {"campaigns": [{
@@ -153,7 +157,7 @@ def test_same_application_branch_from_two_sources_is_not_counted_twice():
         "application_end_at": "2026-09-08T23:59:00+09:00",
         "application_method": "公式LINEミニアプリ抽選",
         "eligibility_conditions": {"membership_required": True},
-        "stores": [["ららぽーと沼津", "静岡県", "https://apply.example/event/1"]],
+        "stores": [["ららぽーと沼津", "静岡県", "https://apply.example/event/1?a=1&b=2"]],
     }]}
     feed = build_central_feed(
         coverage, {"campaigns": []}, official, now=datetime(2026, 8, 24, 12, 0, tzinfo=JST),
@@ -165,6 +169,11 @@ def test_same_application_branch_from_two_sources_is_not_counted_twice():
     assert feed["records"][0]["eligibility_conditions"] == {
         "app_required": True, "membership_required": True,
     }
+    assert feed["metrics"]["duplicate_records_removed"] == 1
+    effectiveness = feed["metrics"]["source_effectiveness"]
+    assert sum(item["candidate_discovered_count"] for item in effectiveness.values()) == 2
+    assert sum(item["duplicate_count"] for item in effectiveness.values()) == 1
+    assert any(item["duplicate_rate"] > 0 for item in effectiveness.values())
 
 
 def test_future_restricted_is_upcoming_but_future_candidate_is_rejected():
