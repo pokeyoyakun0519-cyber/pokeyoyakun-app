@@ -4,7 +4,7 @@ import json
 import socket
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import Message
 from pathlib import Path
 
@@ -89,6 +89,9 @@ class AutonomousWebDiscoveryE2ETest(unittest.TestCase):
     def test_manual_registration_is_not_needed_for_seed_to_dashboard_discovery(self):
         seed_url = "https://manufacturer.example/stores"
         shop_url = "https://official-shop.example/news/lottery"
+        today = datetime.now(timezone(timedelta(hours=9))).date()
+        application_start = today - timedelta(days=1)
+        application_end = today + timedelta(days=7)
         engine, registry, fetcher = self._engine(
             [_seed("manufacturer_a", seed_url)],
             {
@@ -98,7 +101,9 @@ class AutonomousWebDiscoveryE2ETest(unittest.TestCase):
                 ),
                 shop_url: (
                     '<article><h1>ポケモンカード 新商品「拡張パック テスト」抽選販売</h1>'
-                    '<p>応募受付 2026年8月23日から2026年8月30日まで 店頭受取</p>'
+                    f'<p>応募受付 {application_start.year}年{application_start.month}月'
+                    f'{application_start.day}日から{application_end.year}年{application_end.month}月'
+                    f'{application_end.day}日まで 店頭受取</p>'
                     '<a href="https://official-shop.example/apply/1">応募フォーム</a></article>'
                 ),
             },

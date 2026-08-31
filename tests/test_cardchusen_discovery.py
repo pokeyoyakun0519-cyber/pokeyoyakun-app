@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from core.application_discovery import CANDIDATE, CONFIRMED
 from core.application_status import JST
@@ -127,7 +127,11 @@ def test_same_application_dedupes_across_discovery_sources_and_keeps_evidence():
 
 
 def test_official_document_can_promote_but_source_alone_never_does():
-    candidate = _sensor().parse_listing(_card(), SOURCE_URLS["pokemon"])[0]
+    deadline = datetime.now(JST) + timedelta(days=7)
+    deadline_text = deadline.strftime("%Y/%m/%d %H:%M")
+    candidate = _sensor().parse_listing(
+        _card(deadline=deadline_text), SOURCE_URLS["pokemon"],
+    )[0]
     assert _sensor().promote(candidate, official_url=candidate["application_url"])[
         "verification_status"
     ] == CANDIDATE
@@ -136,7 +140,7 @@ def test_official_document_can_promote_but_source_alone_never_does():
         official_url=candidate["application_url"],
         official_html=(
             "<article>ポケモンカード ストームエメラルダ "
-            "オンライン抽選受付 2026/08/30 23:59</article>"
+            f"オンライン抽選受付 {deadline_text}</article>"
         ),
     )
     assert official["verification_status"] == CONFIRMED
