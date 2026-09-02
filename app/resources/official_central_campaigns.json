@@ -488,6 +488,80 @@
         "pickup_period": "2026-09-11〜2026-09-13"
       },
       "stores": [["ふるいちトップブックス新入善店", "富山県", "https://furu1.net/news/news_campaign/news_opensale_shin"]]
+    },
+    {
+      "id": "pokemon_hareruya2_30th_box_20260831",
+      "tcg": "pokemon",
+      "chain": "hareruya2",
+      "product_name": "ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION BOX",
+      "official_url": "https://www.hareruya2.com/pages/146654363968",
+      "application_start_at": "2026-08-31T18:00:00+09:00",
+      "application_end_at": "2026-09-07T18:00:00+09:00",
+      "source_type": "OFFICIAL_RETAILER_APPLICATION_NOTICE",
+      "source_tier": "TIER_A",
+      "application_method": "晴れる屋2公式案内からLivePocket抽選・通販",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-09-03T00:00:00+09:00",
+      "eligibility_conditions": {
+        "membership_required": true,
+        "application_channel": "LivePocket",
+        "retailer_membership_requirement": "晴れる屋2 LINE会員",
+        "application_platform": "LivePocket",
+        "application_limit": "各商品1人1回",
+        "payment_method_requirement": "クレジットカード",
+        "store_pickup_required": false,
+        "result_announcement_method": "2026-09-08予定"
+      },
+      "stores": [["オンライン通販", "全国", "https://livepocket.jp/e/wrb86"]]
+    },
+    {
+      "id": "pokemon_hareruya2_30th_premium_deck_20260831",
+      "tcg": "pokemon",
+      "chain": "hareruya2",
+      "product_name": "ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー",
+      "official_url": "https://www.hareruya2.com/pages/146654363968",
+      "application_start_at": "2026-08-31T18:00:00+09:00",
+      "application_end_at": "2026-09-07T18:00:00+09:00",
+      "source_type": "OFFICIAL_RETAILER_APPLICATION_NOTICE",
+      "source_tier": "TIER_A",
+      "application_method": "晴れる屋2公式案内からLivePocket抽選・通販",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-09-03T00:00:00+09:00",
+      "eligibility_conditions": {
+        "membership_required": true,
+        "application_channel": "LivePocket",
+        "retailer_membership_requirement": "晴れる屋2 LINE会員",
+        "application_platform": "LivePocket",
+        "application_limit": "各商品1人1回",
+        "payment_method_requirement": "クレジットカード",
+        "store_pickup_required": false,
+        "result_announcement_method": "2026-09-08予定"
+      },
+      "stores": [["オンライン通販", "全国", "https://livepocket.jp/e/wrb86"]]
+    },
+    {
+      "id": "pokemon_ministop_30th_premium_deck_20260902",
+      "tcg": "pokemon",
+      "chain": "ministop_online",
+      "product_name": "ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー",
+      "official_url": "https://online.ministop.co.jp/Page/pockemon.aspx",
+      "application_start_at": "2026-09-02T15:00:00+09:00",
+      "application_end_at": "2026-09-04T15:00:00+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PAGE",
+      "source_tier": "TIER_A",
+      "application_method": "ミニストップオンラインで0円申込",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-09-03T00:00:00+09:00",
+      "eligibility_conditions": {
+        "membership_required": true,
+        "application_channel": "ミニストップオンライン",
+        "application_platform": "ミニストップオンライン",
+        "application_limit": "1アカウント・同一住所につき1回1点",
+        "payment_method_requirement": "当選後はクレジットカードまたはPayPay",
+        "store_pickup_required": false,
+        "result_announcement_method": "2026-09-14 15:00以降"
+      },
+      "stores": [["オンライン通販", "全国", "https://online.ministop.co.jp/Form/Product/ProductDetail.aspx?pid=772699-01&shop=0"]]
     }
   ]
 }

@@ -21,6 +21,13 @@ DISCOVERY_METHODS = {
     "SEARCH_ENGINE", "OFFICIAL_X", "COMMERCIAL_FACILITY", "COMPETITOR_REFERENCE",
     "PRODUCT_REVERSE_SEARCH", "OFFICIAL_APP", "OFFICIAL_LINE", "IN_STORE_QR",
 }
+MISS_REASONS = {
+    "OFFICIAL_PAGE_NOT_DISCOVERED", "QUERY_GAP", "SOURCE_ADAPTER_GAP",
+    "JAVASCRIPT_DEPENDENCY", "APP_ONLY", "LOGIN_WALL", "OFFICIAL_X_ONLY",
+    "STORE_LEVEL_ANNOUNCEMENT", "EXTERNAL_APPLICATION_PLATFORM",
+    "URL_PATTERN_CHANGED", "PARSER_FAILURE", "LIFECYCLE_MISCLASSIFICATION",
+    "DEDUPE_FALSE_POSITIVE", "FEED_INGESTION_FAILURE", "SCHEDULING_GAP", "OTHER",
+}
 BASE_SOURCE_SCORES = {
     "OFFICIAL_RETAILER_APPLICATION_NOTICE": 100,
     "OFFICIAL_APPLICATION_PAGE": 95,
@@ -69,6 +76,30 @@ class DiscoveryInfrastructure:
 
     def sources(self) -> list[dict[str, Any]]:
         return list(self._load_json("phase10_discovery_sources.json").get("sources", []))
+
+    def known_source_memory(self) -> list[dict[str, Any]]:
+        payload = self._load_json("phase10_discovery_sources.json")
+        return [dict(item) for item in payload.get("known_source_memory", [])]
+
+    def classify_known_source_miss(self, source_id: str, reason: str) -> dict[str, Any]:
+        if reason not in MISS_REASONS:
+            reason = "OTHER"
+        source = next(
+            (item for item in self.known_source_memory() if item.get("source_id") == source_id),
+            None,
+        )
+        known = source is not None
+        return {
+            "source_id": source_id,
+            "reason": reason,
+            "known_source": known,
+            "event_type": "SECOND_MISS" if known else "FIRST_MISS",
+            "severity": "HIGH" if known else "MEDIUM",
+            "confirmed": False,
+            "required_cycle": [
+                "CLASSIFY", "IMPROVE_RULE", "REDISCOVER", "REGRESSION_TEST", "UPDATE_KNOWN_SOURCE",
+            ],
+        }
 
     def release_calendar(self) -> dict[str, Any]:
         return self._load_json("tcg_release_calendar.json")
@@ -143,6 +174,7 @@ class DiscoveryInfrastructure:
     ) -> list[dict[str, str]]:
         queries: list[dict[str, str]] = []
         stores = [str(value).strip() for value in store_names if str(value).strip()]
+        memory = self.known_source_memory()
         for product in self.release_triggers(now):
             name = str(product["product_name"])
             values = [f'"{name}" 抽選', f'"{name}" 予約', f'"{name}" LivePocket']
@@ -155,7 +187,23 @@ class DiscoveryInfrastructure:
                     "how_discovered": "PRODUCT_REVERSE_SEARCH",
                     "verification_required": "true",
                 })
-        return queries
+            for source in memory:
+                for template in source.get("discovery_queries", []):
+                    query = str(template).replace("{product}", f'"{name}"')
+                    queries.append({
+                        "tcg": str(product["tcg"]), "product_name": name,
+                        "query": query, "how_discovered": "KNOWN_SOURCE_REDISCOVERY",
+                        "source_id": str(source.get("source_id", "")),
+                        "verification_required": "true",
+                    })
+        output: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for item in queries:
+            key = (item["product_name"], item["query"])
+            if key not in seen:
+                seen.add(key)
+                output.append(item)
+        return output
 
     def prioritized_backlog(
         self,

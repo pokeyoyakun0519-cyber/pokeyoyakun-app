@@ -99,8 +99,13 @@ def test_release_calendar_and_product_first_queries_use_release_window_only():
     queries = infrastructure.product_first_queries(
         datetime(2026, 8, 26, 12, tzinfo=JST), ["TSUTAYA"],
     )
-    assert len(queries) == 20
-    assert all(item["how_discovered"] == "PRODUCT_REVERSE_SEARCH" for item in queries)
+    assert len(queries) >= 20
+    assert {item["how_discovered"] for item in queries} == {
+        "PRODUCT_REVERSE_SEARCH", "KNOWN_SOURCE_REDISCOVERY",
+    }
+    assert {item.get("source_id") for item in queries} >= {
+        "familymart_online_pokemon", "hareruya2_livepocket", "ministop_online_pokemon",
+    }
     assert all("application_start_at" not in item for item in queries)
 
 
@@ -168,6 +173,41 @@ def test_current_backlog_analytics_includes_historical_promotion():
     assert analytics["SEARCH_ENGINE"]["confirmed"] == 1
     assert analytics["SEARCH_ENGINE"]["active_upcoming"] == 1
     assert sum(item["candidates"] for item in analytics.values()) == 11
+
+
+def test_priority_retailers_are_remembered_and_repeat_miss_is_high():
+    infrastructure = DiscoveryInfrastructure(ROOT)
+    memory = {item["source_id"]: item for item in infrastructure.known_source_memory()}
+    expected = {
+        "familymart_online_pokemon", "itoyokado_lottery", "otaichi_store_news",
+        "dragonstar_news", "hareruya2_livepocket", "ministop_online_pokemon",
+    }
+    assert expected <= set(memory)
+    assert memory["hareruya2_livepocket"]["application_platform"] == "LivePocket"
+    assert memory["ministop_online_pokemon"]["official_domains"] == [
+        "online.ministop.co.jp", "ministop.co.jp",
+    ]
+    miss = infrastructure.classify_known_source_miss(
+        "dragonstar_news", "URL_PATTERN_CHANGED",
+    )
+    assert miss["event_type"] == "SECOND_MISS"
+    assert miss["severity"] == "HIGH"
+    assert miss["confirmed"] is False
+    assert "REDISCOVER" in miss["required_cycle"]
+
+
+def test_unknown_source_miss_never_confirms_candidate():
+    miss = DiscoveryInfrastructure(ROOT).classify_known_source_miss(
+        "new-retailer", "unexpected-value",
+    )
+    assert miss == {
+        "source_id": "new-retailer", "reason": "OTHER", "known_source": False,
+        "event_type": "FIRST_MISS", "severity": "MEDIUM", "confirmed": False,
+        "required_cycle": [
+            "CLASSIFY", "IMPROVE_RULE", "REDISCOVER", "REGRESSION_TEST",
+            "UPDATE_KNOWN_SOURCE",
+        ],
+    }
 
 
 def test_evidence_submission_schema_requires_review_and_hash_not_image_contents():

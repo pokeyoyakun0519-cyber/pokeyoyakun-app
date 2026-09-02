@@ -2,7 +2,9 @@ from datetime import datetime
 import json
 from pathlib import Path
 
-from core.central_application_feed import JST, _application_branch_key, build_central_feed
+from core.central_application_feed import (
+    JST, _application_branch_key, _product_identity, build_central_feed,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,9 +23,9 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     )
     pokemon = [item for item in feed["records"] if item["tcg"] == "pokemon"]
 
-    assert len(pokemon) == 64
-    assert len({(item["chain_key"], item["branch_name"]) for item in pokemon}) == 42
-    assert sum(item["application_status"] == "UPCOMING" for item in pokemon) == 10
+    assert len(pokemon) == 67
+    assert len({(item["chain_key"], item["branch_name"]) for item in pokemon}) == 44
+    assert sum(item["application_status"] == "UPCOMING" for item in pokemon) == 13
     assert len([item for item in pokemon if item["chain_key"] == "furuichi"]) == 5
     one_piece = [item for item in feed["records"] if item["tcg"] == "one-piece"]
     assert len(one_piece) == 24
@@ -44,15 +46,15 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     union_arena = [item for item in feed["records"] if item["tcg"] == "union-arena"]
     assert len(union_arena) == 1
     assert union_arena[0]["application_status"] == "ACTIVE"
-    assert feed["metrics"]["application_count"] == 98
-    assert feed["metrics"]["upcoming"] == 14
-    assert feed["metrics"]["unique_applications"] == 96
-    assert feed["metrics"]["unique_campaigns"] == 73
-    assert feed["metrics"]["unique_branches"] == 65
-    assert feed["metrics"]["unique_chains"] == 24
-    assert feed["metrics"]["pokemon_unique_branches"] == 42
-    assert feed["metrics"]["pokemon_unique_chains"] == 20
-    assert feed["metrics"]["confirmed"] == 71
+    assert feed["metrics"]["application_count"] == 101
+    assert feed["metrics"]["upcoming"] == 17
+    assert feed["metrics"]["unique_applications"] == 99
+    assert feed["metrics"]["unique_campaigns"] == 76
+    assert feed["metrics"]["unique_branches"] == 67
+    assert feed["metrics"]["unique_chains"] == 25
+    assert feed["metrics"]["pokemon_unique_branches"] == 44
+    assert feed["metrics"]["pokemon_unique_chains"] == 21
+    assert feed["metrics"]["confirmed"] == 74
     assert feed["metrics"]["restricted"] == 27
     assert feed["metrics"]["duplicate_records_removed"] == 5
     assert sum(
@@ -234,3 +236,33 @@ def test_feed_excludes_deadline_missing_and_stale_rows():
 
     assert feed["records"] == []
     assert feed["metrics"]["rejected"] == {"deadline_missing": 1, "stale": 1}
+
+
+def test_product_identity_folds_reviewed_aliases_without_merging_other_30th_products():
+    box = _product_identity("ポケモンカードゲーム MEGA 拡張パック『30th Celebration』BOX")
+    alias = _product_identity("ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION BOX")
+    deck = _product_identity(
+        "ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー"
+    )
+    assert box["product_id"] == alias["product_id"]
+    assert box["product_id"] != deck["product_id"]
+    assert box["image"]["url"] == ""
+    assert box["image"]["rights_status"] == "NOT_CLEARED"
+
+
+def test_verified_hareruya_livepocket_and_ministop_are_active_and_linked():
+    official = json.loads(
+        (ROOT / "app" / "resources" / "official_central_campaigns.json").read_text(encoding="utf-8")
+    )
+    feed = build_central_feed(
+        {"generated_at": "2026-09-03T12:00:00+09:00", "rows": []},
+        {"campaigns": []}, official, now=datetime(2026, 9, 3, 12, 0, tzinfo=JST),
+    )
+    items = [item for item in feed["records"] if item["chain_key"] in {"hareruya2", "ministop_online"}]
+    assert len(items) == 3
+    assert all(item["application_status"] == "ACTIVE" for item in items)
+    assert {item["chain_name"] for item in items} == {"晴れる屋2", "ミニストップオンライン"}
+    hareruya = [item for item in items if item["chain_key"] == "hareruya2"]
+    assert all(item["application_url"] == "https://livepocket.jp/e/wrb86" for item in hareruya)
+    assert all(item["eligibility_conditions"]["application_platform"] == "LivePocket" for item in hareruya)
+    assert len({item["product_id"] for item in items}) == 2

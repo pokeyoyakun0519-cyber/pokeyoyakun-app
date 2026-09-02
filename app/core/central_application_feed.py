@@ -46,6 +46,11 @@ CHAIN_LABELS = {
     "gangi": "ガンギ HOBBYSHOP",
     "kanabell": "カーナベル",
     "hobby_station": "ホビーステーション",
+    "familymart_online": "ファミマオンライン",
+    "itoyokado": "イトーヨーカドー",
+    "otaichi": "お宝市番館",
+    "dragonstar": "ドラゴンスター",
+    "ministop_online": "ミニストップオンライン",
     "furuichi": "ふるいち／古本市場",
 }
 REGIONS = {
@@ -294,12 +299,18 @@ def _record(**values: Any) -> dict[str, Any]:
         application_identity.encode("utf-8")
     ).hexdigest()[:20]
     prefecture = str(values["prefecture"])
+    product = _product_identity(values["product"])
     return {
         "id": record_id,
         "campaign_id": campaign_id,
         "application_id": application_id,
         "tcg": values["tcg"],
         "product_name": values["product"],
+        "product_id": product["product_id"],
+        "canonical_product_name": product["canonical_name"],
+        "product_aliases": product["aliases"],
+        "product_category": product["category"],
+        "product_image": product["image"],
         "chain_key": values["chain"],
         "chain_name": CHAIN_LABELS.get(values["chain"], values["chain"]),
         "branch_name": values["branch"],
@@ -318,6 +329,66 @@ def _record(**values: Any) -> dict[str, Any]:
         "eligibility_conditions": values.get("eligibility_conditions") or {},
         "is_new": True,
         "last_verified_at": values["last_verified_at"],
+    }
+
+
+def _product_identity(value: Any) -> dict[str, Any]:
+    """Return a conservative product identity without merging look-alike products.
+
+    Only reviewed aliases are folded into a shared identity. Unknown names keep a
+    deterministic identity derived from their normalized full name.
+    """
+    original = str(value or "").strip()
+    normalized = _identity_text(original)
+    compact = re.sub(r"[\s\-_/／・『』「」()（）]+", "", normalized)
+    reviewed = (
+        (
+            "pokemon-30th-celebration-booster-box",
+            "ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION BOX",
+            ("30th CELEBRATION BOX", "30th Celebration BOX", "30周年BOX"),
+            "BOOSTER_BOX",
+            ("30thcelebration", "拡張パック", "box"),
+            ("プレミアムデッキ", "カードセット", "futuristic"),
+        ),
+        (
+            "pokemon-30th-celebration-premium-deck-espeon-umbreon",
+            "ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー",
+            ("30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー",),
+            "DECK_SET",
+            ("30thcelebration", "プレミアムデッキ", "エーフィ", "ブラッキー"),
+            (),
+        ),
+    )
+    for product_id, canonical, aliases, category, required, excluded in reviewed:
+        if all(term in compact for term in required) and not any(term in compact for term in excluded):
+            return {
+                "product_id": product_id,
+                "canonical_name": canonical,
+                "aliases": list(aliases),
+                "category": category,
+                "image": {
+                    "status": "UNAVAILABLE_RIGHTS_UNVERIFIED",
+                    "url": "",
+                    "source_url": "",
+                    "source_name": "",
+                    "retrieved_at": "",
+                    "rights_status": "NOT_CLEARED",
+                },
+            }
+    digest = hashlib.sha256(compact.encode("utf-8")).hexdigest()[:20]
+    return {
+        "product_id": f"product-{digest}",
+        "canonical_name": original,
+        "aliases": [],
+        "category": "OTHER",
+        "image": {
+            "status": "UNAVAILABLE",
+            "url": "",
+            "source_url": "",
+            "source_name": "",
+            "retrieved_at": "",
+            "rights_status": "UNKNOWN",
+        },
     }
 
 
