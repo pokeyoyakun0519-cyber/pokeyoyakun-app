@@ -181,12 +181,18 @@ def test_priority_retailers_are_remembered_and_repeat_miss_is_high():
     expected = {
         "familymart_online_pokemon", "itoyokado_lottery", "otaichi_store_news",
         "dragonstar_news", "hareruya2_livepocket", "ministop_online_pokemon",
+        "aeon_style_online_lottery", "bunkyodo_livepocket",
+        "cardbox_lottery_platform", "tokiwa_shobo_lottery", "plant_campaign_lottery",
     }
     assert expected <= set(memory)
     assert memory["hareruya2_livepocket"]["application_platform"] == "LivePocket"
     assert memory["ministop_online_pokemon"]["official_domains"] == [
         "online.ministop.co.jp", "ministop.co.jp",
     ]
+    assert all(memory[source]["source_effectiveness"] == "ACTIVE_CONFIRMED" for source in (
+        "aeon_style_online_lottery", "bunkyodo_livepocket",
+        "cardbox_lottery_platform", "tokiwa_shobo_lottery", "plant_campaign_lottery",
+    ))
     miss = infrastructure.classify_known_source_miss(
         "dragonstar_news", "URL_PATTERN_CHANGED",
     )

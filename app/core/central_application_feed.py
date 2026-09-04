@@ -51,6 +51,11 @@ CHAIN_LABELS = {
     "otaichi": "お宝市番館",
     "dragonstar": "ドラゴンスター",
     "ministop_online": "ミニストップオンライン",
+    "aeon_style_online": "イオンスタイルオンライン",
+    "bunkyodo": "文教堂書店",
+    "cardbox": "カードボックス",
+    "tokiwa_shobo": "ときわ書房",
+    "plant": "PLANT",
     "furuichi": "ふるいち／古本市場",
 }
 REGIONS = {
@@ -75,6 +80,7 @@ def build_central_feed(
     coverage_payload: dict[str, Any],
     restricted_payload: dict[str, Any],
     official_payload: dict[str, Any] | None = None,
+    discovery_payload: dict[str, Any] | None = None,
     *,
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -133,6 +139,7 @@ def build_central_feed(
         "generated_at": current.isoformat(timespec="seconds"),
         "source_generated_at": generated_at,
         "records": records,
+        "monitoring_sources": _monitoring_sources(records, discovery_payload or {}),
         "metrics": {
             "application_count": len(records),
             "upcoming": sum(item["application_status"] == "UPCOMING" for item in records),
@@ -157,6 +164,108 @@ def build_central_feed(
             "rejected": dict(rejected),
         },
     }
+
+
+def _monitoring_sources(
+    records: Iterable[dict[str, Any]], discovery_payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build a public, privacy-safe source inventory.
+
+    Discovery queries, adapter names and source URLs intentionally never cross the
+    Central Feed boundary. A generic chain-wide page is not counted as an
+    individually monitored physical store.
+    """
+    output: dict[tuple[str, str, str], dict[str, Any]] = {}
+    generic_branches = {
+        "", "対象店舗", "オンライン", "オンライン通販", "通販", "全国対象店舗",
+        "九州地区対象店舗", "本州・四国の対象店舗",
+    }
+    for record in records:
+        chain_key = str(record.get("chain_key") or "").strip()
+        branch = str(record.get("branch_name") or "").strip()
+        online = str(record.get("sales_mode") or "") == "ONLINE"
+        if online:
+            kind, identity = "ONLINE_SERVICE", chain_key
+        elif branch in generic_branches or "対象店舗" in branch:
+            kind, identity = "RETAILER_CHAIN", chain_key
+        else:
+            kind, identity = "PHYSICAL_STORE", f"{chain_key}:{branch}"
+        key = (kind, chain_key, identity)
+        item = output.setdefault(key, {
+            "public_id": hashlib.sha256("|".join(key).encode("utf-8")).hexdigest()[:16],
+            "retailer_id": chain_key,
+            "retailer_name": str(record.get("chain_name") or chain_key),
+            "store_name": branch if kind == "PHYSICAL_STORE" else "",
+            "prefecture": str(record.get("prefecture") or "地域不明") if kind == "PHYSICAL_STORE" else "",
+            "entry_type": kind,
+            "monitoring_status": "MONITORING" if record.get("verification_state") == "CONFIRMED" else "VERIFYING",
+            "information_route": _public_information_route(record),
+            "last_verified_at": str(record.get("last_verified_at") or ""),
+            "active_count": 0,
+            "upcoming_count": 0,
+        })
+        item["active_count"] += int(record.get("application_status") == "ACTIVE")
+        item["upcoming_count"] += int(record.get("application_status") == "UPCOMING")
+        item["last_verified_at"] = max(item["last_verified_at"], str(record.get("last_verified_at") or ""))
+
+    platform_names: set[str] = set()
+    for source in discovery_payload.get("known_source_memory", []):
+        retailer_id = str(source.get("retailer_id") or source.get("source_id") or "").strip()
+        if not retailer_id:
+            continue
+        effect = str(source.get("source_effectiveness") or "PENDING")
+        status = "MONITORING" if effect == "ACTIVE_CONFIRMED" else "VERIFYING"
+        route = _public_route_from_source_type(str(source.get("source_type") or ""))
+        key = ("RETAILER_CHAIN", retailer_id, retailer_id)
+        output.setdefault(key, {
+            "public_id": hashlib.sha256("|".join(key).encode("utf-8")).hexdigest()[:16],
+            "retailer_id": retailer_id,
+            "retailer_name": CHAIN_LABELS.get(retailer_id, retailer_id.replace("_", " ")),
+            "store_name": "", "prefecture": "", "entry_type": "RETAILER_CHAIN",
+            "monitoring_status": status, "information_route": route,
+            "last_verified_at": str(source.get("last_successful_discovery") or ""),
+            "active_count": 0, "upcoming_count": 0,
+        })
+        platform = str(source.get("application_platform") or "").strip()
+        if platform and platform not in {"店舗公式告知／公式アプリ", "店舗別公式告知"}:
+            platform_names.add(platform)
+    for platform in sorted(platform_names):
+        key = ("APPLICATION_PLATFORM", platform.casefold(), platform.casefold())
+        output[key] = {
+            "public_id": hashlib.sha256("|".join(key).encode("utf-8")).hexdigest()[:16],
+            "retailer_id": "", "retailer_name": platform, "store_name": "", "prefecture": "",
+            "entry_type": "APPLICATION_PLATFORM", "monitoring_status": "MONITORING",
+            "information_route": platform if platform in {"LivePocket", "LINEミニアプリ"} else "正式応募ページ",
+            "last_verified_at": "", "active_count": 0, "upcoming_count": 0,
+        }
+    return sorted(output.values(), key=lambda item: (
+        item["entry_type"], item["retailer_name"], item["store_name"],
+    ))
+
+
+def _public_information_route(record: dict[str, Any]) -> str:
+    method = str(record.get("application_method") or "").casefold()
+    source = str(record.get("source_label") or "").casefold()
+    if "livepocket" in method or "livepocket" in source:
+        return "LivePocket"
+    if "line" in method or "miniapp.line.me" in str(record.get("application_url") or ""):
+        return "公式アプリ告知"
+    return _public_route_from_source_type(source)
+
+
+def _public_route_from_source_type(source_type: str) -> str:
+    value = source_type.casefold()
+    if "official_x" in value:
+        return "公式X"
+    if "ec" in value:
+        return "公式EC"
+    if "app" in value:
+        return "公式アプリ告知"
+    if "store" in value or "retailer" in value:
+        return "店舗告知"
+    if "platform" in value:
+        return "正式応募ページ"
+    return "公式Web"
 
 
 def _from_coverage_row(
@@ -253,6 +362,9 @@ def _from_official_campaign(
     start_at, end_at = _iso(campaign.get("application_start_at")), _iso(campaign.get("application_end_at"))
     if not tcg or not end_at:
         return None, "tcg_unknown" if not tcg else "deadline_missing"
+    observed_at = _iso(campaign.get("observed_at"))
+    if not start_at and observed_at and datetime.fromisoformat(observed_at) > current:
+        return None, "not_observed_yet"
     start = datetime.fromisoformat(start_at) if start_at else None
     status = _window_status(datetime.fromisoformat(end_at), current, start)
     if not status:

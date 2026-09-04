@@ -562,6 +562,106 @@
         "result_announcement_method": "2026-09-14 15:00以降"
       },
       "stores": [["オンライン通販", "全国", "https://online.ministop.co.jp/Form/Product/ProductDetail.aspx?pid=772699-01&shop=0"]]
+    },
+    {
+      "id": "pokemon_aeon_style_30th_card_sets_20260903",
+      "tcg": "pokemon",
+      "chain": "aeon_style_online",
+      "product_name": "ポケモンカードゲーム MEGA 30th CELEBRATION カードセット（9種）",
+      "official_url": "https://aeonretail.com/Page/k-lottery_pokemon_set.aspx",
+      "application_start_at": "2026-09-03T11:00:00+09:00",
+      "application_end_at": "2026-09-04T23:59:00+09:00",
+      "source_type": "OFFICIAL_EC_APPLICATION_PAGE",
+      "source_tier": "TIER_A",
+      "application_method": "イオンスタイルオンライン会員・イオンカード限定Web抽選",
+      "sales_mode": "ONLINE",
+      "observed_at": "2026-09-04T14:00:00+09:00",
+      "eligibility_conditions": {"membership_required": true, "application_channel": "公式EC", "application_limit": "1商品につき1世帯1回", "payment_method_requirement": "応募者と同一名義のイオンカード", "store_pickup_required": false},
+      "stores": [["オンライン", "全国", "https://aeonretail.com/Page/k-lottery_pokemon_set.aspx"]]
+    },
+    {
+      "id": "pokemon_bunkyodo_urayasu_30th_box_20260831",
+      "tcg": "pokemon", "chain": "bunkyodo",
+      "product_name": "ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION BOX",
+      "official_url": "https://livepocket.jp/e/bpmr1",
+      "application_start_at": "2026-08-31T10:00:00+09:00", "application_end_at": "2026-09-06T20:30:00+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PLATFORM", "source_tier": "TIER_A",
+      "application_method": "LivePocket抽選・店頭配布シリアルコード・店舗受取", "sales_mode": "STORE",
+      "observed_at": "2026-09-04T14:00:00+09:00",
+      "eligibility_conditions": {"application_channel": "LivePocket", "application_limit": "1人1回", "identity_verification_required": true, "store_pickup_required": true, "retailer_membership_requirement": "店頭配布シリアルコード"},
+      "stores": [["浦安西友店", "千葉県", "https://livepocket.jp/e/bpmr1"]]
+    },
+    {
+      "id": "pokemon_bunkyodo_urayasu_30th_deck_20260831",
+      "tcg": "pokemon", "chain": "bunkyodo",
+      "product_name": "ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー",
+      "official_url": "https://livepocket.jp/e/tv_9m",
+      "application_start_at": "2026-08-31T10:00:00+09:00", "application_end_at": "2026-09-06T20:30:00+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PLATFORM", "source_tier": "TIER_A",
+      "application_method": "LivePocket抽選・店頭配布シリアルコード・店舗受取", "sales_mode": "STORE",
+      "observed_at": "2026-09-04T14:00:00+09:00",
+      "eligibility_conditions": {"application_channel": "LivePocket", "application_limit": "1人1回", "identity_verification_required": true, "store_pickup_required": true, "retailer_membership_requirement": "店頭配布シリアルコード"},
+      "stores": [["浦安西友店", "千葉県", "https://livepocket.jp/e/tv_9m"]]
+    },
+    {
+      "id": "pokemon_cardbox_jupiter_30th_box_20260828",
+      "tcg": "pokemon", "chain": "cardbox",
+      "product_name": "ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION BOX",
+      "official_url": "https://shoplottery.e-starbox.com/lottery/entry?code=FcTIYoxHA8",
+      "application_start_at": "2026-08-28T18:00:00+09:00", "application_end_at": "2026-09-06T23:59:00+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PLATFORM", "source_tier": "TIER_A",
+      "application_method": "抽選ロトボックスWeb抽選・店頭予約・店舗受取", "sales_mode": "STORE",
+      "observed_at": "2026-09-04T14:00:00+09:00",
+      "eligibility_conditions": {"application_channel": "抽選ロトボックス", "application_limit": "1人1商品", "identity_verification_required": true, "store_pickup_required": true, "prepayment_required": true},
+      "stores": [["ブックスジュピター店", "地域不明", "https://shoplottery.e-starbox.com/lottery/entry?code=FcTIYoxHA8"]]
+    },
+    {
+      "id": "pokemon_cardbox_jupiter_30th_deck_20260828",
+      "tcg": "pokemon", "chain": "cardbox",
+      "product_name": "ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー",
+      "official_url": "https://shoplottery.e-starbox.com/lottery/entry?code=FcTIYoxHA8",
+      "application_start_at": "2026-08-28T18:00:00+09:00", "application_end_at": "2026-09-06T23:59:00+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PLATFORM", "source_tier": "TIER_A",
+      "application_method": "抽選ロトボックスWeb抽選・店頭予約・店舗受取", "sales_mode": "STORE",
+      "observed_at": "2026-09-04T14:00:00+09:00",
+      "eligibility_conditions": {"application_channel": "抽選ロトボックス", "application_limit": "1人1商品", "identity_verification_required": true, "store_pickup_required": true, "prepayment_required": true},
+      "stores": [["ブックスジュピター店", "地域不明", "https://shoplottery.e-starbox.com/lottery/entry?code=FcTIYoxHA8"]]
+    },
+    {
+      "id": "pokemon_tokiwa_shinurayasu_30th_box_20260831",
+      "tcg": "pokemon", "chain": "tokiwa_shobo",
+      "product_name": "ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION BOX",
+      "official_url": "https://shoplottery.e-starbox.com/lottery/entry?code=L6nmZ7lqKc",
+      "application_start_at": "2026-08-31T00:00:00+09:00", "application_end_at": "2026-09-06T23:59:59+09:00",
+      "source_type": "OFFICIAL_APPLICATION_PLATFORM", "source_tier": "TIER_A",
+      "application_method": "抽選ロトボックスWeb抽選・会員カード・店舗受取", "sales_mode": "STORE",
+      "observed_at": "2026-09-04T14:00:00+09:00",
+      "eligibility_conditions": {"application_channel": "抽選ロトボックス", "application_limit": "1人1回", "retailer_membership_requirement": "2026年8月30日までに発行された店舗会員カード", "identity_verification_required": true, "store_pickup_required": true, "payment_method_requirement": "現金のみ"},
+      "stores": [["ニューコースト新浦安店", "千葉県", "https://shoplottery.e-starbox.com/lottery/entry?code=L6nmZ7lqKc"]]
+    },
+    {
+      "id": "pokemon_plant_30th_packs_20260827",
+      "tcg": "pokemon", "chain": "plant",
+      "product_name": "ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION（20パックまで）",
+      "official_url": "https://www.plant-co.jp/campaign/detail/1585.html?campaignNo=1585&shopCode=0",
+      "application_start_at": "", "application_end_at": "2026-09-10T23:59:00+09:00",
+      "source_type": "OFFICIAL_RETAILER_APPLICATION_NOTICE", "source_tier": "TIER_A",
+      "application_method": "PLANT公式告知からSelectType抽選・指定店舗受取", "sales_mode": "STORE",
+      "observed_at": "2026-09-04T14:00:00+09:00",
+      "eligibility_conditions": {"application_channel": "SelectType", "application_limit": "1人1回・20パックまで", "store_pickup_required": true},
+      "stores": [["津幡店","石川県","https://select-type.com/e/?id=KYRXOvZmPZw"],["川北店","石川県","https://select-type.com/e/?id=KYRXOvZmPZw"],["滑川店","富山県","https://select-type.com/e/?id=KYRXOvZmPZw"],["聖籠店","新潟県","https://select-type.com/e/?id=KYRXOvZmPZw"],["見附店","新潟県","https://select-type.com/e/?id=KYRXOvZmPZw"],["境港店","鳥取県","https://select-type.com/e/?id=KYRXOvZmPZw"],["刈羽店","新潟県","https://select-type.com/e/?id=KYRXOvZmPZw"],["瑞穂店","岐阜県","https://select-type.com/e/?id=KYRXOvZmPZw"],["横越店","新潟県","https://select-type.com/e/?id=KYRXOvZmPZw"],["大玉店","福島県","https://select-type.com/e/?id=KYRXOvZmPZw"],["福知山店","京都府","https://select-type.com/e/?id=KYRXOvZmPZw"],["鏡野店","岡山県","https://select-type.com/e/?id=KYRXOvZmPZw"],["木津川店","京都府","https://select-type.com/e/?id=KYRXOvZmPZw"]]
+    },
+    {
+      "id": "pokemon_plant_30th_deck_20260827",
+      "tcg": "pokemon", "chain": "plant",
+      "product_name": "ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー",
+      "official_url": "https://www.plant-co.jp/campaign/detail/1585.html?campaignNo=1585&shopCode=0",
+      "application_start_at": "", "application_end_at": "2026-09-10T23:59:00+09:00",
+      "source_type": "OFFICIAL_RETAILER_APPLICATION_NOTICE", "source_tier": "TIER_A",
+      "application_method": "PLANT公式告知からSelectType抽選・指定店舗受取", "sales_mode": "STORE",
+      "observed_at": "2026-09-04T14:00:00+09:00",
+      "eligibility_conditions": {"application_channel": "SelectType", "application_limit": "1人1回・1点", "store_pickup_required": true},
+      "stores": [["津幡店","石川県","https://select-type.com/e/?id=YWyxA6zrYzk"],["川北店","石川県","https://select-type.com/e/?id=YWyxA6zrYzk"],["滑川店","富山県","https://select-type.com/e/?id=YWyxA6zrYzk"],["聖籠店","新潟県","https://select-type.com/e/?id=YWyxA6zrYzk"],["見附店","新潟県","https://select-type.com/e/?id=YWyxA6zrYzk"],["境港店","鳥取県","https://select-type.com/e/?id=YWyxA6zrYzk"],["刈羽店","新潟県","https://select-type.com/e/?id=YWyxA6zrYzk"],["瑞穂店","岐阜県","https://select-type.com/e/?id=YWyxA6zrYzk"],["横越店","新潟県","https://select-type.com/e/?id=YWyxA6zrYzk"],["大玉店","福島県","https://select-type.com/e/?id=YWyxA6zrYzk"],["福知山店","京都府","https://select-type.com/e/?id=YWyxA6zrYzk"],["鏡野店","岡山県","https://select-type.com/e/?id=YWyxA6zrYzk"],["木津川店","京都府","https://select-type.com/e/?id=YWyxA6zrYzk"]]
     }
   ]
 }

@@ -23,9 +23,9 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     )
     pokemon = [item for item in feed["records"] if item["tcg"] == "pokemon"]
 
-    assert len(pokemon) == 67
-    assert len({(item["chain_key"], item["branch_name"]) for item in pokemon}) == 44
-    assert sum(item["application_status"] == "UPCOMING" for item in pokemon) == 13
+    assert len(pokemon) == 72
+    assert len({(item["chain_key"], item["branch_name"]) for item in pokemon}) == 46
+    assert sum(item["application_status"] == "UPCOMING" for item in pokemon) == 19
     assert len([item for item in pokemon if item["chain_key"] == "furuichi"]) == 5
     one_piece = [item for item in feed["records"] if item["tcg"] == "one-piece"]
     assert len(one_piece) == 24
@@ -46,15 +46,15 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     union_arena = [item for item in feed["records"] if item["tcg"] == "union-arena"]
     assert len(union_arena) == 1
     assert union_arena[0]["application_status"] == "ACTIVE"
-    assert feed["metrics"]["application_count"] == 101
-    assert feed["metrics"]["upcoming"] == 17
-    assert feed["metrics"]["unique_applications"] == 99
-    assert feed["metrics"]["unique_campaigns"] == 76
-    assert feed["metrics"]["unique_branches"] == 67
-    assert feed["metrics"]["unique_chains"] == 25
-    assert feed["metrics"]["pokemon_unique_branches"] == 44
-    assert feed["metrics"]["pokemon_unique_chains"] == 21
-    assert feed["metrics"]["confirmed"] == 74
+    assert feed["metrics"]["application_count"] == 106
+    assert feed["metrics"]["upcoming"] == 23
+    assert feed["metrics"]["unique_applications"] == 104
+    assert feed["metrics"]["unique_campaigns"] == 81
+    assert feed["metrics"]["unique_branches"] == 69
+    assert feed["metrics"]["unique_chains"] == 27
+    assert feed["metrics"]["pokemon_unique_branches"] == 46
+    assert feed["metrics"]["pokemon_unique_chains"] == 23
+    assert feed["metrics"]["confirmed"] == 79
     assert feed["metrics"]["restricted"] == 27
     assert feed["metrics"]["duplicate_records_removed"] == 5
     assert sum(
@@ -69,6 +69,54 @@ def test_isolated_feed_uses_deadline_evidence_and_current_retention():
     assert all(item["campaign_id"] for item in feed["records"])
     assert all(item["application_id"] for item in feed["records"])
     assert all(item["source_tier"] == "TIER_A" for item in feed["records"])
+
+
+def test_public_monitoring_sources_separate_chain_store_online_and_platform():
+    coverage = {"generated_at": "2026-09-04T14:00:00+09:00", "rows": []}
+    official = {"campaigns": [{
+        "id": "plant", "tcg": "pokemon", "chain": "plant", "product_name": "Product",
+        "official_url": "https://official.example/news", "application_end_at": "2026-09-10T23:59:00+09:00",
+        "source_type": "OFFICIAL_RETAILER_APPLICATION_NOTICE", "sales_mode": "STORE",
+        "observed_at": "2026-09-04T12:00:00+09:00",
+        "stores": [
+            ["津幡店", "石川県", "https://official.example/apply"],
+            ["津幡店", "石川県", "https://official.example/apply"],
+        ],
+    }]}
+    discovery = {"known_source_memory": [{
+        "source_id": "plant_campaign_lottery", "retailer_id": "plant",
+        "application_platform": "LivePocket", "source_type": "OFFICIAL_RETAILER_APPLICATION_NOTICE",
+        "source_effectiveness": "ACTIVE_CONFIRMED", "last_successful_discovery": "2026-09-04T12:00:00+09:00",
+    }]}
+    feed = build_central_feed(
+        coverage, {"campaigns": []}, official, discovery,
+        now=datetime(2026, 9, 4, 14, 0, tzinfo=JST),
+    )
+    sources = feed["monitoring_sources"]
+    assert len([item for item in sources if item["entry_type"] == "PHYSICAL_STORE"]) == 1
+    assert len([item for item in sources if item["entry_type"] == "RETAILER_CHAIN"]) == 1
+    assert len([item for item in sources if item["entry_type"] == "APPLICATION_PLATFORM"]) == 1
+    assert next(item for item in sources if item["entry_type"] == "PHYSICAL_STORE")["active_count"] == 1
+    serialized = json.dumps(sources, ensure_ascii=False)
+    assert "discovery_queries" not in serialized
+    assert "official_domains" not in serialized
+    assert "source_url" not in serialized
+
+
+def test_no_start_campaign_is_not_visible_before_first_official_observation():
+    official = {"campaigns": [{
+        "tcg": "pokemon", "chain": "plant", "product_name": "Future observed",
+        "official_url": "https://official.example/news", "application_start_at": "",
+        "application_end_at": "2026-09-10T23:59:00+09:00",
+        "observed_at": "2026-09-04T12:00:00+09:00",
+        "stores": [["店舗", "東京都", "https://official.example/apply"]],
+    }]}
+    feed = build_central_feed(
+        {"generated_at": "2026-09-01T00:00:00+09:00", "rows": []},
+        {"campaigns": []}, official, now=datetime(2026, 9, 1, 0, 0, tzinfo=JST),
+    )
+    assert feed["records"] == []
+    assert feed["metrics"]["rejected"] == {"not_observed_yet": 1}
 
 
 def test_official_campaign_provider_url_is_not_onepiece_specific():
